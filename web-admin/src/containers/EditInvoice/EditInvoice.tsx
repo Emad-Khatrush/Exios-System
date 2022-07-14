@@ -128,9 +128,7 @@ export class EditInvoice extends Component<Props, State> {
     }
   }
 
-  setFormState = (value: any, name: string, id: number, child?: any) => {
-    console.log(name);
-    
+  setFormState = (value: any, name: string, id: number, child?: any) => {    
     if (name === 'fullName' || name === 'email' || name === 'phone') {
       this.setState((oldValues) => ({
         changedFields: {
