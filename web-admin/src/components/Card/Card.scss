@@ -1,0 +1,14 @@
+.custom-card-body {
+  &::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background-color: #eeeeee;
+    border-radius: 50px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: #c4c4c4;
+    border-radius: 50px;
+  }
+}
