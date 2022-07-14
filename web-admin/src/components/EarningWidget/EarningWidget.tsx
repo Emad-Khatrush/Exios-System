@@ -75,7 +75,7 @@ class EarningWidget extends Component<Props, State> {
           <div className='col-md-12 col-lg-7'>
             <p className='title'> {displayType} Earning</p>
             <p className='this-date mb-0'> This month </p>
-            <p className='cash mb-1'> ${totalMonthlyEarning} </p>
+            <p className='cash mb-1'> ${totalMonthlyEarning.toFixed(2)} </p>
             <div className='d-flex align-items-center'>
               <ArrowPercent percent={percentage} positive={betterThenPreviousMonth} />
               <p className='result'> From previous period </p>
