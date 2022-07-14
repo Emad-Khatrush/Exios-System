@@ -299,7 +299,7 @@ export class EditInvoice extends Component<Props, State> {
   }
 
   submit = (event: MouseEvent) => {
-    event.preventDefault();
+    event.preventDefault();    
     this.setState({ isUpdating: true })
     const order = {
       isPayment: this.state.formData.isPayment,

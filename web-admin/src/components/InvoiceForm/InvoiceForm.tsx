@@ -108,6 +108,7 @@ const InvoiceForm = (props: Props) => {
             inputProps={{ inputMode: 'numeric' }}
             onChange={props.handleChange}
             defaultValue={invoice?.quantity}
+            onWheel={(event: any) => event.target.blur()}
           />
         </div>
 
@@ -143,6 +144,7 @@ const InvoiceForm = (props: Props) => {
             inputProps={{ inputMode: 'numeric' }}
             onChange={props.handleChange}
             defaultValue={invoice?.totalInvoice}
+            onWheel={(event: any) => event.target.blur()}
           />
         </div>
 
@@ -150,10 +152,11 @@ const InvoiceForm = (props: Props) => {
           <TextField
             label={'Net Income'}
             name="netIncome"
-            inputProps={{ inputMode: 'numeric' }}
+            inputProps={{ inputMode: 'numeric', step: .01 }}
             type={'number'}
             onChange={props.handleChange}
             defaultValue={invoice?.netIncome[0]?.total}
+            onWheel={(event: any) => event.target.blur()}
           />
         </div>
 
@@ -197,6 +200,7 @@ const InvoiceForm = (props: Props) => {
                 props.handleChange(event);
               }}
               defaultValue={invoice?.debt?.total}
+              onWheel={(event: any) => event.target.blur()}
             />
             <FormControl 
               required={debt.total > 0 ? true : false} 
@@ -289,6 +293,7 @@ const InvoiceForm = (props: Props) => {
             }}
             defaultValue={invoice?.receivedUSD}
             onChange={props.handleChange}
+            onWheel={(event: any) => event.target.blur()}
           />
         </div>
 
@@ -304,6 +309,7 @@ const InvoiceForm = (props: Props) => {
             }}
             defaultValue={invoice?.receivedLYD}
             onChange={props.handleChange}
+            onWheel={(event: any) => event.target.blur()}
           />
         </div>
 
@@ -319,6 +325,7 @@ const InvoiceForm = (props: Props) => {
             }}
             defaultValue={invoice?.receivedShipmentUSD}
             onChange={props.handleChange}
+            onWheel={(event: any) => event.target.blur()}
           />
         </div>
 
@@ -334,6 +341,7 @@ const InvoiceForm = (props: Props) => {
             }}
             defaultValue={invoice?.receivedShipmentLYD}
             onChange={props.handleChange}
+            onWheel={(event: any) => event.target.blur()}
           />
         </div>
 
@@ -351,6 +359,7 @@ const InvoiceForm = (props: Props) => {
             inputProps={{ inputMode: 'numeric' }}
             onChange={props.handleChange}
             defaultValue={invoice?.shipment.packageCount}
+            onWheel={(event: any) => event.target.blur()}
           />
         </div>
 
@@ -363,6 +372,7 @@ const InvoiceForm = (props: Props) => {
             inputProps={{ inputMode: 'numeric' }}
             onChange={props.handleChange}
             defaultValue={invoice?.shipment.weight}
+            onWheel={(event: any) => event.target.blur()}
           />
         </div>
 
@@ -373,9 +383,10 @@ const InvoiceForm = (props: Props) => {
             name="exiosShipmentPrice"
             required
             type={'number'}
-            inputProps={{ inputMode: 'numeric' }}
+            inputProps={{ inputMode: 'numeric', step: .01 }}
             onChange={props.handleChange}
             defaultValue={invoice?.shipment.exiosShipmentPrice}
+            onWheel={(event: any) => event.target.blur()}
           />
         </div>
 
@@ -386,9 +397,10 @@ const InvoiceForm = (props: Props) => {
             name="originShipmentPrice"
             required
             type={'number'}
-            inputProps={{ inputMode: 'numeric' }}
+            inputProps={{ inputMode: 'decimal', step: .01 }}
             onChange={props.handleChange}
             defaultValue={invoice?.shipment.originShipmentPrice}
+            onWheel={(event: any) => event.target.blur()}
           />
         </div>
 
@@ -505,6 +517,7 @@ const InvoiceForm = (props: Props) => {
                   name="trackingNumber"
                   onChange={props.handleChange}
                   defaultValue={deliveredPackages?.trackingNumber}
+                  onWheel={(event: any) => event.target.blur()}
                 />
               </div>
 
@@ -518,6 +531,7 @@ const InvoiceForm = (props: Props) => {
                   label={'Weight'}
                   onChange={props.handleChange}
                   defaultValue={deliveredPackages?.packageWeight?.total || deliveredPackages?.packageWeight}
+                  onWheel={(event: any) => event.target.blur()}
                 />
                 <FormControl style={{ width: '100%' }}>
                   <InputLabel>Unit</InputLabel>
@@ -549,6 +563,7 @@ const InvoiceForm = (props: Props) => {
                   inputProps={{ inputMode: 'numeric' }}
                   onChange={props.handleChange}
                   defaultValue={deliveredPackages?.exiosPrice}
+                  onWheel={(event: any) => event.target.blur()}
                 />
               </div>
 
@@ -561,6 +576,7 @@ const InvoiceForm = (props: Props) => {
                   inputProps={{ inputMode: 'numeric' }}
                   onChange={props.handleChange}
                   defaultValue={deliveredPackages?.originPrice}
+                  onWheel={(event: any) => event.target.blur()}
                 />
               </div>
             </div>
