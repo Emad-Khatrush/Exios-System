@@ -63,7 +63,7 @@ class ImageUploader extends Component<Props, State> {
           }}
         >
           <Box sx={{ maxWidth: 600, flexGrow: 1 }}>
-            <Box className='image-previewer'>
+            <Box className='image-previewer' style={{ height: '80%' }}>
               <img src={selectedImg} width={'100%'} height={'100%'} alt="" />
             </Box>
           </Box>
