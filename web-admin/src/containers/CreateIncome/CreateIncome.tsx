@@ -141,7 +141,6 @@ class CreateIncome extends Component<Props, State> {
     const { isSuccess, isLoading, message } = this.state;
 
     const inputFileRef = React.createRef();
-    console.log(this.state);
 
     return (
       <div className="m-4">

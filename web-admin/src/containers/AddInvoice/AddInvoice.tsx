@@ -133,7 +133,6 @@ class AddInvoice extends Component<Props, State> {
       
       this.setState({ paymentList });
     } else if (name === 'trackingNumber' || name === 'packageWeight' || name === 'measureUnit' || name === 'originPrice' || name === 'exiosPrice') {
-      console.log(event.target.value);
       
       const fieldName = name === 'packageWeight' ? 'weight' : name;
       const id = child ? Number(child.props.id) : event.target.id;

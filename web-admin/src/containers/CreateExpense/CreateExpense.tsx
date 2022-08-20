@@ -59,9 +59,7 @@ class CreateExpense extends Component<Props, State> {
     officeData: null
   }
 
-  async componentDidMount() {
-    console.log(this.props.router);
-    
+  async componentDidMount() {    
     if (this.props.isEmployee) {
       const res = await api.get('office/tripoli');
       this.setState({ officeData: res.data });

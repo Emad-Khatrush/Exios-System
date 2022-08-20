@@ -1,5 +1,6 @@
 const path = require('path')
 const HtmlWebpackPlugin = require('html-webpack-plugin')
+const isDevelopment = process.env.NODE_ENV === 'development';
 
 module.exports = {
   entry: path.resolve(__dirname, '..', './src/index.tsx'),
@@ -14,12 +15,15 @@ module.exports = {
         use: [
           {
             loader: 'babel-loader',
-          },
+            options: {
+              plugins: [isDevelopment && require.resolve('react-refresh/babel')].filter(Boolean),
+            }
+          }
         ],
       },
       {
-        test: /\.s[ac]ss$/i,
-        use: ['style-loader', 'css-loader', 'sass-loader'],
+        test: /\.(sa|sc|c)ss$/,
+        use: ['style-loader', 'css-loader', 'sass-loader', 'postcss-loader'],
       },
       {
         test: /\.(?:ico|gif|png|jpg|jpeg)$/i,

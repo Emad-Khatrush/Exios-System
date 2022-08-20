@@ -119,14 +119,9 @@ class Expenses extends Component<Props, State> {
     const { dateFilterValue }: any = this.state;
 
     let filteredList = list;
-    console.log(dateFilterValue);
     if (dateFilterValue && dateFilterValue[0] && dateFilterValue[1]) {      
       filteredList = list.filter(a => {
-        console.log(a);
-        
-        const dataDate = moment(a.createdAt).format('MM-DD-YYYY');
-        console.log(dataDate);
-        
+        const dataDate = moment(a.createdAt).format('MM-DD-YYYY');        
         const startDate = moment(dateFilterValue[0]).format('MM-DD-YYYY');
         const endDate = moment(dateFilterValue[1]).format('MM-DD-YYYY');
         return startDate <= dataDate && dataDate <= endDate;

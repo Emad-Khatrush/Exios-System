@@ -21,8 +21,8 @@ const OfficesExpense = (props: Props) => {
 
   const office = props.offices.find((data: Office) => data.office === currentOffice);
 
-  const debts = props.totalDebts.filter(debt => debt.office === currentOffice);
-  const hasDebts = debts.length > 0;
+  const debts = props.totalDebts.filter(debt => debt.office === currentOffice && debt.totalDebts > 0);
+  const hasDebts = debts.length > 0;  
   
   return (
     <Card>

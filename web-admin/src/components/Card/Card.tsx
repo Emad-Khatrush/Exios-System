@@ -10,23 +10,29 @@ const Card = (props: any) => {
   return (
     <div>
       {props.tabs &&
-        <TableTabs 
+        <TableTabs
           tabs={props.tabs}
           tabsOnChange={(value: string) => props.tabsOnChange(value)}
         />
       }
-      <div {...props} style={{...props.style, overflow: 'auto', boxShadow: '0 0.3rem 0.9rem rgba(0, 0, 0, 0.075)'}} className="mb-3 p-3 bg-body rounded">
+      <div 
+        {...props} 
+        style={{...props.style, overflow: 'auto', boxShadow: '0 0.3rem 0.9rem rgba(0, 0, 0, 0.075)'}} 
+        className="mb-3 p-3 bg-body rounded"
+      >
         <div>
           {props.showSearchInput &&
             <div className='d-flex'>
-              <TextInput 
+              <TextInput
+                name="searchValue"
                 className={props.selectValues && 'connect-field-right'}
-                placeholder={props.inputPlaceholder} 
+                placeholder={props.inputPlaceholder}
                 icon={<AiOutlineSearch />}
                 onChange={(event: React.MouseEvent) => props.searchInputOnChange(event)}
               />
               {props.selectValues &&
                 <Select
+                  name='selectorValue'
                   onChange={(event: any) => props.selectorInputOnChange(event)}
                   label="Type"
                   defaultValue={props.selectValues[0].value}
@@ -42,7 +48,11 @@ const Card = (props: any) => {
             </div>
           }
         </div>
-        <div className='custom-card-body' style={props.bodyStyle}>
+        <div 
+          className='custom-card-body' 
+          style={props.bodyStyle}
+          onScroll={props.onScroll}
+        >
           {props.children}
         </div>
       </div>

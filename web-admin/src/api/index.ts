@@ -117,7 +117,7 @@ export default {
   // region common
   post: (url: string, body: object) => base.post(url, body),
 
-  get: (url: string) => base.get(url),
+  get: (url: string, body?: object) => base.get(url, body),
 
   update: (url: string, body: object) => base.put(url, body),
 

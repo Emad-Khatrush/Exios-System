@@ -9,7 +9,7 @@ import StatusDataWidget from '../../components/StatusDataWidget/StatusDataWidget
 import InfoTable from '../../components/InfoTable/InfoTable';
 import { defaultColumns, generateDataToListType } from './generateData';
 import { connect } from 'react-redux';
-import { getInvoices } from '../../actions/invoices';
+import { getAllInvoices } from '../../actions/invoices';
 import { IInvoice } from '../../reducers/invoices';
 
 import { FaFileInvoiceDollar } from 'react-icons/fa';
@@ -36,7 +36,7 @@ interface InvoiceDetails {
 }
 
 type Props = {
-  getInvoices: any,
+  getAllInvoices: () => void,
   listData: IInvoice
   router: any
 }
@@ -68,7 +68,7 @@ class Invoices extends Component<Props, State> {
   }
 
   componentDidMount() {
-    this.props.getInvoices();
+    this.props.getAllInvoices();
     const id = new URLSearchParams(this.props.router.location?.search).get('id') || '';
     this.setState({ searchValue: id });
   }
@@ -79,7 +79,7 @@ class Invoices extends Component<Props, State> {
     switch (activeTabValue) {
       case 'all':
         // display all active orders
-        return !order.isFinished && !order.unsureOrder;
+        return !order.unsureOrder;
       
       case 'shipment':
       // display shipment orders only
@@ -126,7 +126,7 @@ class Invoices extends Component<Props, State> {
       const displayOrdersTab = this.findOrdersForSelectedTab(order);      
 
       // count every tab
-      if (!order.isFinished && !order.unsureOrder) allOrderCount++;
+      if (!order.unsureOrder) allOrderCount++;
       if (order.isFinished) finishedOrderCount++;
       if (!order.isShipment && order.isPayment && !order.unsureOrder && !order.isFinished) paidOrderCount++;
       if (order.unsureOrder && !order.isFinished) unsureOrderCount++;
@@ -339,7 +339,7 @@ const mapStateToProps = (state: any) => {
 }
 
 const mapDispatchToProps = {
-    getInvoices,
+  getAllInvoices,
 };
 
 export default connect(mapStateToProps, mapDispatchToProps)(withRouter(Invoices));

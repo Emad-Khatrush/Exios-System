@@ -1,15 +1,15 @@
 import { Action, Dispatch } from "redux"
 import api from "../api";
-import { GET_ACTIVITIES, STATUS_ERROR, STATUS_START, STATUS_SUCCESS } from "../constants/actions";
+import { GET_ACTIVITIES, STATUS_ERROR, STATUS_LOADING, STATUS_SUCCESS } from "../constants/actions";
 
-export const getActivities = () => {
+export const getActivities = (query?: { limit?: number, skip?: number }) => {
   return (dispatch: Dispatch<Action>): void => {
     dispatch({
-      status: STATUS_START,
+      status: STATUS_LOADING,
       type: GET_ACTIVITIES,
     });
-
-    api.get('activities')
+    
+    api.get('activities', query)
       .then(({ data }) => {
         dispatch({
           payload: { data },

@@ -1,4 +1,5 @@
 import { Invoice } from "../models";
+import { IInvoice } from "../reducers/invoices";
 
 // General Methods
 export const arrayRemoveByValue = (arr: any[], value: string) => { 
@@ -45,4 +46,32 @@ export const getOrderSteps = (order: Invoice | null | undefined) => {
     });
   }
   return steps;
+}
+
+export const getTabOrdersCount = (tabType: string, data: IInvoice) => {
+
+    switch (tabType) {
+      case 'active':
+        return data.activeOrdersCount;
+      
+      case 'shipment':
+      return data.shipmentOrdersCount;
+
+      case 'arriving':
+      return data.arrivingOrdersCount;
+
+      case 'unpaid':
+      return data.unpaidOrdersCount;
+
+      case 'finished':
+      return data.finishedOrdersCount;
+
+      case 'unsure':
+      return data.unsureOrdersCount;
+    
+      default:
+        // default
+        return data.activeOrdersCount;
+    }
+
 }

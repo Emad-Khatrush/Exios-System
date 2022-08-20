@@ -7,26 +7,44 @@ import { getActivities } from '../../actions/activities'
 import { ActivityType } from '../../models'
 
 type Props = {
-  getActivities: any
+  getActivities: (query?: { limit?: number, skip?: number }) => void
   listData: any
 }
 
 type State = {
   selectorValue: string
+  scrollReached: boolean
 }
 
 class Activities extends Component<Props, State> {
   state: State = {
-    selectorValue: 'all'
+    selectorValue: 'all',
+    scrollReached: false
   }
 
   componentDidMount() {
-    this.props.getActivities();
+    this.props.getActivities({
+      skip: 0,
+      limit: 25
+    });
   }
 
   filterList = (activity: ActivityType[]) => {
     const { selectorValue } = this.state;
     return activity.filter((atv: ActivityType) => selectorValue === 'all' || atv.details.type === selectorValue);
+  }
+
+  onScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const scrollReached = event.currentTarget.scrollHeight - event.currentTarget.scrollTop <= event.currentTarget.clientHeight + 25;
+    const limit = Number(this.props.listData?.query?.limit);
+    
+    if (scrollReached !== this.state.scrollReached && limit < this.props.listData?.total) {
+      this.props.getActivities({
+        skip: 0,
+        limit: limit + 25
+      });
+      this.setState({ scrollReached });
+    }
   }
 
   render() {
@@ -36,9 +54,16 @@ class Activities extends Component<Props, State> {
 
     return (
       <div className="container mt-4">
-        <div className="row" style={{ maxWidth: '1100px', margin: 'auto'}}>
-          <div className="col-12">
-            <Card>
+        <div className="row" style={{ maxWidth: '1100px', margin: 'auto' }}>
+          <div className="col-md-12">
+            <Card
+              onScroll={this.onScroll}
+              bodyStyle={{
+                height: '75vh',
+                overflow: 'auto',
+                marginTop: '20px'
+              }}
+            >
               <div className='d-flex justify-content-between'>
                 <h3> Activities </h3>
                 <FormControl sx={{ m: 1, minWidth: 120 }} size="small">
@@ -61,22 +86,25 @@ class Activities extends Component<Props, State> {
                 </FormControl>
               </div>
               <hr style={{ color: '#b7b7b7' }} />
-              {filteredList && filteredList.slice().reverse().map((activity: ActivityType, index: number) => (
-                <Activity 
-                  key={activity._id} 
-                  activity={activity} 
-                  index={index}
-                  totalList={listData?.list.length}
-                />
-              ))}
+              <div>
+                {filteredList && filteredList.map((activity: ActivityType, index: number) => (
+                  <Activity 
+                    key={activity._id} 
+                    activity={activity} 
+                    index={index}
+                    totalList={listData?.list.length}
+                  />
+                ))}
+              </div>
+
               {filteredList.length === 0 &&
-                <>
-                  {listData.listStatus.isLoading ? 
-                  <CircularProgress className='text-center' />
-                  :
-                  <p className='text-center'> No activities found </p>
-                  }
-                </>
+                <p className='text-center'> No activities found </p>
+              }
+
+              {listData.listStatus.isLoading &&
+                <div className='text-center'>
+                  <CircularProgress />
+                </div>
               }
             </Card>
           </div>

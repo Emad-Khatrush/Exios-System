@@ -1,5 +1,6 @@
 // region statuses
 export const STATUS_START = 'STATUS_START';
+export const STATUS_LOADING = 'STATUS_LOADING';
 export const STATUS_ERROR = 'STATUS_ERROR';
 export const STATUS_SUCCESS = 'STATUS_SUCCESS';
 

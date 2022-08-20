@@ -6,32 +6,32 @@ export const generateTabs = (tabs: any): any => {
     {
       label: 'Active',
       value: 'active',
-      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.activeOrderCount)} color="sky" />
+      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.activeOrdersCount)} color="sky" />
     },
     {
       label: 'Only Shipment',
       value: 'shipment',
-      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.shipmentOrderCount)} color="primary" />
+      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.shipmentOrdersCount)} color="primary" />
     },
     {
       label: `Arriving`,
       value: 'arriving',
-      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.arrivingOrderCount)} color="primary" />
+      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.arrivingOrdersCount)} color="primary" />
     },
     {
       label: 'UnPaid',
       value: 'unpaid',
-      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.unpaidOrderCount)} color="warning" />
+      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.unpaidOrdersCount)} color="warning" />
     },
     {
       label: 'Finished',
       value: 'finished',
-      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.finishedOrderCount)} color="success" />
+      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.finishedOrdersCount)} color="success" />
     },
     {
       label: 'Unsure Orders',
       value: 'unsure',
-      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.unsureOrderCount)} color="danger" />
+      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.unsureOrdersCount)} color="danger" />
     }
   ] as LocalTabs;
 }

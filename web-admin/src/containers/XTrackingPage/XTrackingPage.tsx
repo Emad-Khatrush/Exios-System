@@ -2,28 +2,31 @@ import { CircularProgress } from "@mui/material";
 import { Component } from "react";
 import { AiOutlinePlus } from "react-icons/ai";
 import { connect } from "react-redux";
-import { getInvoices } from "../../actions/invoices";
+import { getInvoices, getInvoicesBySearch } from "../../actions/invoices";
 import Card from "../../components/Card/Card";
 import CustomButton from "../../components/CustomButton/CustomButton";
 import OrderWidget from "../../components/OrderWidget/OrderWidget";
-import { Invoice, LocalTabs } from "../../models";
+import { LocalTabs } from "../../models";
 import { IInvoice } from "../../reducers/invoices";
+import { getTabOrdersCount } from "../../utils/methods";
 import { generateTabs } from "./utils";
 
 type Props = {
-  getInvoices: () => void
+  getInvoices: (config?: {
+    skip?: number
+    limit?: number
+    tabType?: string
+  }) => void
+  getInvoicesBySearch: (query: { searchValue: string, selectorValue: string, tabType: string }) => void
   listData: IInvoice
 }
 
 type State = {
   searchValue: string
   selectorValue: string
-  activeTabValue: string
-  activeOrderCount: number
-  shipmentOrderCount: number
-  finishedOrderCount: number
-  unpaidOrderCount: number
-  unsureOrderCount: number
+  scrollReached: boolean
+  filteredOrders: IInvoice[]
+  searchForOrder: boolean
 }
 
 const selectValues = [
@@ -42,132 +45,72 @@ class XTrackingPage extends Component<Props, State> {
   state: State = {
     searchValue: '',
     selectorValue: 'orderId',
-    activeTabValue: 'active',
-    activeOrderCount: 0,
-    shipmentOrderCount: 0,
-    finishedOrderCount: 0,
-    unpaidOrderCount: 0,
-    unsureOrderCount: 0,
+    scrollReached: false,
+    filteredOrders: [],
+    searchForOrder: false
   }
 
   componentDidMount() {
-    this.props.getInvoices();
+    this.props.getInvoices({
+      skip: 0,
+      limit: 25
+    });
   }
 
-  findOrdersForSelectedTab = (order: Invoice) => {
-    const { activeTabValue } = this.state;
+  onTabChange = (value: string) => {
+    this.props.getInvoices({
+      tabType: value
+    });
+  }
 
-    switch (activeTabValue) {
-      case 'active':
-        // display active orders only
-        return !order.isFinished && !order.unsureOrder;
-      
-      case 'shipment':
-      // display shipment orders only
-      return order.isShipment && !order.isPayment && !order.unsureOrder && !order.isFinished;
-
-      case 'arriving':
-      // display arriving orders only
-      return order.isPayment && order.orderStatus === 1;
-
-      case 'unpaid':
-      // display unpaid orders only
-      return order.orderStatus === 0 && !order.unsureOrder;
-
-      case 'finished':
-      // display finished orders only
-      return order.isFinished;
-
-      case 'unsure':
-      // display unsure orders only
-      return order.unsureOrder;
+  onScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    const scrollReached = event.currentTarget.scrollHeight - event.currentTarget.scrollTop <= event.currentTarget.clientHeight + 25;
+    const limit = Number(this.props.listData?.query?.limit);
+    const currentOrdersCount = getTabOrdersCount(this.props.listData.tabType, this.props.listData);
     
-      default:
-        // default
-        return !order.isFinished;
+    if (scrollReached !== this.state.scrollReached && limit < currentOrdersCount) {
+      this.props.getInvoices({
+        skip: 0,
+        limit: limit + 25,
+        tabType: this.props.listData.tabType
+      });
+      this.setState({ scrollReached });
     }
   }
 
-  searchByTrackingNumber = (order: Invoice) => {
-    const { searchValue } = this.state;
-
-    let dataFound = false;
-    for (let i = 0; i < order.paymentList.length; i++) {
-      const isTrackingNumberValid = order?.paymentList[i]?.deliveredPackages?.trackingNumber.toLowerCase().indexOf(this.state.searchValue.toLowerCase()) > -1;
-      if (searchValue !== '' && isTrackingNumberValid) {
-        dataFound = true;
-        break;
-      }
+  filterList = (event: any) => {
+    const eventName = event.target.name;
+    const searchValue = eventName === 'searchValue' ? event.target.value : this.state.searchValue;
+    const selectorValue = eventName === 'selectorValue' ? event.target.value : this.state.selectorValue;
+    
+    if (eventName === 'selectorValue' && searchValue === '') return;
+    
+    if (eventName === 'searchValue' && searchValue === '') {
+      this.props.getInvoices({
+        tabType: this.props.listData.tabType
+      });
+    } else {
+      this.props.getInvoicesBySearch({
+        searchValue: searchValue,
+        selectorValue: selectorValue,
+        tabType: this.props.listData.tabType
+      })
     }
-    return dataFound;
   }
 
-  filterList = (list: any[]) => {
-    const { searchValue, selectorValue } = this.state;
-    let filteredList = list;
-
-    let activeOrderCount = 0;
-    let shipmentOrderCount = 0;
-    let finishedOrderCount = 0;
-    let unpaidOrderCount = 0;
-    let unsureOrderCount = 0;
-    let arrivingOrderCount = 0;
-
-
-    filteredList = filteredList.filter((order: Invoice) => {
-      // if the search bar have a value, filter all the data
-      const displayOrdersTab = searchValue ? true : this.findOrdersForSelectedTab(order);
-
-      // count every tab
-      if (!order.isFinished && !order.unsureOrder) activeOrderCount++;
-      if (order.isFinished) finishedOrderCount++;
-      if (order.orderStatus === 0 && !order.unsureOrder) unpaidOrderCount++;
-      if (order.unsureOrder) unsureOrderCount++;
-      if (order.isPayment && order.orderStatus === 1) arrivingOrderCount++;
-      if (order.isShipment && !order.isPayment && !order.unsureOrder && !order.isFinished) shipmentOrderCount++;
-
-      if (selectorValue === 'trackingNumber') {
-        return(
-          ((this.searchByTrackingNumber(order) && displayOrdersTab) || searchValue === '') &&
-          displayOrdersTab
-        )
-      }
-
-      return(
-      ((order.customerInfo.fullName || "").toLocaleLowerCase().indexOf(searchValue.toLocaleLowerCase()) > -1 ||
-      (order.orderId || "").toLocaleLowerCase().indexOf(searchValue) > -1
-      ) &&
-      displayOrdersTab
-    )})
-
-    return {
-      filteredList,
-      activeOrderCount,
-      shipmentOrderCount,
-      finishedOrderCount,
-      unpaidOrderCount,
-      unsureOrderCount,
-      arrivingOrderCount
-    };
-  }
 
   render() {
-    const { listData } = this.props;
-
-    const { filteredList, activeOrderCount, shipmentOrderCount, finishedOrderCount, unpaidOrderCount, unsureOrderCount, arrivingOrderCount} = this.filterList(listData.list);
-
-    if (listData.listStatus.isLoading) {
-      return <CircularProgress />
-    }
+    const { listData } = this.props;    
+    const filteredList = listData.list.reverse();
 
     const tabs: LocalTabs = generateTabs({
-      activeOrderCount,
-      shipmentOrderCount,
-      finishedOrderCount,
-      unpaidOrderCount,
-      unsureOrderCount,
-      arrivingOrderCount
-    });
+      activeOrdersCount: listData.activeOrdersCount,
+      shipmentOrdersCount: listData.shipmentOrdersCount,
+      finishedOrdersCount: listData.finishedOrdersCount,
+      unpaidOrdersCount: listData.unpaidOrdersCount,
+      unsureOrdersCount: listData.unsureOrdersCount,
+      arrivingOrdersCount: listData.arrivingOrdersCount
+    });    
     
     return (
       <div className="container mt-4">
@@ -194,11 +137,18 @@ class XTrackingPage extends Component<Props, State> {
                 overflow: 'auto',
                 marginTop: '20px'
               }}
-              searchInputOnChange={(event: any) => this.setState({ searchValue: event.target.value })}
-              selectorInputOnChange={(event: any) => this.setState({ selectorValue: event.target.value })}
-              tabsOnChange={(value: string) => this.setState({ activeTabValue: value })}
+              searchInputOnChange={(event: any) => {
+                this.setState({ searchValue: event.target.value });
+                this.filterList(event);
+              }}
+              selectorInputOnChange={(event: any) => {
+                this.setState({ selectorValue: event.target.value });
+                this.filterList(event);
+              }}
+              tabsOnChange={(value: string) => this.onTabChange(value)}
+              onScroll={this.onScroll}
             >
-              {filteredList && filteredList.reverse().map((order, i) => (
+              {filteredList && (filteredList || []).reverse().map((order: any, i: number) => (
                 <OrderWidget
                   key={order.orderId}
                   order={order}
@@ -206,7 +156,13 @@ class XTrackingPage extends Component<Props, State> {
                 />
               ))}
 
-              {filteredList.length <= 0 &&
+              {listData.listStatus.isLoading &&
+                <div className="text-center">
+                  <CircularProgress />
+                </div>
+              }
+
+              {filteredList?.length <= 0 &&
                 <p className="text-center"> No orders found </p>
               }
             </Card>
@@ -225,6 +181,7 @@ const mapStateToProps = (state: any) => {
 
 const mapDispatchToProps = {
     getInvoices,
+    getInvoicesBySearch
 };
 
 export default connect(mapStateToProps, mapDispatchToProps)(XTrackingPage);

@@ -39,7 +39,6 @@ const EditIncome = (props: Props) => {
   const { id } = useParams();
 
   const inputFileRef = useRef();
-console.log(formData);
 
   useEffect(() => {
     api.get('income/' + id)

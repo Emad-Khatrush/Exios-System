@@ -38,8 +38,6 @@ export const session = (state: ISession = initialState, action: any) => {
         }
         
         case STATUS_SUCCESS: {     
-          console.log("login", action.payload);
-               
           return {
             ...state,
             account: action.payload.account,

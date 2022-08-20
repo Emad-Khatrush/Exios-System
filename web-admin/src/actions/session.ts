@@ -36,7 +36,6 @@ export const login = function(username: string, password: string) {
 export const checkAuth = (token: string) => {
   
   return (dispatch: Dispatch<Action>): void => {
-    console.log("checkAuth ", token);
     api.post('verifyToken', { token })
       .then(({ data }) => {
         // addAuthInterceptor(data.token);

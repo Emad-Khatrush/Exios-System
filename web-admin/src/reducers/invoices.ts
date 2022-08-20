@@ -1,4 +1,4 @@
-import { CREATE_INVOICE, GET_INVOICES, RESET_INVOICE, STATUS_ERROR, STATUS_START, STATUS_SUCCESS } from "../constants/actions";
+import { CREATE_INVOICE, GET_INVOICES, RESET_INVOICE, STATUS_ERROR, STATUS_LOADING, STATUS_START, STATUS_SUCCESS } from "../constants/actions";
 import { Invoice } from "../models";
 
 export interface IStatus {
@@ -11,7 +11,18 @@ export interface IStatus {
 export interface IInvoice{
   listStatus: IStatus
   list: Invoice[]
+  query: {
+    skip: number
+    limit: number
+  }
   total: number
+  activeOrdersCount: number
+  shipmentOrdersCount: number
+  finishedOrdersCount: number
+  unpaidOrdersCount: number
+  unsureOrdersCount: number
+  arrivingOrdersCount: number
+  tabType: string
 }
 
 export const initialState: IInvoice = {
@@ -22,8 +33,19 @@ export const initialState: IInvoice = {
     message: null
   },
   list: [],
-  total: 0
-};
+  query: {
+    limit: 0,
+    skip: 0
+  },
+  total: 0,
+  activeOrdersCount: 0,
+  shipmentOrdersCount: 0,
+  finishedOrdersCount: 0,
+  unpaidOrdersCount: 0,
+  unsureOrdersCount: 0,
+  arrivingOrdersCount: 0,
+  tabType: 'active' 
+}
 
 export const invoice = (state: IInvoice = initialState, action: any) => {
   switch (action.type) {
@@ -76,6 +98,17 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
               }
             };
           }
+
+          case STATUS_LOADING: {
+            return {
+              ...state,
+              listStatus: {
+                isError: false,
+                isSuccess: false,
+                isLoading: true,
+              }
+            };
+          }
           
           case STATUS_SUCCESS: {                      
             return {
@@ -85,8 +118,16 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
                 isSuccess: true,
                 isLoading: false,
               },
-              list: action.payload.data,
-              total: action.payload?.data?.length
+              list: action.payload.data.orders,
+              activeOrdersCount: action.payload?.data?.activeOrdersCount,
+              shipmentOrdersCount: action.payload?.data?.shipmentOrdersCount,
+              finishedOrdersCount: action.payload?.data?.finishedOrdersCount,
+              unpaidOrdersCount: action.payload?.data?.unpaidOrdersCount,
+              unsureOrdersCount: action.payload?.data?.unsureOrdersCount,
+              arrivingOrdersCount: action.payload?.data?.arrivingOrdersCount,
+              tabType: action.payload?.data?.tabType,
+              total: action.payload?.data?.total,
+              query: action.payload?.data?.query
             }
           }
           case STATUS_ERROR: {
