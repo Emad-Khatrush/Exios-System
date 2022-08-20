@@ -10,9 +10,15 @@ const upload = multer({ storage });
 
 const router  = express.Router();
 
+router.route('/invoices')
+      .get(protect, orders.getInvoices);
+
 router.route('/orders')
       .get(protect, orders.getOrders)
       .post(protect, upload.array('files'), orders.createOrder);
+
+router.route('/orders/:searchValue/:searchType')
+      .get(orders.getOrdersBySearch)
 
 router.route('/unsureOrder/add')
       .post(protect, orders.createUnsureOrder);

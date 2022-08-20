@@ -2,18 +2,123 @@ const Orders = require('../models/order');
 const Activities = require('../models/activities');
 const orderid = require('order-id')('key');
 const ErrorHandler = require('../utils/errorHandler');
-const { cloudinary, uploadFromBuffer } = require('../utils/cloudinary');
+const { uploadFromBuffer } = require('../utils/cloudinary');
 const { errorMessages } = require('../constants/errorTypes');
 const Offices = require('../models/office');
-const { addChangedField } = require('../middleware/helper');
+const { addChangedField, getTapTypeQuery } = require('../middleware/helper');
 const { orderLabels } = require('../constants/orderLabels');
 const mongoose = require('mongoose');
 
+module.exports.getInvoices = async (req, res, next) => {
+  try {
+    const orders = await Orders.find({});
+    res.status(200).json({
+      orders
+    });
+  } catch (error) {
+    return next(new ErrorHandler(404, error.message));
+  }
+}
+
 module.exports.getOrders = async (req, res, next) => {
   try {
+    const { limit, skip, tabType } = req.query;
     // await Orders.deleteMany({})
-    const orders = await Orders.find({}).populate('user');
-    res.status(200).json(orders);
+    const tabTypeQuery = getTapTypeQuery(tabType);
+    const orders = await Orders.find(tabTypeQuery).populate('user').sort({ createdAt: -1 }).skip(skip).limit(limit);
+    const totalOrders = await Orders.count();
+    const activeOrders = await Orders.aggregate([
+      { $match: { isFinished: false,  unsureOrder: false } },
+    ])
+
+    const shipmentOrders = await Orders.aggregate([
+      { $match: { isShipment: true,  unsureOrder: false, isPayment: false,  isFinished: false } },
+    ])
+
+    const arrivingOrders = await Orders.aggregate([
+      { $match: { isPayment: true,  orderStatus: 1 } },
+    ])
+
+    const unpaidOrders = await Orders.aggregate([
+      { $match: { unsureOrder: false,  orderStatus: 0, isPayment: true } },
+    ])
+
+    const finishedOrders = await Orders.aggregate([
+      { $match: { isFinished: true } },
+    ])
+    
+    const unsureOrders = await Orders.aggregate([
+      { $match: { unsureOrder: true } },
+    ])
+    
+    res.status(200).json({
+      orders,
+      activeOrdersCount: activeOrders.length,
+      shipmentOrdersCount: shipmentOrders.length,
+      finishedOrdersCount: finishedOrders.length,
+      unpaidOrdersCount: unpaidOrders.length,
+      unsureOrdersCount: unsureOrders.length,
+      arrivingOrdersCount: arrivingOrders.length,
+      tabType: tabType ? tabType : 'active',
+      total: totalOrders,
+      query: {
+        limit: Number(limit),
+        skip: Number(skip)
+      }
+    });
+  } catch (error) {
+    return next(new ErrorHandler(404, error.message));
+  }
+}
+
+module.exports.getOrdersBySearch = async (req, res, next) => {
+  const { searchValue, searchType } = req.params;
+  const { tabType } = req.query;
+  let query = [{ $match: { $or: [{orderId: { $regex: new RegExp(searchValue.toLowerCase(), 'i') }}, { 'customerInfo.fullName': { $regex: new RegExp(searchValue.toLowerCase(), 'i') } }] } }];
+  const totalOrders = await Orders.count();
+  if (searchType === 'trackingNumber') {
+    query = [
+      { $unwind: '$paymentList' },
+      { $match: { $or: [ { 'paymentList.deliveredPackages.trackingNumber': { $regex: new RegExp(searchValue.trim().toLowerCase(), 'i') } }, { 'customerInfo.fullName': { $regex: new RegExp(searchValue.toLowerCase(), 'i') } } ] } }
+    ]
+  }
+  try {
+    const activeOrders = await Orders.aggregate([
+      { $match: { isFinished: false,  unsureOrder: false } },
+    ])
+
+    const shipmentOrders = await Orders.aggregate([
+      { $match: { isShipment: true,  unsureOrder: false, isPayment: false,  isFinished: false } },
+    ])
+
+    const arrivingOrders = await Orders.aggregate([
+      { $match: { isPayment: true,  orderStatus: 1 } },
+    ])
+
+    const unpaidOrders = await Orders.aggregate([
+      { $match: { unsureOrder: false,  orderStatus: 0 } },
+    ])
+
+    const finishedOrders = await Orders.aggregate([
+      { $match: { isFinished: true } },
+    ])
+    
+    const unsureOrders = await Orders.aggregate([
+      { $match: { unsureOrder: true } },
+    ])
+    
+    const orders = await Orders.aggregate(query);
+    res.status(200).json({
+      orders,
+      activeOrdersCount: activeOrders.length,
+      shipmentOrdersCount: shipmentOrders.length,
+      finishedOrdersCount: finishedOrders.length,
+      unpaidOrdersCount: unpaidOrders.length,
+      unsureOrdersCount: unsureOrders.length,
+      arrivingOrdersCount: arrivingOrders.length,
+      tabType: tabType ? tabType : 'active',
+      total: totalOrders
+    })
   } catch (error) {
     return next(new ErrorHandler(404, error.message));
   }
