@@ -27,6 +27,7 @@ type State = {
   scrollReached: boolean
   filteredOrders: IInvoice[]
   searchForOrder: boolean
+  isTabOrdersLoading: boolean
 }
 
 const selectValues = [
@@ -47,20 +48,25 @@ class XTrackingPage extends Component<Props, State> {
     selectorValue: 'orderId',
     scrollReached: false,
     filteredOrders: [],
-    searchForOrder: false
+    searchForOrder: false,
+    isTabOrdersLoading: false
   }
 
   componentDidMount() {
     this.props.getInvoices({
       skip: 0,
-      limit: 25
+      limit: 15
     });
   }
 
-  onTabChange = (value: string) => {
-    this.props.getInvoices({
-      tabType: value
+  onTabChange = async (value: string) => {
+    this.setState({ isTabOrdersLoading: true });
+    await this.props.getInvoices({
+      tabType: value,
+      skip: 0,
+      limit: 15
     });
+    this.setState({ isTabOrdersLoading: false });
   }
 
   onScroll = (event: React.UIEvent<HTMLDivElement>) => {
@@ -71,7 +77,7 @@ class XTrackingPage extends Component<Props, State> {
     if (scrollReached !== this.state.scrollReached && limit < currentOrdersCount) {
       this.props.getInvoices({
         skip: 0,
-        limit: limit + 25,
+        limit: limit + 15,
         tabType: this.props.listData.tabType
       });
       this.setState({ scrollReached });
@@ -148,13 +154,22 @@ class XTrackingPage extends Component<Props, State> {
               tabsOnChange={(value: string) => this.onTabChange(value)}
               onScroll={this.onScroll}
             >
-              {filteredList && (filteredList || []).reverse().map((order: any, i: number) => (
-                <OrderWidget
-                  key={order.orderId}
-                  order={order}
-                  orderIndex={filteredList?.length - i}
-                />
-              ))}
+              {this.state.isTabOrdersLoading ?
+                <div className="text-center">
+                  <CircularProgress />
+                </div>
+                :
+                <>
+                  {filteredList && (filteredList || []).reverse().map((order: any, i: number) => (
+                    <OrderWidget
+                      key={order.orderId}
+                      order={order}
+                      orderIndex={filteredList?.length - i}
+                    />
+                  ))}
+                </>
+              }
+              
 
               {listData.listStatus.isLoading &&
                 <div className="text-center">
