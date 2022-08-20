@@ -43,3 +43,28 @@ exports.addChangedField = (fieldName, newData, oldData, labels) => {
             }
     }
 }
+
+exports.getTapTypeQuery = (tapType) => {
+    switch (tapType) {
+        case 'active':
+            return { isFinished: false,  unsureOrder: false }
+        
+        case 'shipment':
+            return { isShipment: true,  unsureOrder: false, isPayment: false,  isFinished: false }
+        
+        case 'arriving':
+            return { isPayment: true,  orderStatus: 1 }
+
+        case 'unpaid':
+            return { unsureOrder: false,  orderStatus: 0, isPayment: true }
+
+        case 'finished':
+            return { isFinished: true }
+
+        case 'unsure':
+            return { unsureOrder: true }
+    
+        default:
+            return { isFinished: false,  unsureOrder: false }
+    }
+}

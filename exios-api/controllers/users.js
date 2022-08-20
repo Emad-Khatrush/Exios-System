@@ -55,7 +55,6 @@ module.exports.login = async (req, res, next) => {
     }
 
     const token = await user.getSignedToken();
-    console.log("--- login route ---", token);
     res.status(200).json({
       success: true,
       account: user,
@@ -97,7 +96,6 @@ module.exports.getHomeData = async (req, res, next) => {
       { $project: { _id: 0, office: '$_id.office', currency: '$_id.currency', totalDebts: 1 } },
       { $sort: { office: 1 , currency: -1 } }
     ])
-    console.log(totalDebts);
 
     const totalInvoices = (await Orders.aggregate([
       { $addFields: { 'month': { $month: '$createdAt' } } },
@@ -113,17 +111,6 @@ module.exports.getHomeData = async (req, res, next) => {
       { $group: { _id: '$month', totalNetOfMonth: { $sum: '$netIncome.total' } } },
       { $project: { _id: 0, totalNetOfMonth: 1 } },
     ]))[0]?.totalNetOfMonth || 0;
-
-    // getting the current and previos earning
-    // const monthlyEarning = (await Orders.aggregate([
-    //   { $addFields: { 'month': { $month: '$createdAt' } } },
-    //   { $match: { isFinished: false, unsureOrder: false, isCanceled: false } },
-    //   { $unwind: '$netIncome' },
-    //   { $group: { _id: '$month', totalNetOfMonth: { $sum: '$netIncome.total' } } },
-    //   { $project: { _id: 1, totalNetOfMonth: 1 } },
-    // ]));
-    
-    // return res.status(200).json(thisMonthlyEarning)
 
     const previousMonthlyEarning = (await Orders.aggregate([
       { $addFields: { 'month': { $month: '$createdAt' } } },
