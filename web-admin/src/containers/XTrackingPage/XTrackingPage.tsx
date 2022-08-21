@@ -128,9 +128,7 @@ class XTrackingPage extends Component<Props, State> {
       arrivingOrdersCount: listData.arrivingOrdersCount
     });
 
-    const currentOrdersCount = getTabOrdersCount(this.props.listData.tabType, this.props.listData);
-    console.log(currentOrdersCount);
-    
+    const currentOrdersCount = getTabOrdersCount(this.props.listData.tabType, this.props.listData);    
     
     return (
       <div className="container mt-4">

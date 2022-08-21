@@ -8,7 +8,6 @@ import { connect } from 'react-redux';
 import CustomButton from '../../components/CustomButton/CustomButton';
 import { IExpense } from '../../reducers/expenses';
 import { createExpense, resetExpense } from '../../actions/expenses';
-import api from '../../api';
 import withRouter from '../../utils/WithRouter/WithRouter';
 import { NavigateFunction } from 'react-router-dom';
 
@@ -28,7 +27,6 @@ type State = {
   formData: any
   paymentList: any
   showResponseMessage: boolean
-  officeData: any
 }
 
 const breadcrumbs = [
@@ -56,14 +54,9 @@ class CreateExpense extends Component<Props, State> {
       note: '',
     }],
     showResponseMessage: false,
-    officeData: null
   }
 
   async componentDidMount() {    
-    if (this.props.isEmployee) {
-      const res = await api.get('office/tripoli');
-      this.setState({ officeData: res.data });
-    }
     this.props.resetExpense()
   }
 
@@ -173,11 +166,7 @@ class CreateExpense extends Component<Props, State> {
 
   render() {
     const { expense } = this.props;
-    const { officeData }: any = this.state;
-
     const inputFileRef = React.createRef();
-
-    const officeHasData = !!officeData;
 
     return (
       <div className="m-4">
@@ -188,9 +177,6 @@ class CreateExpense extends Component<Props, State> {
                 {breadcrumbs}
               </Breadcrumbs>
           </div>
-          {officeHasData && 
-            <h6> Balance: {(officeData?.libyanDinar?.value || 0)} LYD - {(officeData?.usaDollar?.value || 0)} USD </h6>
-          }
           <form
             className="row"
             onSubmit={(e) => this.submitForm(e)}
