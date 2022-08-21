@@ -38,9 +38,14 @@ const adminRoutes = [
 
  const employeeRoutes = [
     {
-        title: 'X-Tracking',
+        title: 'Home',
         path: '/',
         icon: <MdLineStyle className="sidebar-icon" />,
+    },
+    {
+        title: 'X-Tracking',
+        path: '/xtracking',
+        icon: <FaArchive className="sidebar-icon" />,
     },
      {   
         title: 'Invoice',

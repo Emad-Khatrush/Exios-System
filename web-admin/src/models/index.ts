@@ -153,7 +153,8 @@ export type HomeData = {
     totalDebts: number, 
     office: string, 
     currency: string
-  }[]
+  }[],
+  debts: Invoice[]
 }
 
 export type Expense = {
@@ -196,6 +197,7 @@ export type Session = {
 }
 
 export type Account = {
+  _id: string
   username: string,
   firstName: string,
   lastName: string,

@@ -1,10 +1,11 @@
-import { CREATE_INVOICE, GET_INVOICES, RESET_INVOICE, STATUS_ERROR, STATUS_LOADING, STATUS_START, STATUS_SUCCESS } from "../constants/actions";
+import { CREATE_INVOICE, GET_INVOICES, RESET_INVOICE, STATUS_ERROR, STATUS_LOADING, STATUS_START, STATUS_SUCCESS, SWITCH_TAB } from "../constants/actions";
 import { Invoice } from "../models";
 
 export interface IStatus {
   isError: boolean
   isLoading: boolean
   isSuccess: boolean
+  isSwitchingTab: boolean
   message: string | null
 }
 
@@ -30,6 +31,7 @@ export const initialState: IInvoice = {
     isError: false,
     isLoading: false,
     isSuccess: false,
+    isSwitchingTab: false,
     message: null
   },
   list: [],
@@ -99,6 +101,18 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
             };
           }
 
+          case SWITCH_TAB: {
+            return {
+              ...state,
+              listStatus: {
+                isError: false,
+                isSuccess: false,
+                isLoading: false,
+                isSwitchingTab: true
+              }
+            };
+          }
+
           case STATUS_LOADING: {
             return {
               ...state,
@@ -106,6 +120,7 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
                 isError: false,
                 isSuccess: false,
                 isLoading: true,
+                isSwitchingTab: false
               }
             };
           }
@@ -117,6 +132,7 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
                 isError: false,
                 isSuccess: true,
                 isLoading: false,
+                isSwitchingTab: false
               },
               list: action.payload.data.orders,
               activeOrdersCount: action.payload?.data?.activeOrdersCount,
@@ -137,6 +153,7 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
                 isError: true,
                 isSuccess: false,
                 isLoading: false,
+                isSwitchingTab: false,
                 message: action.payload.error?.data?.message
               }
             }

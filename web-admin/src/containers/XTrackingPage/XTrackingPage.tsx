@@ -2,7 +2,7 @@ import { CircularProgress } from "@mui/material";
 import { Component } from "react";
 import { AiOutlinePlus } from "react-icons/ai";
 import { connect } from "react-redux";
-import { getInvoices, getInvoicesBySearch } from "../../actions/invoices";
+import { getCurrentTabInvoices, getDefualtInvoices, getInvoices, getInvoicesBySearch } from "../../actions/invoices";
 import Card from "../../components/Card/Card";
 import CustomButton from "../../components/CustomButton/CustomButton";
 import OrderWidget from "../../components/OrderWidget/OrderWidget";
@@ -13,6 +13,16 @@ import { generateTabs } from "./utils";
 
 type Props = {
   getInvoices: (config?: {
+    skip?: number
+    limit?: number
+    tabType?: string
+  }) => void
+  getCurrentTabInvoices: (config?: {
+    skip?: number
+    limit?: number
+    tabType?: string
+  }) => void
+  getDefualtInvoices: (config?: {
     skip?: number
     limit?: number
     tabType?: string
@@ -53,20 +63,18 @@ class XTrackingPage extends Component<Props, State> {
   }
 
   componentDidMount() {
-    this.props.getInvoices({
+    this.props.getDefualtInvoices({
       skip: 0,
-      limit: 15
+      limit: 10
     });
   }
 
-  onTabChange = async (value: string) => {
-    this.setState({ isTabOrdersLoading: true });
-    await this.props.getInvoices({
+  onTabChange = (value: string) => {
+    this.props.getCurrentTabInvoices({
       tabType: value,
       skip: 0,
-      limit: 15
+      limit: 10
     });
-    this.setState({ isTabOrdersLoading: false });
   }
 
   onScroll = (event: React.UIEvent<HTMLDivElement>) => {
@@ -77,7 +85,7 @@ class XTrackingPage extends Component<Props, State> {
     if (scrollReached !== this.state.scrollReached && limit < currentOrdersCount) {
       this.props.getInvoices({
         skip: 0,
-        limit: limit + 15,
+        limit: limit + 5,
         tabType: this.props.listData.tabType
       });
       this.setState({ scrollReached });
@@ -93,7 +101,9 @@ class XTrackingPage extends Component<Props, State> {
     
     if (eventName === 'searchValue' && searchValue === '') {
       this.props.getInvoices({
-        tabType: this.props.listData.tabType
+        tabType: this.props.listData.tabType,
+        skip: 0,
+        limit: 10,
       });
     } else {
       this.props.getInvoicesBySearch({
@@ -116,7 +126,11 @@ class XTrackingPage extends Component<Props, State> {
       unpaidOrdersCount: listData.unpaidOrdersCount,
       unsureOrdersCount: listData.unsureOrdersCount,
       arrivingOrdersCount: listData.arrivingOrdersCount
-    });    
+    });
+
+    const currentOrdersCount = getTabOrdersCount(this.props.listData.tabType, this.props.listData);
+    console.log(currentOrdersCount);
+    
     
     return (
       <div className="container mt-4">
@@ -154,7 +168,7 @@ class XTrackingPage extends Component<Props, State> {
               tabsOnChange={(value: string) => this.onTabChange(value)}
               onScroll={this.onScroll}
             >
-              {this.state.isTabOrdersLoading ?
+              {this.props.listData.listStatus.isSwitchingTab ?
                 <div className="text-center">
                   <CircularProgress />
                 </div>
@@ -164,20 +178,19 @@ class XTrackingPage extends Component<Props, State> {
                     <OrderWidget
                       key={order.orderId}
                       order={order}
-                      orderIndex={filteredList?.length - i}
+                      orderIndex={currentOrdersCount - i}
                     />
                   ))}
                 </>
               }
               
-
               {listData.listStatus.isLoading &&
                 <div className="text-center">
                   <CircularProgress />
                 </div>
               }
 
-              {filteredList?.length <= 0 &&
+              {filteredList?.length <= 0 && !listData.listStatus.isLoading &&
                 <p className="text-center"> No orders found </p>
               }
             </Card>
@@ -196,7 +209,9 @@ const mapStateToProps = (state: any) => {
 
 const mapDispatchToProps = {
     getInvoices,
-    getInvoicesBySearch
+    getInvoicesBySearch,
+    getCurrentTabInvoices,
+    getDefualtInvoices
 };
 
 export default connect(mapStateToProps, mapDispatchToProps)(XTrackingPage);

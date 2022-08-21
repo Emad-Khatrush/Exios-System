@@ -1,6 +1,6 @@
 import { Action, Dispatch } from "redux"
 import api from "../api";
-import { CREATE_INVOICE, GET_INVOICES, RESET_INVOICE, STATUS_ERROR, STATUS_LOADING, STATUS_START, STATUS_SUCCESS } from "../constants/actions";
+import { CREATE_INVOICE, GET_INVOICES, RESET_INVOICE, STATUS_ERROR, STATUS_LOADING, STATUS_START, STATUS_SUCCESS, SWITCH_TAB } from "../constants/actions";
 
 export const resetInvoice = () => {
   return (dispatch: Dispatch<Action>): void => {    
@@ -71,6 +71,58 @@ export const getAllInvoices = (config?: { skip?: number, limit?: number, tabType
   }
 }
 
+export const getCurrentTabInvoices = (config?: { skip?: number, limit?: number, tabType?: string }) => {
+  
+  return (dispatch: Dispatch<Action>): void => {
+    dispatch({
+      status: SWITCH_TAB,
+      type: GET_INVOICES,
+    });
+
+    api.get('orders', config)
+      .then(({ data }) => {
+        dispatch({
+          payload: { data },
+          status: STATUS_SUCCESS,
+          type: GET_INVOICES,
+        });
+      })
+      .catch(error => {
+        dispatch({
+          payload: { error },
+          status: STATUS_ERROR,
+          type: GET_INVOICES,
+        });
+      })
+  }
+}
+
+export const getDefualtInvoices = (config?: { skip?: number, limit?: number, tabType?: string }) => {
+  
+  return (dispatch: Dispatch<Action>): void => {
+    dispatch({
+      status: STATUS_START,
+      type: GET_INVOICES,
+    });
+
+    api.get('orders', config)
+      .then(({ data }) => {
+        dispatch({
+          payload: { data },
+          status: STATUS_SUCCESS,
+          type: GET_INVOICES,
+        });
+      })
+      .catch(error => {
+        dispatch({
+          payload: { error },
+          status: STATUS_ERROR,
+          type: GET_INVOICES,
+        });
+      })
+  }
+}
+
 export const getInvoices = (config?: { skip?: number, limit?: number, tabType?: string }) => {
   
   return (dispatch: Dispatch<Action>): void => {
@@ -98,8 +150,12 @@ export const getInvoices = (config?: { skip?: number, limit?: number, tabType?: 
 }
 
 export const getInvoicesBySearch = (query?: { searchValue: string, selectorValue: string, tabType: string }) => {
-
   return (dispatch: Dispatch<Action>): void => {
+
+    dispatch({
+      status: SWITCH_TAB,
+      type: GET_INVOICES,
+    });
 
     api.get(`orders/${query?.searchValue}/${query?.selectorValue}?tabType=${query?.tabType}`)
       .then(({ data }) => {

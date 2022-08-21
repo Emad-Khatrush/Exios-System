@@ -3,15 +3,21 @@ import { FaBoxOpen, FaEye, FaMoneyBillWave } from "react-icons/fa";
 import EarningWidget from "../../components/EarningWidget/EarningWidget";
 import InfoWidget from "../../components/InfoWidget/InfoWidget";
 import OfficesExpense from "../../components/OfficesExpense/OfficesExpense";
-import { HomeData } from "../../models";
-import api from "../../api";
+import { HomeData, Session } from "../../models";
 import { CircularProgress } from "@mui/material";
+import { connect } from "react-redux";
+
+import api from "../../api";
 
 type State = {
   HomeData: HomeData | null
 }
 
-class Home extends React.Component<{}, State> {
+type Props = {
+  session: Session
+}
+
+class Home extends React.Component<Props, State> {
 
   state: State = {
     HomeData: null
@@ -25,7 +31,7 @@ class Home extends React.Component<{}, State> {
 
     if (!this.state.HomeData) {
       return <CircularProgress />
-    }
+    }    
       
     return (
       <div className="m-3">
@@ -50,7 +56,8 @@ class Home extends React.Component<{}, State> {
             <div className="col-md-7">
               <OfficesExpense 
                 offices={this.state.HomeData.offices}
-                totalDebts={this.state.HomeData.totalDebts}
+                debts={this.state.HomeData.debts}
+                account={this.props.session?.account}
               />
             </div>
         </div>
@@ -58,4 +65,11 @@ class Home extends React.Component<{}, State> {
     ) 
   }
 }
-export default Home;
+
+const mapStateToProps = (state: any) => {  
+  return {
+    session: state.session,
+  };
+}
+
+export default connect(mapStateToProps)(Home);

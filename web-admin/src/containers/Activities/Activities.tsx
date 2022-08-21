@@ -97,7 +97,7 @@ class Activities extends Component<Props, State> {
                 ))}
               </div>
 
-              {filteredList.length === 0 &&
+              {filteredList.length === 0 && !this.props.listData.listStatus.isLoading &&
                 <p className='text-center'> No activities found </p>
               }
 

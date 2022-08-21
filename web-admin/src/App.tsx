@@ -10,6 +10,7 @@ import { Session } from './models';
 import './App.scss';
 
 const Home = React.lazy(() => import('./containers/Home/Home'));
+const EmployeeHomePage = React.lazy(() => import('./containers/EmployeeHomePage/EmployeeHomePage'));
 const AddInvoice = React.lazy(() => import('./containers/AddInvoice/AddInvoice'));
 const UnsureOrder = React.lazy(() => import('./containers/UnsureOrder/UnsureOrder'));
 const Invoices = React.lazy(() => import('./containers/Invoices/Invoices'));
@@ -30,7 +31,8 @@ type MyProps = {
 const getRoutesByRole = (roles: any) => {
   if (roles?.isEmployee) {
     return <>
-      <Route path='/' element={<XTrackingPage />} />
+      <Route path='/' element={<EmployeeHomePage />} />
+      <Route path='/xtracking' element={<XTrackingPage />} />
       <Route path='/unsureOrder/add' element={<UnsureOrder />} />
       <Route path='/invoice/add' element={<AddInvoice />} />
       <Route path='/invoice/:id/edit' element={<EditInvoice />} />
