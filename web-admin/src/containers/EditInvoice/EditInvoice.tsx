@@ -15,6 +15,7 @@ import './EditInvoice.scss';
 
 type Props = {
   router: RouteMatch
+  isEmployee: boolean
 }
 
 type State = {
@@ -524,6 +525,7 @@ export class EditInvoice extends Component<Props, State> {
                     addNewPaymentField={this.addNewPaymentField}
                     deteteRow={this.deteteRow}
                     invoice={formData || null}
+                    isEmployee={this.props.isEmployee}
                   />
                   <div className="col-md-12 mb-2 text-end">
                     <CustomButton 
@@ -564,7 +566,11 @@ export class EditInvoice extends Component<Props, State> {
   }
 }
 
-const mapStateToProps = () => ({})
+const mapStateToProps = (state: any) => {
+	return {
+    isEmployee: state.session.account?.roles.isEmployee
+	};
+}
 
 const mapDispatchToProps = {}
 

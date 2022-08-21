@@ -15,6 +15,7 @@ type Props = {
   createInvoice: any,
   invoice: IInvoice
   resetInvoice: any
+  isEmployee: boolean
   router: {
     navigate: NavigateFunction
   }
@@ -215,8 +216,7 @@ class AddInvoice extends Component<Props, State> {
   };
 
   render() {
-    const { invoice } = this.props;
-
+    const { invoice, isEmployee } = this.props;
     const invoiceFileRef = React.createRef();
     const receiptsFileRef = React.createRef();    
     
@@ -264,6 +264,7 @@ class AddInvoice extends Component<Props, State> {
                   paymentList={this.state.paymentList}
                   addNewPaymentField={this.addNewPaymentField}
                   deteteRow={this.deteteRow}
+                  isEmployee={isEmployee}
                 />
                 <div className="col-md-12 mb-2 text-end">
                   <CustomButton 
@@ -306,6 +307,7 @@ class AddInvoice extends Component<Props, State> {
 const mapStateToProps = (state: any) => {
 	return {
 		invoice: state.invoice,
+    isEmployee: state.session.account?.roles.isEmployee
 	};
 }
 

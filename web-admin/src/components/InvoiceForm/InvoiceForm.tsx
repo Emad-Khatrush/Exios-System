@@ -12,6 +12,7 @@ type Props = {
   addNewPaymentField?: any
   deteteRow?: any
   invoice?: Invoice | null
+  isEmployee?: boolean 
 }
 
 const InvoiceForm = (props: Props) => {
@@ -148,17 +149,19 @@ const InvoiceForm = (props: Props) => {
           />
         </div>
 
-        <div className="col-md-6 mb-4">
-          <TextField
-            label={'Net Income'}
-            name="netIncome"
-            inputProps={{ inputMode: 'numeric', step: .01 }}
-            type={'number'}
-            onChange={props.handleChange}
-            defaultValue={invoice?.netIncome[0]?.total}
-            onWheel={(event: any) => event.target.blur()}
-          />
-        </div>
+        {!props.isEmployee && 
+          <div className="col-md-6 mb-4">
+            <TextField
+              label={'Net Income'}
+              name="netIncome"
+              inputProps={{ inputMode: 'numeric', step: .01 }}
+              type={'number'}
+              onChange={props.handleChange}
+              defaultValue={invoice?.netIncome[0]?.total}
+              onWheel={(event: any) => event.target.blur()}
+            />
+          </div>
+        }
 
         <div className="col-md-6 mb-4">
           <FormControl style={{ width: '100%' }} required>
