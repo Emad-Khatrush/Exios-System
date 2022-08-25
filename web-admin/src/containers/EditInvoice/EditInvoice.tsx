@@ -103,6 +103,7 @@ export class EditInvoice extends Component<Props, State> {
         paymentList: [...prevState.formData.paymentList, newLink]
       },
       changedFields: {
+        ...this.state.changedFields,
         paymentList: [...prevState.formData.paymentList, newLink]
       },
       paymentList: [...prevState.paymentList, newLink]
@@ -225,7 +226,7 @@ export class EditInvoice extends Component<Props, State> {
         inputValue = paymentList[event.target.id][event.target.name];
         paymentList[event.target.id][event.target.name] = event.target.value;
       }
-      this.setState({ paymentList, changedFields: { paymentList } });
+      this.setState({ paymentList, changedFields: { ...this.state.changedFields, paymentList } });
     } else {
       let value = event.target.inputMode === 'numeric' ? Number(event.target.value) : event.target.value;
       // if checked has a value
@@ -304,7 +305,7 @@ export class EditInvoice extends Component<Props, State> {
       isPayment: this.state.formData.isPayment,
       orderStatus: this.state.formData.orderStatus,
       ...this.state.changedFields
-    };
+    };    
     const steps = getOrderSteps(order);
     const isOrderFinished = steps?.length - 1 === order.orderStatus;
     order.isFinished = isOrderFinished;    

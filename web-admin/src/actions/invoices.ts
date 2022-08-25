@@ -160,7 +160,7 @@ export const getInvoicesBySearch = (query?: { searchValue: string, selectorValue
     api.get(`orders/${query?.searchValue}/${query?.selectorValue}?tabType=${query?.tabType}`)
       .then(({ data }) => {
         dispatch({
-          payload: { data },
+          payload: { data, searching: true },
           status: STATUS_SUCCESS,
           type: GET_INVOICES,
         });

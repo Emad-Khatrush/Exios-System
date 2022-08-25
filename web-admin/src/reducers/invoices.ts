@@ -125,7 +125,22 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
             };
           }
           
-          case STATUS_SUCCESS: {                      
+          case STATUS_SUCCESS: {       
+            if (action.payload?.searching) {
+              return {
+                ...state,
+                listStatus: {
+                  isError: false,
+                  isSuccess: true,
+                  isLoading: false,
+                  isSwitchingTab: false
+                },
+                list: action.payload.data.orders,
+                tabType: action.payload?.data?.tabType,
+                total: action.payload?.data?.total,
+                query: action.payload?.data?.query
+              }
+            }             
             return {
               ...state,
               listStatus: {
