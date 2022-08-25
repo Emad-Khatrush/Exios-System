@@ -79,10 +79,10 @@ export const getCurrentTabInvoices = (config?: { skip?: number, limit?: number, 
       type: GET_INVOICES,
     });
 
-    api.get('orders', config)
+    api.get('currentOrdersTab', config)
       .then(({ data }) => {
         dispatch({
-          payload: { data },
+          payload: { data, dontUpdateOrdersCount: true },
           status: STATUS_SUCCESS,
           type: GET_INVOICES,
         });
@@ -160,7 +160,7 @@ export const getInvoicesBySearch = (query?: { searchValue: string, selectorValue
     api.get(`orders/${query?.searchValue}/${query?.selectorValue}?tabType=${query?.tabType}`)
       .then(({ data }) => {
         dispatch({
-          payload: { data, searching: true },
+          payload: { data, dontUpdateOrdersCount: true },
           status: STATUS_SUCCESS,
           type: GET_INVOICES,
         });

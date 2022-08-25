@@ -126,7 +126,7 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
           }
           
           case STATUS_SUCCESS: {       
-            if (action.payload?.searching) {
+            if (action.payload?.dontUpdateOrdersCount) {
               return {
                 ...state,
                 listStatus: {
