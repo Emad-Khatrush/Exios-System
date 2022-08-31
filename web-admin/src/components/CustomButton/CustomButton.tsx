@@ -33,7 +33,7 @@ const CustomButton = (props: Props) => {
   const Type = href ? Link : React.Fragment;
 
   return (
-    <Type target={target || '_self'} style={{ textDecoration: 'none'}} to={href || ''}>
+    <Type target={target || '_self'} style={{ textDecoration: 'none'}} rel="noreferrer" to={href || ''}>
       <Button
         {...props}
         type="submit"

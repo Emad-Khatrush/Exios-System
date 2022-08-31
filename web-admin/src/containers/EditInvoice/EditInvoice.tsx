@@ -388,7 +388,17 @@ export class EditInvoice extends Component<Props, State> {
       <div className="m-4 edit-invoice">
         <div style={{ maxWidth: '1400px', margin: 'auto'}}>
           <div className="col-12 mb-3">
-            <h4 className='mb-2'> Create Invoice</h4>
+            <div className="d-flex justify-content-between">
+              <h4 className='mb-2'> Edit Invoice</h4>
+              <CustomButton 
+                background='rgb(0, 171, 85)' 
+                size="small"
+                href={`https://www.exioslibya.com/xtracking/${formData.orderId}/ar`}
+                target="_blank"
+              >
+                Preview
+              </CustomButton>
+            </div>
               <Breadcrumbs separator="›" aria-label="breadcrumb">
                 {breadcrumbs}
               </Breadcrumbs>
@@ -454,6 +464,7 @@ export class EditInvoice extends Component<Props, State> {
                                 country: event.target.value
                               }
                             }))}
+                            style={{ direction: 'rtl' }}
                           />
                         )}
                       />
@@ -486,6 +497,7 @@ export class EditInvoice extends Component<Props, State> {
                                 description: event.target.value
                               }
                             }))}
+                            style={{ direction: 'rtl' }}
                           />
                         )}
                       />
