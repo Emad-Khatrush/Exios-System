@@ -38,6 +38,7 @@ type State = {
   filteredOrders: IInvoice[]
   searchForOrder: boolean
   isTabOrdersLoading: boolean
+  quickSearchDelayTimer: any
 }
 
 const selectValues = [
@@ -59,7 +60,8 @@ class XTrackingPage extends Component<Props, State> {
     scrollReached: false,
     filteredOrders: [],
     searchForOrder: false,
-    isTabOrdersLoading: false
+    isTabOrdersLoading: false,
+    quickSearchDelayTimer: undefined
   }
 
   componentDidMount() {
@@ -106,10 +108,17 @@ class XTrackingPage extends Component<Props, State> {
         limit: 10,
       });
     } else {
-      this.props.getInvoicesBySearch({
-        searchValue: searchValue,
-        selectorValue: selectorValue,
-        tabType: this.props.listData.tabType
+      clearTimeout(this.state.quickSearchDelayTimer);
+      this.setState(() => {
+        return {
+          quickSearchDelayTimer: setTimeout(() => {
+            this.props.getInvoicesBySearch({
+              searchValue: searchValue,
+              selectorValue: selectorValue,
+              tabType: this.props.listData.tabType
+            })
+          }, 750)
+        }
       })
     }
   }

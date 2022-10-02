@@ -470,7 +470,7 @@ const InvoiceForm = (props: Props) => {
                 <TextField
                   id={String(i)}
                   className='connect-field-right'
-                  label={'Payment Link'}
+                  label={`Payment Link (${i + 1})`}
                   name="paymentLink"
                   onChange={props.handleChange}
                   defaultValue={payment?.link}
@@ -478,7 +478,7 @@ const InvoiceForm = (props: Props) => {
                 <ButtonGroup key={i} color='success' size="small" aria-label="small button group">
                   <Button id={String(i)} name="paid" onDoubleClick={props.handleChange} variant={payment.paid || payment?.status?.paid ? 'contained': 'outlined'} key="paid">Paid</Button>
                   <Button id={String(i)} name="arrived" onDoubleClick={props.handleChange} variant={payment.arrived || payment?.status?.arrived ? 'contained': 'outlined'} key="arrived">Arrived</Button>
-                  <Button id={String(i)} name="note" key="note" onClick={() => { setNote({ openNoteModal: true, note: payment.note, id: String(i) }) }} ><BiNote /></Button>
+                  <Button id={String(i)} name="note" key="note" onClick={() => { setNote({ openNoteModal: true, note: payment.note, id: String(i) }) }} variant={payment.note ? 'contained': 'outlined'} ><BiNote /></Button>
                   <Button id={String(i)} 
                     key="deliveredPackages" 
                     name="deliveredPackages" 
@@ -490,7 +490,8 @@ const InvoiceForm = (props: Props) => {
                       exiosPrice: payment?.deliveredPackages?.exiosPrice,
                       openModal: true, 
                       id: String(i)
-                    }) }} 
+                    }) }}
+                    variant={payment?.deliveredPackages?.trackingNumber ? 'contained': 'outlined'}
                   >
                     <BiPackage />
                   </Button>

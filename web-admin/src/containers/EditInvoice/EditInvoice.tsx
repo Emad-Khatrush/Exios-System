@@ -103,6 +103,7 @@ export class EditInvoice extends Component<Props, State> {
         paymentList: [...prevState.formData.paymentList, newLink]
       },
       changedFields: {
+        ...this.state.changedFields,
         paymentList: [...prevState.formData.paymentList, newLink]
       },
       paymentList: [...prevState.paymentList, newLink]
@@ -225,7 +226,7 @@ export class EditInvoice extends Component<Props, State> {
         inputValue = paymentList[event.target.id][event.target.name];
         paymentList[event.target.id][event.target.name] = event.target.value;
       }
-      this.setState({ paymentList, changedFields: { paymentList } });
+      this.setState({ paymentList, changedFields: { ...this.state.changedFields, paymentList } });
     } else {
       let value = event.target.inputMode === 'numeric' ? Number(event.target.value) : event.target.value;
       // if checked has a value
@@ -304,7 +305,7 @@ export class EditInvoice extends Component<Props, State> {
       isPayment: this.state.formData.isPayment,
       orderStatus: this.state.formData.orderStatus,
       ...this.state.changedFields
-    };
+    };    
     const steps = getOrderSteps(order);
     const isOrderFinished = steps?.length - 1 === order.orderStatus;
     order.isFinished = isOrderFinished;    
@@ -387,7 +388,17 @@ export class EditInvoice extends Component<Props, State> {
       <div className="m-4 edit-invoice">
         <div style={{ maxWidth: '1400px', margin: 'auto'}}>
           <div className="col-12 mb-3">
-            <h4 className='mb-2'> Create Invoice</h4>
+            <div className="d-flex justify-content-between">
+              <h4 className='mb-2'> Edit Invoice</h4>
+              <CustomButton 
+                background='rgb(0, 171, 85)' 
+                size="small"
+                href={`https://www.exioslibya.com/xtracking/${formData.orderId}/ar`}
+                target="_blank"
+              >
+                Preview
+              </CustomButton>
+            </div>
               <Breadcrumbs separator="›" aria-label="breadcrumb">
                 {breadcrumbs}
               </Breadcrumbs>
@@ -453,6 +464,7 @@ export class EditInvoice extends Component<Props, State> {
                                 country: event.target.value
                               }
                             }))}
+                            style={{ direction: 'rtl' }}
                           />
                         )}
                       />
@@ -485,6 +497,7 @@ export class EditInvoice extends Component<Props, State> {
                                 description: event.target.value
                               }
                             }))}
+                            style={{ direction: 'rtl' }}
                           />
                         )}
                       />
