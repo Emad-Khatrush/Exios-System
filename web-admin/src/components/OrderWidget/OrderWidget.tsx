@@ -16,10 +16,11 @@ import ActionCard from '../ActionCard/ActionCard';
 type Props = {
   order: Invoice
   orderIndex: number
+  isSearchingForTrackingNumber: boolean
 }
 
 const OrderWidget = (props: Props) => {
-  const { order } = props;
+  const { order, isSearchingForTrackingNumber } = props;
 
   const [previewImages, setPreviewImages] = useState<any>();  
   const [hasCopiedText, setHasCopiedText] = useState<boolean>(false);  
@@ -28,9 +29,10 @@ const OrderWidget = (props: Props) => {
   const lastActivityOrder = order.activity.slice(-1)[0];  
   const diffActivityDates = moment(new Date()).diff(moment(lastActivityOrder?.createdAt));
   const remainingActivityDay = moment(diffActivityDates).format('D');
+  const trackingNumber = (order as any).paymentList?.deliveredPackages?.trackingNumber;
 
   return (
-    <Card>
+    <Card style={{ margin: '10px' }}>
       <div className="row order-widget">
         <div className="col-lg-2 m-auto">
           <div className="preview-image h-100">
@@ -44,6 +46,18 @@ const OrderWidget = (props: Props) => {
           <div className='d-flex justify-content-between'>
             <div>
               <div className='d-flex flex-column'>
+
+                {isSearchingForTrackingNumber && trackingNumber &&
+                  <div className='mb-2'>
+                    <h6 className='mb-1'> Related Tracking Number </h6>
+                    <Badge 
+                      style={{ width: 'fit-content' }} 
+                      text={trackingNumber} 
+                      color='warning'
+                    />
+                  </div>
+                }
+            
                 <h5 style={{ marginRight: '8px' }} className='mb-1'> {order.customerInfo.fullName} </h5>
                 <div className='mb-2'>
                   <Badge

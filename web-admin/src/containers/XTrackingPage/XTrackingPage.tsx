@@ -126,6 +126,7 @@ class XTrackingPage extends Component<Props, State> {
 
   render() {
     const { listData } = this.props;    
+    const { selectorValue, searchValue} = this.state;    
     const filteredList = listData.list.reverse();
 
     const tabs: LocalTabs = generateTabs({
@@ -186,6 +187,7 @@ class XTrackingPage extends Component<Props, State> {
                       key={order.orderId}
                       order={order}
                       orderIndex={currentOrdersCount - i}
+                      isSearchingForTrackingNumber={selectorValue === 'trackingNumber' && searchValue !== ''}
                     />
                   ))}
                 </>
