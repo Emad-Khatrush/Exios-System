@@ -86,6 +86,7 @@ export class EditInvoice extends Component<Props, State> {
       status: {
         paid: false,
         arrived: false,
+        arrivedLibya: false,
       },
       note: '',
       deliveredPackages: {
@@ -213,10 +214,10 @@ export class EditInvoice extends Component<Props, State> {
   }
 
   handleChange = (event: any, checked?: any, child?: any) => {
-    if (['paid', 'arrived', 'paymentLink', 'note'].includes(event.target.name)) {      
+    if (['paid', 'arrived', 'arrivedLibya', 'paymentLink', 'note'].includes(event.target.name)) {      
       let paymentList: any = [...this.state.paymentList!];
       let inputValue;
-      if (event.target.name === 'paid' || event.target.name === 'arrived') {
+      if (event.target.name === 'paid' || event.target.name === 'arrived' || event.target.name === 'arrivedLibya') {
         inputValue = paymentList[event.target.id].status[event.target.name];
         paymentList[event.target.id].status[event.target.name] = !inputValue;
       } else if (event.target.name === 'paymentLink') {

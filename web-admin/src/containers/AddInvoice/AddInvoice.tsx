@@ -55,6 +55,7 @@ class AddInvoice extends Component<Props, State> {
       paymentLink: '',
       paid: false,
       arrived: false,
+      arrivedLibya: false,
       note: '',
       deliveredPackages: {
         trackingNumber: '',
@@ -128,7 +129,7 @@ class AddInvoice extends Component<Props, State> {
   handleChange = (event: any, checked?: any, child?: any) => {
     const name = event.target.name;
     let paymentList: any = [...this.state.paymentList];
-    if (['paid', 'arrived', 'paymentLink', 'note'].includes(name)) {            
+    if (['paid', 'arrived', 'arrivedLibya', 'paymentLink', 'note'].includes(name)) {            
       const inputValue = paymentList[event.target.id][name];
       paymentList[event.target.id][name] = name ===  'paymentLink' || name ===  'note' ? event.target.value : !inputValue;
       
@@ -174,6 +175,7 @@ class AddInvoice extends Component<Props, State> {
         paymentLink: '',
         paid: false,
         arrived: false,
+        arrivedLibya: false,
         note: '',
         deliveredPackages: {
           trackingNumber: '',
