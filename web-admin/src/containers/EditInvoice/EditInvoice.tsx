@@ -1,6 +1,6 @@
 import { connect } from 'react-redux'
 import React, { Component } from 'react'
-import { Alert, Autocomplete, Backdrop, Breadcrumbs, CircularProgress, Link, Snackbar, TextField, Typography } from '@mui/material'
+import { Alert, Autocomplete, Backdrop, Breadcrumbs, Button, ButtonGroup, CircularProgress, Link, Snackbar, TextField, Typography } from '@mui/material'
 import Card from '../../components/Card/Card'
 import ImageUploader from '../../components/ImageUploader/ImageUploader'
 import InvoiceForm from '../../components/InvoiceForm/InvoiceForm'
@@ -10,6 +10,7 @@ import { Invoice, OrderActivity } from '../../models'
 import withRouter from '../../utils/WithRouter/WithRouter'
 import { RouteMatch } from 'react-router-dom'
 import { getOrderSteps } from '../../utils/methods'
+import QRCode from 'qrcode.react'
 
 import './EditInvoice.scss';
 
@@ -28,6 +29,7 @@ type State = {
   isUpdating: boolean
   isFinished: boolean
   resMessage: string | null
+  whatsupMessage: string
 }
 
 const breadcrumbs = [
@@ -67,7 +69,8 @@ export class EditInvoice extends Component<Props, State> {
     isError: false,
     isUpdating: false,
     isFinished: false,
-    resMessage: null
+    resMessage: null,
+    whatsupMessage: ''
   }
 
   componentDidMount() {    
@@ -366,8 +369,40 @@ export class EditInvoice extends Component<Props, State> {
       })
   }
 
+  sendWhatsupMessage = () => {
+    const { formData, whatsupMessage } = this.state;
+
+    if (!whatsupMessage) {
+      return;
+    }
+
+    this.setState({ isUpdating: true });
+
+    api.post(`sendWhatsupMessage`, { phone: formData.customerInfo.phone, message: whatsupMessage })
+      .then((res) => {
+        this.setState({
+          isUpdating: false,
+          isFinished: true,
+          resMessage: 'Whatsup message has been send successfully',
+          activity: {
+            country: '',
+            description: ''
+          }
+        })
+      })
+      .catch((err) => {
+        console.log(err);
+        this.setState({
+          isUpdating: false,
+          isFinished: true,
+          isError: true,
+          resMessage: err.data.message
+        })
+      })
+  }
+
   render() {
-    const { formData, isInvoicePending, isUpdating, isError, isFinished, resMessage } = this.state;    
+    const { formData, isInvoicePending, isUpdating, isError, isFinished, resMessage, whatsupMessage } = this.state;    
 
     const invoiceFileRef = React.createRef();
     const receiptsFileRef = React.createRef();
@@ -383,7 +418,22 @@ export class EditInvoice extends Component<Props, State> {
       also before shipping do not forget 
       to send us photos. 
       thanks 
-    `
+    `;
+
+    const warehouseDefaultMessage = `
+اهلا بك عميلنا ${formData.customerInfo.fullName}
+لقد حدثنا طلبيتك رقم ${formData.orderId} على ان تم وصوله الى المخزن
+يرجى زيارة موقعنا الاكتروني لكي تتابع التفاصيل
+https://www.exioslibya.com/xtracking/${formData.orderId}/ar
+شكرا لكم
+    `;
+
+    const arrivedLibyaDefaultMessage = `
+اهلا بك عميلنا ${formData.customerInfo.fullName}
+رقم الطلبية ${formData.orderId} الخاص بك قد وصل الى مخزننا في ليبيا
+يرجى التواصل مع اقرب مندوب لك او زيارة مقر الشركة للاستلام
+تحياتي لكم
+    `;
     
     return (
       <div className="m-4 edit-invoice">
@@ -515,6 +565,37 @@ export class EditInvoice extends Component<Props, State> {
                   </div>
                 </Card>
               </form>
+
+              <Card>
+                <h5 className='mb-3'> Send Whatsup Message </h5>
+                <textarea 
+                  style={{ height: '200px', direction: 'rtl' }} 
+                  placeholder='Message' 
+                  className='form-control mb-2' 
+                  defaultValue={whatsupMessage}
+                  onChange={(e) => this.setState({ whatsupMessage: e.target.value })}
+                >
+                </textarea>
+
+                <div className="col-md-12 mb-4 text-end">
+                  <ButtonGroup variant="outlined" aria-label="outlined button group">
+                    <Button onClick={() => this.setState({ whatsupMessage: warehouseDefaultMessage })}>وصلت مخزن</Button>
+                    <Button onClick={() => this.setState({ whatsupMessage: arrivedLibyaDefaultMessage })}>وصلت ليبيا</Button>
+                    <Button onClick={() => this.setState({ whatsupMessage: '' })}>حقل فارغ</Button>
+                  </ButtonGroup>
+                </div>
+
+                <div className="col-md-12 mb-4 text-end">
+                  <CustomButton 
+                    background='rgb(0, 171, 85)' 
+                    size="small"
+                    disabled={isUpdating ? true : false}
+                    onClick={this.sendWhatsupMessage}
+                  >
+                    Send Message
+                  </CustomButton>
+                </div>
+              </Card>
 
               <div className="col-md-12 mb-4">
                 <textarea 
