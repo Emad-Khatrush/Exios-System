@@ -10,7 +10,6 @@ import { Invoice, OrderActivity } from '../../models'
 import withRouter from '../../utils/WithRouter/WithRouter'
 import { RouteMatch } from 'react-router-dom'
 import { getOrderSteps } from '../../utils/methods'
-import QRCode from 'qrcode.react'
 
 import './EditInvoice.scss';
 
