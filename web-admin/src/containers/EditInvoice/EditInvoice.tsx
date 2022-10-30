@@ -10,6 +10,8 @@ import { Invoice, OrderActivity } from '../../models'
 import withRouter from '../../utils/WithRouter/WithRouter'
 import { RouteMatch } from 'react-router-dom'
 import { getOrderSteps } from '../../utils/methods'
+import QRCode from 'qrcode.react'
+import { formatInvoiceFields } from '../XTrackingPage/utils'
 
 import './EditInvoice.scss';
 
@@ -29,6 +31,7 @@ type State = {
   isFinished: boolean
   resMessage: string | null
   whatsupMessage: string
+  qrCode: null
 }
 
 const breadcrumbs = [
@@ -69,7 +72,8 @@ export class EditInvoice extends Component<Props, State> {
     isUpdating: false,
     isFinished: false,
     resMessage: null,
-    whatsupMessage: ''
+    whatsupMessage: '',
+    qrCode: null
   }
 
   componentDidMount() {    
@@ -93,6 +97,7 @@ export class EditInvoice extends Component<Props, State> {
       note: '',
       deliveredPackages: {
         trackingNumber: '',
+        arrivedAt: new Date(),
         weight: {
           total: null,
           measureUnit: null
@@ -187,18 +192,20 @@ export class EditInvoice extends Component<Props, State> {
           netIncome
         }
       }))
-    } else if (name === 'trackingNumber' || name === 'packageWeight' || name === 'measureUnit' || name === 'originPrice' || name === 'exiosPrice') {      
-      const fieldName = name === 'packageWeight' ? 'weight' : name;
+    } else if (['trackingNumber', 'packageWeight', 'measureUnit', 'originPrice', 'exiosPrice', 'receivedShipmentLYDPackage', 'receivedShipmentUSDPackage', 'arrivedAt'].includes(name)) {      
+      const fieldName = formatInvoiceFields(name);
       const fieldId = child ? Number(child.props.id) : id; 
      
       let paymentList: any = [...this.state.paymentList!];
+      
       if (fieldName === 'weight') {
         paymentList[fieldId]['deliveredPackages']['weight'].total = value;
       } else if (fieldName === 'measureUnit') {        
         paymentList[fieldId]['deliveredPackages']['weight'].measureUnit = value;
       } else {
         paymentList[fieldId]['deliveredPackages'][fieldName] = value;
-      }            
+      }
+
       this.setState((oldValues) => ({
         changedFields: {
           ...oldValues.changedFields,
@@ -215,19 +222,21 @@ export class EditInvoice extends Component<Props, State> {
     }
   }
 
-  handleChange = (event: any, checked?: any, child?: any) => {
-    if (['paid', 'arrived', 'arrivedLibya', 'paymentLink', 'note'].includes(event.target.name)) {      
+  handleChange = (event: any, checked?: any, child?: any, customFieldName?: string) => {
+    const fieldName = customFieldName ? customFieldName : event.target.name;
+    
+    if (['paid', 'arrived', 'arrivedLibya', 'paymentLink', 'note'].includes(fieldName)) {      
       let paymentList: any = [...this.state.paymentList!];
       let inputValue;
-      if (event.target.name === 'paid' || event.target.name === 'arrived' || event.target.name === 'arrivedLibya') {
-        inputValue = paymentList[event.target.id].status[event.target.name];
-        paymentList[event.target.id].status[event.target.name] = !inputValue;
-      } else if (event.target.name === 'paymentLink') {
+      if (['paid', 'arrived', 'arrivedLibya'].includes(fieldName)) {
+        inputValue = paymentList[event.target.id].status[fieldName];
+        paymentList[event.target.id].status[fieldName] = !inputValue;
+      } else if (fieldName === 'paymentLink') {
         inputValue = paymentList[event.target.id]['link'];
         paymentList[event.target.id]['link'] = event.target.value;
       } else {
-        inputValue = paymentList[event.target.id][event.target.name];
-        paymentList[event.target.id][event.target.name] = event.target.value;
+        inputValue = paymentList[event.target.id][fieldName];
+        paymentList[event.target.id][fieldName] = event.target.value;
       }
       this.setState({ paymentList, changedFields: { ...this.state.changedFields, paymentList } });
     } else {
@@ -236,8 +245,8 @@ export class EditInvoice extends Component<Props, State> {
       if (checked === false || checked === true) {
         value = checked;
       }      
-      
-      this.setFormState(value, event.target.name, event.target.id, child)
+
+      this.setFormState(value, fieldName, event.target.id, child)
     }
   };
 
@@ -382,6 +391,7 @@ export class EditInvoice extends Component<Props, State> {
         this.setState({
           isUpdating: false,
           isFinished: true,
+          qrCode: res.data,
           resMessage: 'Whatsup message has been send successfully',
           activity: {
             country: '',
@@ -583,6 +593,8 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
                     <Button onClick={() => this.setState({ whatsupMessage: '' })}>حقل فارغ</Button>
                   </ButtonGroup>
                 </div>
+
+                <QRCode value={this.state.qrCode || ''} />
 
                 <div className="col-md-12 mb-4 text-end">
                   <CustomButton 

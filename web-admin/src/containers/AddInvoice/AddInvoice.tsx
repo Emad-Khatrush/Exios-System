@@ -10,6 +10,7 @@ import CustomButton from '../../components/CustomButton/CustomButton';
 import { IInvoice } from '../../reducers/invoices';
 import { NavigateFunction } from 'react-router-dom';
 import withRouter from '../../utils/WithRouter/WithRouter';
+import { formatInvoiceFields } from '../XTrackingPage/utils'
 
 type Props = {
   createInvoice: any,
@@ -60,6 +61,7 @@ class AddInvoice extends Component<Props, State> {
       deliveredPackages: {
         trackingNumber: '',
         weight: null,
+        arrivedAt: new Date(),
         measureUnit: '',
         exiosPrice: null,
         originPrice: null
@@ -126,19 +128,20 @@ class AddInvoice extends Component<Props, State> {
     this.setState<any>({ [foundFile.previewFiles]: previewFiles, [foundFile.filesInput]: filesInput });
   }
 
-  handleChange = (event: any, checked?: any, child?: any) => {
-    const name = event.target.name;
+  handleChange = (event: any, checked?: any, child?: any, customFieldName?: string) => {
+    let fieldName = customFieldName ? customFieldName : event.target.name;
+
     let paymentList: any = [...this.state.paymentList];
-    if (['paid', 'arrived', 'arrivedLibya', 'paymentLink', 'note'].includes(name)) {            
-      const inputValue = paymentList[event.target.id][name];
-      paymentList[event.target.id][name] = name ===  'paymentLink' || name ===  'note' ? event.target.value : !inputValue;
+    if (['paid', 'arrived', 'arrivedLibya', 'paymentLink', 'note'].includes(fieldName)) {            
+      const inputValue = paymentList[event.target.id][fieldName];
+      paymentList[event.target.id][fieldName] = fieldName ===  'paymentLink' || fieldName ===  'note' ? event.target.value : !inputValue;
       
       this.setState({ paymentList });
-    } else if (name === 'trackingNumber' || name === 'packageWeight' || name === 'measureUnit' || name === 'originPrice' || name === 'exiosPrice') {
+    } else if (['trackingNumber', 'packageWeight', 'measureUnit', 'originPrice', 'exiosPrice', 'receivedShipmentLYDPackage', 'receivedShipmentUSDPackage', 'arrivedAt'].includes(fieldName)) {
       
-      const fieldName = name === 'packageWeight' ? 'weight' : name;
+      const convertToApiFieldName = formatInvoiceFields(fieldName);
       const id = child ? Number(child.props.id) : event.target.id;
-      paymentList[id]['deliveredPackages'][fieldName] = event.target.value;
+      paymentList[id]['deliveredPackages'][convertToApiFieldName] = event.target.value;
       
       this.setState({ paymentList });
     } else {
@@ -147,7 +150,7 @@ class AddInvoice extends Component<Props, State> {
       this.setState((oldValues) => ({
         formData: {
           ...oldValues.formData,
-          [name]: value === 'on' ? checked : value
+          [fieldName]: value === 'on' ? checked : value
         }
       }))
     }
@@ -180,6 +183,7 @@ class AddInvoice extends Component<Props, State> {
         deliveredPackages: {
           trackingNumber: '',
           weight: 0,
+          arrivedAt: new Date(),
           measureUnit: '',
           exiosPrice: 0,
           originPrice: 0

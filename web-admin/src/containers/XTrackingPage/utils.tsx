@@ -35,3 +35,19 @@ export const generateTabs = (tabs: any): any => {
     }
   ] as LocalTabs;
 }
+
+export const formatInvoiceFields = (name: string) => {
+  switch (name) {
+    case 'packageWeight':
+      return 'weight';
+
+    case 'receivedShipmentLYDPackage':
+      return 'receivedShipmentLYD';
+
+    case 'receivedShipmentUSDPackage':
+      return 'receivedShipmentUSD';
+  
+    default:
+      return name;
+  }
+}

@@ -1,11 +1,14 @@
 import { ApiErrorMessages } from "../models";
-import { EXPENSE_ID_TAKEN, EXPENSE_NOT_FOUND, FIELDS_EMPTY, IMAGE_NOT_FOUND, INVALID_CREDENTIALS, INVALID_TOKEN, ORDER_ID_TAKEN, ORDER_NOT_FOUND, SERVER_ERROR, Token_EXPIRED, TOKEN_NOT_FOUND, USER_NOT_FOUND } from "../constants/errors";
+import { EXPENSE_ID_TAKEN, EXPENSE_NOT_FOUND, FIELDS_EMPTY, IMAGE_NOT_FOUND, INVALID_CREDENTIALS, INVALID_TOKEN, ORDER_ID_TAKEN, ORDER_NOT_FOUND, SERVER_ERROR, Token_EXPIRED, TOKEN_NOT_FOUND, USER_NOT_FOUND, USER_SUBSCRIPTION_CANCLED } from "../constants/errors";
 
 export const getErrorMessage = (errorId: ApiErrorMessages): string => {
   
   switch (errorId) {
     case USER_NOT_FOUND:
       return 'We could not find the username';
+
+    case USER_SUBSCRIPTION_CANCLED:
+        return 'Your account has been canceled, please if there is a mistake, contact admins to reactive the account again.';
 
     case INVALID_CREDENTIALS:
       return 'Username or password is wrong';

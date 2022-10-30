@@ -52,6 +52,8 @@ export type Invoice = {
       arrivedAt: Date
       exiosPrice: number
       originPrice: number
+      receivedShipmentLYD: number
+      receivedShipmentUSD: number
       trackingNumber: string
       weight: {
         total: number, 
@@ -184,7 +186,7 @@ export type OrderActivity = {
   description?: string
 }
 
-export type ApiErrorMessages = 'user-not-found' | 'invalid-credentials' | 'authorize-invalid'
+export type ApiErrorMessages = 'user-not-found' | 'user-subscription-canceled' | 'invalid-credentials' | 'authorize-invalid'
   | 'token-not-found' | 'invalid-token' | 'order-id-taken' | 'order-not-found' | 'expense-id-taken'
   | 'expense-not-found' | 'image-not-found' | 'fields-empty' | 'server-error';
 

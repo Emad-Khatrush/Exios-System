@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { Button, ButtonGroup, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, InputAdornment, InputLabel, MenuItem, Select, TextField } from '@mui/material';
+import { Button, ButtonGroup, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, InputAdornment, InputLabel, MenuItem, Select, Stack, TextField } from '@mui/material';
 
 import { BiNote, BiPackage } from 'react-icons/bi';
 import { Invoice } from '../../models';
 import './InvoiceForm.scss';
 import { getOrderSteps } from '../../utils/methods';
+import LocalizationProvider from '@mui/lab/LocalizationProvider';
+import AdapterDateFns from '@mui/lab/AdapterDateFns';
+import DatePicker from '@mui/lab/DatePicker';
 
 type Props = {
   handleChange?: any
@@ -29,16 +32,19 @@ const InvoiceForm = (props: Props) => {
     measureUnit: '',
     exiosShipmentPrice: '',
     originShipmentPrice: '',
+    receivedShipmentLYD: 0,
+    receivedShipmentUSD: 0,
+    arrivedAt: null,
     id: ''
   });
-
+  
   const [ debt, setDebt ] = useState<{total: number, currency: string}>({
     total: 0,
     currency: ''
   });
-
+  
   const [ confirmRemoveLinkModal, setConfirmRemoveLinkModal ] = useState(false);
-
+  
   const { invoice } = props;
   const steps = getOrderSteps(invoice);    
 
@@ -463,7 +469,7 @@ const InvoiceForm = (props: Props) => {
         </div>
         
 
-        {props.paymentList?.map((payment: any, i: number) => {          
+        {props.paymentList?.map((payment: any, i: number) => {   
           return(
             <div key={i} className="col-md-12 mb-4">
               <div className='d-flex'>
@@ -483,12 +489,16 @@ const InvoiceForm = (props: Props) => {
                   <Button id={String(i)} 
                     key="deliveredPackages" 
                     name="deliveredPackages" 
-                    onClick={() => { setDeliveredPackages({
+                    onClick={() => { 
+                      setDeliveredPackages({
                       measureUnit: payment?.deliveredPackages?.measureUnit, 
                       packageWeight: payment?.deliveredPackages?.weight, 
                       trackingNumber: payment?.deliveredPackages?.trackingNumber, 
                       originPrice: payment?.deliveredPackages?.originPrice,  
                       exiosPrice: payment?.deliveredPackages?.exiosPrice,
+                      receivedShipmentUSD: payment?.deliveredPackages?.receivedShipmentUSD,  
+                      receivedShipmentLYD: payment?.deliveredPackages?.receivedShipmentLYD,
+                      arrivedAt: payment?.deliveredPackages?.arrivedAt + '',
                       openModal: true, 
                       id: String(i)
                     }) }}
@@ -583,6 +593,49 @@ const InvoiceForm = (props: Props) => {
                   defaultValue={deliveredPackages?.originPrice}
                   onWheel={(event: any) => event.target.blur()}
                 />
+              </div>
+
+              <div className="col-md-6 mb-4 d-flex">
+                <TextField
+                  id={deliveredPackages.id}
+                  label={'Received Shipment USD'}
+                  name="receivedShipmentUSDPackage"
+                  type={'number'}
+                  inputProps={{ inputMode: 'numeric' }}
+                  onChange={props.handleChange}
+                  defaultValue={deliveredPackages?.receivedShipmentUSD}
+                  onWheel={(event: any) => event.target.blur()}
+                />
+              </div>
+
+              <div className="col-md-6 mb-4 d-flex">
+                <TextField
+                  id={deliveredPackages.id}
+                  label={'Received Shipment LYD'}
+                  name="receivedShipmentLYDPackage"
+                  type={'number'}
+                  inputProps={{ inputMode: 'numeric' }}
+                  onChange={props.handleChange}
+                  defaultValue={deliveredPackages?.receivedShipmentLYD}
+                  onWheel={(event: any) => event.target.blur()}
+                />
+              </div>
+
+              <div className="col-md-6 mb-4 d-flex">
+                 <LocalizationProvider dateAdapter={AdapterDateFns}>
+                    <Stack spacing={3}>
+                      <DatePicker
+                        label="Arrived Date"
+                        inputFormat="dd/MM/yyyy"
+                        value={new Date(deliveredPackages?.arrivedAt)}
+                        renderInput={(params: any) => <TextField {...params} /> }                    
+                        onChange={(value) => {
+                          props.handleChange({ target: { value, id: deliveredPackages.id }}, undefined, undefined, 'arrivedAt');
+                          setDeliveredPackages({ ...deliveredPackages, arrivedAt: value });
+                        }}
+                      />
+                    </Stack>
+                  </LocalizationProvider>
               </div>
             </div>
           </DialogContent>
