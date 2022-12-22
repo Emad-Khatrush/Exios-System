@@ -1,6 +1,6 @@
 import { connect } from 'react-redux'
 import React, { Component } from 'react'
-import { Alert, Autocomplete, Backdrop, Breadcrumbs, Button, ButtonGroup, CircularProgress, Link, Snackbar, TextField, Typography } from '@mui/material'
+import { Alert, Autocomplete, Backdrop, Breadcrumbs, Button, ButtonGroup, CircularProgress, Link, Snackbar, Switch, TextField, Typography } from '@mui/material'
 import Card from '../../components/Card/Card'
 import ImageUploader from '../../components/ImageUploader/ImageUploader'
 import InvoiceForm from '../../components/InvoiceForm/InvoiceForm'
@@ -32,6 +32,7 @@ type State = {
   resMessage: string | null
   whatsupMessage: string
   qrCode: null
+  shouldVerifyQrCode: boolean
 }
 
 const breadcrumbs = [
@@ -73,7 +74,8 @@ export class EditInvoice extends Component<Props, State> {
     isFinished: false,
     resMessage: null,
     whatsupMessage: '',
-    qrCode: null
+    qrCode: null,
+    shouldVerifyQrCode: false
   }
 
   componentDidMount() {    
@@ -378,7 +380,8 @@ export class EditInvoice extends Component<Props, State> {
   }
 
   sendWhatsupMessage = () => {
-    const { formData, whatsupMessage } = this.state;
+    const { formData, whatsupMessage, shouldVerifyQrCode } = this.state;
+console.log(shouldVerifyQrCode);
 
     if (!whatsupMessage) {
       return;
@@ -386,7 +389,7 @@ export class EditInvoice extends Component<Props, State> {
 
     this.setState({ isUpdating: true });
 
-    api.post(`sendWhatsupMessage`, { phone: formData.customerInfo.phone, message: whatsupMessage })
+    api.post(`sendWhatsupMessage`, { phone: formData.customerInfo.phone, message: whatsupMessage, shouldVerifyQrCode })
       .then((res) => {
         this.setState({
           isUpdating: false,
@@ -593,9 +596,10 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
                     <Button onClick={() => this.setState({ whatsupMessage: '' })}>حقل فارغ</Button>
                   </ButtonGroup>
                 </div>
-
-                <QRCode value={this.state.qrCode || ''} />
-
+                <Switch value={this.state.shouldVerifyQrCode} onChange={(e) => this.setState({ shouldVerifyQrCode: e.target.checked })} />
+                
+                {this.state.shouldVerifyQrCode && <QRCode value={this.state.qrCode || ''} />}
+                
                 <div className="col-md-12 mb-4 text-end">
                   <CustomButton 
                     background='rgb(0, 171, 85)' 
@@ -606,6 +610,7 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
                     Send Message
                   </CustomButton>
                 </div>
+
               </Card>
 
               <div className="col-md-12 mb-4">
