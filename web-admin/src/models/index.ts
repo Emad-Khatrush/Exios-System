@@ -1,6 +1,7 @@
 export type Invoice = {
   user: User,
   _id: string,
+  madeBy: User,
   orderId: string,
   activity: ActivityType[],
   customerInfo: {

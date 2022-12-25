@@ -11,6 +11,8 @@ import { IInvoice } from '../../reducers/invoices';
 import { NavigateFunction } from 'react-router-dom';
 import withRouter from '../../utils/WithRouter/WithRouter';
 import { formatInvoiceFields } from '../XTrackingPage/utils'
+import { User } from '../../models';
+import api from '../../api';
 
 type Props = {
   createInvoice: any,
@@ -23,6 +25,7 @@ type Props = {
 }
 
 type State = {
+  employees: User[]
   invoiceFilesInput: any
   receiptsFilesInput: any
   previewInvoiceFiles: any
@@ -46,6 +49,7 @@ const breadcrumbs = [
 
 class AddInvoice extends Component<Props, State> {
   state: any = {
+    employees: [],
     invoiceFilesInput: [],
     receiptsFilesInput: [],
     previewInvoiceFiles: [],
@@ -72,6 +76,12 @@ class AddInvoice extends Component<Props, State> {
 
   componentDidMount() {
     this.props.resetInvoice()
+    api.get(`employees`)
+      .then((res) => this.setState({ employees: res.data.results }))
+      .catch((err) => {
+        console.log(err);
+        console.log("error");
+      })
   }
 
   componentDidUpdate() {
@@ -222,6 +232,7 @@ class AddInvoice extends Component<Props, State> {
   };
 
   render() {
+    const { employees } = this.state;
     const { invoice, isEmployee } = this.props;
     const invoiceFileRef = React.createRef();
     const receiptsFileRef = React.createRef();    
@@ -271,6 +282,7 @@ class AddInvoice extends Component<Props, State> {
                   addNewPaymentField={this.addNewPaymentField}
                   deteteRow={this.deteteRow}
                   isEmployee={isEmployee}
+                  employees={employees}
                 />
                 <div className="col-md-12 mb-2 text-end">
                   <CustomButton 

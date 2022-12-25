@@ -6,7 +6,7 @@ import ImageUploader from '../../components/ImageUploader/ImageUploader'
 import InvoiceForm from '../../components/InvoiceForm/InvoiceForm'
 import CustomButton from '../../components/CustomButton/CustomButton'
 import api from '../../api'
-import { Invoice, OrderActivity } from '../../models'
+import { Invoice, OrderActivity, User } from '../../models'
 import withRouter from '../../utils/WithRouter/WithRouter'
 import { RouteMatch } from 'react-router-dom'
 import { getOrderSteps } from '../../utils/methods'
@@ -22,6 +22,7 @@ type Props = {
 
 type State = {
   formData: Invoice | any
+  employees: User[]
   changedFields: Invoice | any
   isInvoicePending: boolean
   paymentList: any[]
@@ -62,6 +63,7 @@ export class EditInvoice extends Component<Props, State> {
 
   state: State = {
     formData: null,
+    employees: [],
     changedFields: [],
     isInvoicePending: true,
     paymentList: [],
@@ -80,7 +82,14 @@ export class EditInvoice extends Component<Props, State> {
 
   componentDidMount() {    
     api.get(`order/${this.props.router.params.id}`)
-      .then((res) => this.setState({ formData: res.data, paymentList: res.data.paymentList, isInvoicePending: false }))
+      .then((res) => this.setState({ formData: res.data, paymentList: res.data.paymentList }))
+      .catch((err) => {
+        console.log(err);
+        console.log("error");
+      })
+
+    api.get(`employees`)
+      .then((res) => this.setState({ employees: res.data?.results, isInvoicePending: false }))
       .catch((err) => {
         console.log(err);
         console.log("error");
@@ -214,7 +223,7 @@ export class EditInvoice extends Component<Props, State> {
           paymentList
         }
       }))
-    } else {      
+    } else {            
       this.setState((oldValues) => ({
         changedFields: {
           ...oldValues.changedFields,
@@ -381,7 +390,6 @@ export class EditInvoice extends Component<Props, State> {
 
   sendWhatsupMessage = () => {
     const { formData, whatsupMessage, shouldVerifyQrCode } = this.state;
-console.log(shouldVerifyQrCode);
 
     if (!whatsupMessage) {
       return;
@@ -414,7 +422,7 @@ console.log(shouldVerifyQrCode);
   }
 
   render() {
-    const { formData, isInvoicePending, isUpdating, isError, isFinished, resMessage, whatsupMessage } = this.state;    
+    const { formData, isInvoicePending, isUpdating, isError, isFinished, resMessage, whatsupMessage, employees } = this.state;    
 
     const invoiceFileRef = React.createRef();
     const receiptsFileRef = React.createRef();
@@ -637,6 +645,7 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
                     deteteRow={this.deteteRow}
                     invoice={formData || null}
                     isEmployee={this.props.isEmployee}
+                    employees={employees}
                   />
                   <div className="col-md-12 mb-2 text-end">
                     <CustomButton 

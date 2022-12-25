@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Button, ButtonGroup, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, InputAdornment, InputLabel, MenuItem, Select, Stack, TextField } from '@mui/material';
+import { Avatar, Button, ButtonGroup, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, InputAdornment, InputLabel, MenuItem, Select, Stack, TextField } from '@mui/material';
 
 import { BiNote, BiPackage } from 'react-icons/bi';
-import { Invoice } from '../../models';
+import { Invoice, User } from '../../models';
 import './InvoiceForm.scss';
 import { getOrderSteps } from '../../utils/methods';
 import LocalizationProvider from '@mui/lab/LocalizationProvider';
@@ -15,7 +15,8 @@ type Props = {
   addNewPaymentField?: any
   deteteRow?: any
   invoice?: Invoice | null
-  isEmployee?: boolean 
+  isEmployee?: boolean
+  employees?: User[]
 }
 
 const InvoiceForm = (props: Props) => {
@@ -87,6 +88,31 @@ const InvoiceForm = (props: Props) => {
             onChange={props.handleChange}
             defaultValue={invoice?.customerInfo?.phone}
           />
+        </div>
+
+        <div className="col-md-6 mb-4">
+          <FormControl style={{ width: '100%' }}>
+            <InputLabel id="demo-select-small">Made By</InputLabel>
+            <Select
+              className='made-by-selector'
+              style={{ display: 'flex' }}
+              labelId={'Made By'}
+              id={'madeBy'}
+              defaultValue={invoice?.madeBy?._id}
+              label={'Made By'}
+              name="madeBy"
+              onChange={(event) => {
+                return props.handleChange(event);
+              }}
+            >
+              {props.employees && props.employees.map(employee => (
+                <MenuItem value={employee?._id}>
+                  <Avatar sx={{ width: 30, height: 30, marginRight: '10px' }} alt={`${employee.firstName} ${employee.lastName}`} src={employee.imgUrl} />
+                  <em className='ml-2'> {`${employee.firstName} ${employee.lastName}`} </em>
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
         </div>
 
         {/* Order Info Section  */}
