@@ -142,6 +142,26 @@ class UnsureOrder extends Component<Props, State> {
                   </FormControl>
                 </div>
 
+                <div className="col-md-3 mb-4">
+                  <TextField
+                    id={'outlined-helperText'}
+                    required={true}
+                    label={'Shipment From Where'}
+                    name="fromWhere"
+                    onChange={this.handleChange}
+                  />
+                </div>
+
+                <div className="col-md-3 mb-4">
+                  <TextField
+                    id={'outlined-helperText'}
+                    required={true}
+                    label={'Shipment To Where'}
+                    name="toWhere"
+                    onChange={this.handleChange}
+                  />
+                </div>
+
                 <div className="col-md-12 mb-2 text-end">
                   <CustomButton 
                     background='rgb(0, 171, 85)' 

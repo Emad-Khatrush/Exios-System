@@ -218,6 +218,12 @@ export const defaultColumns = (setState: any) => ([
     }
   },
   {
+    field: 'madeBy',
+    headerName: 'Made By',
+    width: 200,
+    align: 'center'
+  },
+  {
     field: 'orderNote',
     headerName: 'Note',
     width: 200,
@@ -264,7 +270,8 @@ export const generateDataToListType = (list: any[]) => {
     exiosShipmentPrice: data.shipment.exiosShipmentPrice,
     shipmentIncome: data.paymentList,
     placedAt: data.placedAt,
-    createdAt: moment(data.createdAt).format('DD-MM-YYYY hh:mm A')
+    createdAt: moment(data.createdAt).format('DD-MM-YYYY hh:mm A'),
+    madeBy: `${data?.madeBy?.firstName || ''} ${data?.madeBy?.lastName || ''}`
   }));
 }
 
