@@ -104,6 +104,7 @@ export class EditInvoice extends Component<Props, State> {
         paid: false,
         arrived: false,
         arrivedLibya: false,
+        received: false,
       },
       note: '',
       deliveredPackages: {
@@ -236,10 +237,10 @@ export class EditInvoice extends Component<Props, State> {
   handleChange = (event: any, checked?: any, child?: any, customFieldName?: string) => {
     const fieldName = customFieldName ? customFieldName : event.target.name;
     
-    if (['paid', 'arrived', 'arrivedLibya', 'paymentLink', 'note'].includes(fieldName)) {      
+    if (['paid', 'arrived', 'arrivedLibya', 'received', 'paymentLink', 'note'].includes(fieldName)) {      
       let paymentList: any = [...this.state.paymentList!];
       let inputValue;
-      if (['paid', 'arrived', 'arrivedLibya'].includes(fieldName)) {
+      if (['paid', 'arrived', 'arrivedLibya', 'received'].includes(fieldName)) {
         inputValue = paymentList[event.target.id].status[fieldName];
         paymentList[event.target.id].status[fieldName] = !inputValue;
       } else if (fieldName === 'paymentLink') {

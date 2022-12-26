@@ -61,6 +61,7 @@ class AddInvoice extends Component<Props, State> {
       paid: false,
       arrived: false,
       arrivedLibya: false,
+      received: false,
       note: '',
       deliveredPackages: {
         trackingNumber: '',
@@ -142,7 +143,7 @@ class AddInvoice extends Component<Props, State> {
     let fieldName = customFieldName ? customFieldName : event.target.name;
 
     let paymentList: any = [...this.state.paymentList];
-    if (['paid', 'arrived', 'arrivedLibya', 'paymentLink', 'note'].includes(fieldName)) {            
+    if (['paid', 'arrived', 'arrivedLibya', 'received', 'paymentLink', 'note'].includes(fieldName)) {            
       const inputValue = paymentList[event.target.id][fieldName];
       paymentList[event.target.id][fieldName] = fieldName ===  'paymentLink' || fieldName ===  'note' ? event.target.value : !inputValue;
       
@@ -189,6 +190,7 @@ class AddInvoice extends Component<Props, State> {
         paid: false,
         arrived: false,
         arrivedLibya: false,
+        received: false,
         note: '',
         deliveredPackages: {
           trackingNumber: '',
