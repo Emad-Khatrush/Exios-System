@@ -433,7 +433,7 @@ export class EditInvoice extends Component<Props, State> {
     }
 
     const supplierDefaultMessage = `Hello, we placed the order, please write this on the package, 
-      Exios39 - by ${formData.shipment.method}(${formData.orderId}) 
+      Exios39 - by ${formData?.shipment?.method}(${formData?.orderId}) 
       it is our shipping mark 
                         
       also before shipping do not forget 
