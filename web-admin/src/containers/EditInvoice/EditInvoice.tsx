@@ -80,20 +80,14 @@ export class EditInvoice extends Component<Props, State> {
     shouldVerifyQrCode: false
   }
 
-  componentDidMount() {    
-    api.get(`order/${this.props.router.params.id}`)
-      .then((res) => this.setState({ formData: res.data, paymentList: res.data.paymentList }))
-      .catch((err) => {
-        console.log(err);
-        console.log("error");
-      })
-
-    api.get(`employees`)
-      .then((res) => this.setState({ employees: res.data?.results, isInvoicePending: false }))
-      .catch((err) => {
-        console.log(err);
-        console.log("error");
-      })
+  async componentDidMount() {
+    try {
+      const order = (await api.get(`order/${this.props.router.params.id}`)).data;
+      const employees = (await api.get(`employees`)).data?.results;
+      this.setState({ formData: order, paymentList: order?.paymentList, employees, isInvoicePending: false })
+    } catch (error) {
+      console.log(error);
+    }
   }
 
   addNewPaymentField = () => {
