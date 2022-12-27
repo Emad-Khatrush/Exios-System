@@ -69,6 +69,7 @@ const InvoiceForm = (props: Props) => {
             label={'Full Name'}
             onChange={props.handleChange}
             defaultValue={invoice?.customerInfo?.fullName}
+            disabled={invoice?.isCanceled}
           />
         </div>
         <div className="col-md-6 mb-4">
@@ -78,6 +79,7 @@ const InvoiceForm = (props: Props) => {
             label={'Email'}
             onChange={props.handleChange}
             defaultValue={invoice?.customerInfo?.email}
+            disabled={invoice?.isCanceled}
           />
         </div>
         <div className="col-md-6 mb-4">
@@ -88,6 +90,7 @@ const InvoiceForm = (props: Props) => {
             name="phone"
             onChange={props.handleChange}
             defaultValue={invoice?.customerInfo?.phone}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -105,6 +108,7 @@ const InvoiceForm = (props: Props) => {
               onChange={(event) => {
                 return props.handleChange(event);
               }}
+              disabled={invoice?.isCanceled}
             >
               {props.employees && props.employees.map(employee => (
                 <MenuItem value={employee?._id}>
@@ -129,6 +133,7 @@ const InvoiceForm = (props: Props) => {
             name="productName"
             onChange={props.handleChange}
             defaultValue={invoice?.productName}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -143,6 +148,7 @@ const InvoiceForm = (props: Props) => {
             onChange={props.handleChange}
             defaultValue={invoice?.quantity}
             onWheel={(event: any) => event.target.blur()}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -154,6 +160,7 @@ const InvoiceForm = (props: Props) => {
             name="fromWhere"
             onChange={props.handleChange}
             defaultValue={invoice?.shipment?.fromWhere}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -165,6 +172,7 @@ const InvoiceForm = (props: Props) => {
             name="toWhere"
             onChange={props.handleChange}
             defaultValue={invoice?.shipment?.toWhere}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -179,6 +187,7 @@ const InvoiceForm = (props: Props) => {
             onChange={props.handleChange}
             defaultValue={invoice?.totalInvoice}
             onWheel={(event: any) => event.target.blur()}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -192,6 +201,7 @@ const InvoiceForm = (props: Props) => {
               onChange={props.handleChange}
               defaultValue={invoice?.netIncome[0]?.total}
               onWheel={(event: any) => event.target.blur()}
+              disabled={invoice?.isCanceled}
             />
           </div>
         }
@@ -208,6 +218,7 @@ const InvoiceForm = (props: Props) => {
               onChange={(event) => {
                 return props.handleChange(event);
               }}
+              disabled={invoice?.isCanceled}
             >
               <MenuItem value={'tripoli'}>
                 <em> Tripoli Office </em>
@@ -237,6 +248,7 @@ const InvoiceForm = (props: Props) => {
               }}
               defaultValue={invoice?.debt?.total}
               onWheel={(event: any) => event.target.blur()}
+              disabled={invoice?.isCanceled}
             />
             <FormControl 
               required={debt.total > 0 ? true : false} 
@@ -257,6 +269,7 @@ const InvoiceForm = (props: Props) => {
                   })
                   return props.handleChange(event);
                 }}
+                disabled={invoice?.isCanceled}
               >
                 <MenuItem value={'USD'}>
                   <em> USD </em>
@@ -279,6 +292,7 @@ const InvoiceForm = (props: Props) => {
             name={'orderNote'} 
             onChange={props.handleChange}
             defaultValue={invoice?.orderNote}
+            disabled={invoice?.isCanceled}
           >
           </textarea>
         </div>
@@ -289,6 +303,7 @@ const InvoiceForm = (props: Props) => {
             onChange={props.handleChange} 
             defaultChecked={invoice?.isPayment}
             color="success"
+            disabled={invoice?.isCanceled}
           /> 
           Payment
         </div>
@@ -299,6 +314,7 @@ const InvoiceForm = (props: Props) => {
             onChange={props.handleChange} 
             defaultChecked={invoice?.isShipment}
             color="success"
+            disabled={invoice?.isCanceled}
           />
           Shipment
         </div>
@@ -308,6 +324,7 @@ const InvoiceForm = (props: Props) => {
             onChange={props.handleChange} 
             defaultChecked={invoice?.unsureOrder}
             color="success"
+            disabled={invoice?.isCanceled}
           />
           Unsure Order
         </div>
@@ -330,6 +347,7 @@ const InvoiceForm = (props: Props) => {
             defaultValue={invoice?.receivedUSD}
             onChange={props.handleChange}
             onWheel={(event: any) => event.target.blur()}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -346,6 +364,7 @@ const InvoiceForm = (props: Props) => {
             defaultValue={invoice?.receivedLYD}
             onChange={props.handleChange}
             onWheel={(event: any) => event.target.blur()}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -362,6 +381,7 @@ const InvoiceForm = (props: Props) => {
             defaultValue={invoice?.receivedShipmentUSD}
             onChange={props.handleChange}
             onWheel={(event: any) => event.target.blur()}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -378,6 +398,7 @@ const InvoiceForm = (props: Props) => {
             defaultValue={invoice?.receivedShipmentLYD}
             onChange={props.handleChange}
             onWheel={(event: any) => event.target.blur()}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -396,6 +417,7 @@ const InvoiceForm = (props: Props) => {
             onChange={props.handleChange}
             defaultValue={invoice?.shipment?.packageCount}
             onWheel={(event: any) => event.target.blur()}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -409,6 +431,7 @@ const InvoiceForm = (props: Props) => {
             onChange={props.handleChange}
             defaultValue={invoice?.shipment?.weight}
             onWheel={(event: any) => event.target.blur()}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -423,6 +446,7 @@ const InvoiceForm = (props: Props) => {
             onChange={props.handleChange}
             defaultValue={invoice?.shipment?.exiosShipmentPrice}
             onWheel={(event: any) => event.target.blur()}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -437,6 +461,7 @@ const InvoiceForm = (props: Props) => {
             onChange={props.handleChange}
             defaultValue={invoice?.shipment?.originShipmentPrice}
             onWheel={(event: any) => event.target.blur()}
+            disabled={invoice?.isCanceled}
           />
         </div>
 
@@ -452,6 +477,7 @@ const InvoiceForm = (props: Props) => {
               onChange={(event) => {
                 return props.handleChange(event);
               }}
+              disabled={invoice?.isCanceled}
             >
               <MenuItem value={'air'}>
                 <em> By Air </em>
@@ -480,6 +506,7 @@ const InvoiceForm = (props: Props) => {
               onChange={(event) => {
                 return props.handleChange(event);
               }}
+              disabled={invoice?.isCanceled}
             >
               {steps.map(((steps: any, i) => (
                 <MenuItem key={i} value={i}>
@@ -507,8 +534,9 @@ const InvoiceForm = (props: Props) => {
                   name="paymentLink"
                   onChange={props.handleChange}
                   defaultValue={payment?.link}
+                  disabled={invoice?.isCanceled}
                 />
-                <ButtonGroup key={i} color='success' size="small" aria-label="small button group">
+                <ButtonGroup disabled={invoice?.isCanceled} key={i} color='success' size="small" aria-label="small button group">
                   <Button id={String(i)} name="paid" onDoubleClick={props.handleChange} variant={payment.paid || payment?.status?.paid ? 'contained': 'outlined'} key="paid">Paid</Button>
                   <Button id={String(i)} name="arrived" onDoubleClick={props.handleChange} variant={payment.arrived || payment?.status?.arrived ? 'contained': 'outlined'} key="arrived">Arrived</Button>
                   <Button id={String(i)} name="arrivedLibya" onDoubleClick={props.handleChange} variant={payment.arrivedLibya || payment?.status?.arrivedLibya ? 'contained': 'outlined'} key="arrivedLibya">Libya</Button>
@@ -673,13 +701,14 @@ const InvoiceForm = (props: Props) => {
         </Dialog>
 
         <div className='col-md-6 mb-4'>
-          <Button style={{ marginRight: '10px' }} variant="contained" onClick={props.addNewPaymentField} type='button' size='small'>ADD</Button>
+          <Button disabled={invoice?.isCanceled} style={{ marginRight: '10px' }} variant="contained" onClick={props.addNewPaymentField} type='button' size='small'>ADD</Button>
           <Button 
             color='error' 
             variant="contained" 
             type='button' 
             size='small'
             onClick={() => setConfirmRemoveLinkModal(true)} 
+            disabled={invoice?.isCanceled}
           >
             Remove
           </Button>

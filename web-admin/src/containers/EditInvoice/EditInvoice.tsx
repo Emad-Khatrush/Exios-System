@@ -1,23 +1,26 @@
 import { connect } from 'react-redux'
 import React, { Component } from 'react'
-import { Alert, Autocomplete, Backdrop, Breadcrumbs, Button, ButtonGroup, CircularProgress, Link, Snackbar, Switch, TextField, Typography } from '@mui/material'
+import { Alert, Autocomplete, Backdrop, Breadcrumbs, Button, ButtonGroup, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Link, Snackbar, Switch, TextField, Typography } from '@mui/material'
 import Card from '../../components/Card/Card'
 import ImageUploader from '../../components/ImageUploader/ImageUploader'
 import InvoiceForm from '../../components/InvoiceForm/InvoiceForm'
 import CustomButton from '../../components/CustomButton/CustomButton'
 import api from '../../api'
-import { Invoice, OrderActivity, User } from '../../models'
+import { Account, Invoice, OrderActivity, User } from '../../models'
 import withRouter from '../../utils/WithRouter/WithRouter'
 import { RouteMatch } from 'react-router-dom'
 import { getOrderSteps } from '../../utils/methods'
 import QRCode from 'qrcode.react'
 import { formatInvoiceFields } from '../XTrackingPage/utils'
+import { isMobile } from 'react-device-detect';
 
 import './EditInvoice.scss';
+import moment from 'moment'
 
 type Props = {
   router: RouteMatch
   isEmployee: boolean
+  account: Account
 }
 
 type State = {
@@ -34,6 +37,8 @@ type State = {
   whatsupMessage: string
   qrCode: null
   shouldVerifyQrCode: boolean
+  isCancelOrderDialogOpen: boolean
+  cancelationReason: string
 }
 
 const breadcrumbs = [
@@ -77,7 +82,9 @@ export class EditInvoice extends Component<Props, State> {
     resMessage: null,
     whatsupMessage: '',
     qrCode: null,
-    shouldVerifyQrCode: false
+    shouldVerifyQrCode: false,
+    isCancelOrderDialogOpen: false,
+    cancelationReason: ''
   }
 
   async componentDidMount() {
@@ -383,6 +390,26 @@ export class EditInvoice extends Component<Props, State> {
       })
   }
 
+  cancelOrder = async () => {
+    const { cancelationReason } = this.state;
+    if (!cancelationReason) return;
+    this.setState({ isUpdating: true });
+
+    try {
+      const order = (await api.post(`order/${this.props.router.params.id}/cancel`, { cancelationReason }))?.data;
+      this.setState({
+        formData: order,
+        changedFields: [],
+        isUpdating: false,
+        isFinished: true,
+        resMessage: 'Invoice canceled successfully.',
+        isCancelOrderDialogOpen: false
+      })
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
   sendWhatsupMessage = () => {
     const { formData, whatsupMessage, shouldVerifyQrCode } = this.state;
 
@@ -417,7 +444,8 @@ export class EditInvoice extends Component<Props, State> {
   }
 
   render() {
-    const { formData, isInvoicePending, isUpdating, isError, isFinished, resMessage, whatsupMessage, employees } = this.state;    
+    const { formData, isInvoicePending, isUpdating, isError, isFinished, resMessage, whatsupMessage, employees, isCancelOrderDialogOpen } = this.state;    
+    const { account } = this.props;
 
     const invoiceFileRef = React.createRef();
     const receiptsFileRef = React.createRef();
@@ -454,16 +482,29 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
       <div className="m-4 edit-invoice">
         <div style={{ maxWidth: '1400px', margin: 'auto'}}>
           <div className="col-12 mb-3">
-            <div className="d-flex justify-content-between">
+            <div className={`d-flex justify-content-between ${isMobile ? 'flex-column my-2' : ''}`}>
               <h4 className='mb-2'> Edit Invoice</h4>
-              <CustomButton 
-                background='rgb(0, 171, 85)' 
-                size="small"
-                href={`https://www.exioslibya.com/xtracking/${formData.orderId}/ar`}
-                target="_blank"
-              >
-                Preview
-              </CustomButton>
+              <div>
+                {(!formData?.isCanceled && (['62bb47b22aabe070791f8278', '632aeb399aefb9b93b7a7527'].includes(account?._id) || account?.roles.isAdmin)) &&
+                  <Button 
+                    style={{ marginRight: '8px' }} 
+                    variant="outlined" 
+                    color="error" 
+                    size='small'
+                    onClick={() => this.setState({ isCancelOrderDialogOpen: true })}
+                  >
+                    Cancel
+                  </Button>
+                }
+                <CustomButton
+                  background='rgb(0, 171, 85)' 
+                  size="small"
+                  href={`https://www.exioslibya.com/xtracking/${formData.orderId}/ar`}
+                  target="_blank"
+                >
+                  Preview
+                </CustomButton>
+              </div>
             </div>
               <Breadcrumbs separator="›" aria-label="breadcrumb">
                 {breadcrumbs}
@@ -572,7 +613,7 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
                       <CustomButton 
                         background='rgb(0, 171, 85)' 
                         size="small"
-                        disabled={isUpdating ? true : false}
+                        disabled={(isUpdating || formData?.isCanceled) ? true : false}
                       >
                         Add Activity
                       </CustomButton>
@@ -607,7 +648,7 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
                   <CustomButton 
                     background='rgb(0, 171, 85)' 
                     size="small"
-                    disabled={isUpdating ? true : false}
+                    disabled={(isUpdating || formData?.isCanceled) ? true : false}
                     onClick={this.sendWhatsupMessage}
                   >
                     Send Message
@@ -629,6 +670,13 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
             </div>
 
             <div className="col-md-8">
+              {formData?.isCanceled &&
+                <Card>
+                  <h5 className='mb-3' style={{ color: '#d32f2f' }}> Order Canceled </h5>
+                  <p className='mb-1'> <strong>Cancelation Date:</strong> {moment(formData.cancelation.date).format('DD-MM-YYYY / HH:mm')} time </p>
+                  <p className='mb-1'> <strong>Reason:</strong> {formData.cancelation.reason} </p>
+                </Card>
+              }
               <form
                 onSubmit={(event: any ) => this.submit(event)}
               >
@@ -646,7 +694,7 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
                     <CustomButton 
                       background='rgb(0, 171, 85)' 
                       size="small"
-                      disabled={isUpdating ? true : false}
+                      disabled={(isUpdating || formData?.isCanceled) ? true : false}
                     >
                       Update Invoice
                     </CustomButton>
@@ -676,6 +724,28 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
             {resMessage}
           </Alert>
         </Snackbar>
+
+        <Dialog open={isCancelOrderDialogOpen} onClose={() => this.setState({ isCancelOrderDialogOpen: false })}>
+          <DialogTitle>Are you sure to cancel this order?</DialogTitle>
+          <DialogContent>
+            <p>يرجى كتابة سبب الالغاء بالتفصيل</p>
+            <textarea 
+              name="cancelationReason"
+              onChange={(e) => this.setState({ cancelationReason: e.target.value })}
+              rows={10}
+              style={{ width: '100%' }}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => this.setState({ isCancelOrderDialogOpen: false })} >الرجوع</Button>
+            <Button 
+              onClick={() => this.cancelOrder()}
+              color="error"
+            >
+              الغاء الفاتورة
+            </Button>
+          </DialogActions>
+        </Dialog>
       </div>
     )
   }
@@ -683,7 +753,8 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
 
 const mapStateToProps = (state: any) => {
 	return {
-    isEmployee: state.session.account?.roles.isEmployee
+    isEmployee: state.session.account?.roles.isEmployee,
+    account: state.session.account
 	};
 }
 

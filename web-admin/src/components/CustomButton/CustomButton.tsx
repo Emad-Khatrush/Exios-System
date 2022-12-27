@@ -16,10 +16,11 @@ type Props = {
   disabled?: boolean
   href?: string
   target?: string
+  className?: string
 }
 
 const CustomButton = (props: Props) => {
-  const { size, color, icon, background, href, style, onClick, disabled, target } = props;
+  const { size, color, icon, background, href, style, onClick, disabled, target, className } = props;
 
   const customStyle: any = {
     textTransform: 'none',
@@ -44,7 +45,7 @@ const CustomButton = (props: Props) => {
         startIcon={icon}
         onClick={onClick}
         disabled={disabled}
-        className='custom-button'
+        className={`custom-button ${className}`}
       >
         {props.children} 
       </Button>
