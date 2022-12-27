@@ -153,7 +153,7 @@ const InvoiceForm = (props: Props) => {
             label={'Shipment From Where'}
             name="fromWhere"
             onChange={props.handleChange}
-            defaultValue={invoice?.shipment.fromWhere}
+            defaultValue={invoice?.shipment?.fromWhere}
           />
         </div>
 
@@ -164,7 +164,7 @@ const InvoiceForm = (props: Props) => {
             label={'Shipment To Where'}
             name="toWhere"
             onChange={props.handleChange}
-            defaultValue={invoice?.shipment.toWhere}
+            defaultValue={invoice?.shipment?.toWhere}
           />
         </div>
 
@@ -394,7 +394,7 @@ const InvoiceForm = (props: Props) => {
             type={'number'}
             inputProps={{ inputMode: 'numeric' }}
             onChange={props.handleChange}
-            defaultValue={invoice?.shipment.packageCount}
+            defaultValue={invoice?.shipment?.packageCount}
             onWheel={(event: any) => event.target.blur()}
           />
         </div>
@@ -407,7 +407,7 @@ const InvoiceForm = (props: Props) => {
             type={'number'}
             inputProps={{ inputMode: 'numeric' }}
             onChange={props.handleChange}
-            defaultValue={invoice?.shipment.weight}
+            defaultValue={invoice?.shipment?.weight}
             onWheel={(event: any) => event.target.blur()}
           />
         </div>
@@ -421,7 +421,7 @@ const InvoiceForm = (props: Props) => {
             type={'number'}
             inputProps={{ inputMode: 'numeric', step: .01 }}
             onChange={props.handleChange}
-            defaultValue={invoice?.shipment.exiosShipmentPrice}
+            defaultValue={invoice?.shipment?.exiosShipmentPrice}
             onWheel={(event: any) => event.target.blur()}
           />
         </div>
@@ -435,7 +435,7 @@ const InvoiceForm = (props: Props) => {
             type={'number'}
             inputProps={{ inputMode: 'decimal', step: .01 }}
             onChange={props.handleChange}
-            defaultValue={invoice?.shipment.originShipmentPrice}
+            defaultValue={invoice?.shipment?.originShipmentPrice}
             onWheel={(event: any) => event.target.blur()}
           />
         </div>
