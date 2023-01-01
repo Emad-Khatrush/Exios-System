@@ -767,7 +767,7 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
                 <img src="/images/exios-logo.png" alt="Exios" width={160} height={90} />
               </div>
               <div style={{ border: '2px solid black' }} className="p-3">
-                <QRCode value={`http://localhost:3000/shouldAllowToAccessApp?id=${formData?._id}`} />
+                <QRCode value={`http://exios-admin-frontend.web.app/shouldAllowToAccessApp?id=${formData?._id}`} />
               </div>
               <div style={{ border: '2px solid black' }} className="p-3">
                 <p> <strong>Customer ID:</strong> {formData?.orderId} </p>
