@@ -4,6 +4,7 @@ import { connect } from 'react-redux';
 
 import PrivateRoute from './routes/PrivateRoute';
 import Login from './containers/Login/Login';
+import AllowToAccessApp from './containers/AllowToAccessApp/AllowToAccessApp';
 import AuthChecker from './utils/AuthChecker';
 import { Session } from './models';
 
@@ -70,6 +71,7 @@ class App extends React.Component<MyProps> {
           <Router>
             <AuthChecker />
             <Routes>
+              <Route path='/shouldAllowToAccessApp' element={<AllowToAccessApp session={session} />} />
               <Route path='/login' element={<Login />} />;
               <Route element={<PrivateRoute session={session} />}>
                 {routes}

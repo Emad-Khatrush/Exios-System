@@ -13,6 +13,7 @@ import { getOrderSteps } from '../../utils/methods'
 import QRCode from 'qrcode.react'
 import { formatInvoiceFields } from '../XTrackingPage/utils'
 import { isMobile } from 'react-device-detect';
+import * as htmlToImage from 'html-to-image';
 
 import './EditInvoice.scss';
 import moment from 'moment'
@@ -39,6 +40,7 @@ type State = {
   shouldVerifyQrCode: boolean
   isCancelOrderDialogOpen: boolean
   cancelationReason: string
+  shippingLabelDialogOpen: boolean
 }
 
 const breadcrumbs = [
@@ -53,7 +55,7 @@ const breadcrumbs = [
   </Typography>,
 ];
 
-const countries = ['الصين', 'امريكا', 'بريطانيا', 'تركيا', 'الامارات'];
+const countries = ['الصين', 'امريكا', 'بريطانيا', 'تركيا', 'الامارات', 'طرابلس', 'بنغازي'];
 const orderActions = [
   'تم شراء المنتجات، الان في مرحلة انتظار البضائع للوصول الى مخزننا',
   'وصلت البضائع الى المخزن، الان في مرحلة التجهيز والشحن الى ليبيا',
@@ -84,7 +86,8 @@ export class EditInvoice extends Component<Props, State> {
     qrCode: null,
     shouldVerifyQrCode: false,
     isCancelOrderDialogOpen: false,
-    cancelationReason: ''
+    cancelationReason: '',
+    shippingLabelDialogOpen: false
   }
 
   async componentDidMount() {
@@ -444,7 +447,7 @@ export class EditInvoice extends Component<Props, State> {
   }
 
   render() {
-    const { formData, isInvoicePending, isUpdating, isError, isFinished, resMessage, whatsupMessage, employees, isCancelOrderDialogOpen } = this.state;    
+    const { formData, isInvoicePending, isUpdating, isError, isFinished, resMessage, whatsupMessage, employees, isCancelOrderDialogOpen, shippingLabelDialogOpen } = this.state;    
     const { account } = this.props;
 
     const invoiceFileRef = React.createRef();
@@ -658,6 +661,16 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
               </Card>
 
               <div className="col-md-12 mb-4">
+                <CustomButton 
+                  className='my-2'
+                  background='rgb(0, 171, 85)' 
+                  size="small"
+                  disabled={(isUpdating || formData?.isCanceled) ? true : false}
+                  onClick={() => this.setState({ shippingLabelDialogOpen: true })}
+                >
+                  Download Shipping Label
+                </CustomButton>
+
                 <textarea 
                   style={{ height: '300px' }} 
                   placeholder='Message' 
@@ -743,6 +756,41 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
               color="error"
             >
               الغاء الفاتورة
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog open={shippingLabelDialogOpen} onClose={() => this.setState({ shippingLabelDialogOpen: false })}>
+          <DialogContent>
+            <div style={{ background: 'white', textAlign: 'center', border: '2px solid black', width: '400px', height: '460px' }} id='test222'>
+              <div style={{ border: '2px solid black' }} className="p-3">
+                <img src="/images/exios-logo.png" alt="Exios" width={160} height={90} />
+              </div>
+              <div style={{ border: '2px solid black' }} className="p-3">
+                <QRCode value={`http://localhost:3000/shouldAllowToAccessApp?id=${formData?._id}`} />
+              </div>
+              <div style={{ border: '2px solid black' }} className="p-3">
+                <p> <strong>Customer ID:</strong> {formData?.orderId} </p>
+                <p> <strong>Shipment Method:</strong> {formData?.shipment?.method} </p>
+              </div>
+            </div>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => this.setState({ shippingLabelDialogOpen: false })} >Back</Button>
+            <Button 
+              onClick={() => {
+                const node = document.getElementById('test222');
+                htmlToImage.toJpeg(node as any)
+                  .then(function (dataUrl) {
+                    require("downloadjs")(dataUrl, 'shipping Label.jpeg');
+                  })
+                  .catch(function (error) {
+                    console.error('oops, something went wrong!', error);
+                  });
+              }}
+              color='success'
+            >
+              Download Label
             </Button>
           </DialogActions>
         </Dialog>
