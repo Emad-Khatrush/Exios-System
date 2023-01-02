@@ -457,7 +457,11 @@ export class EditInvoice extends Component<Props, State> {
       return <CircularProgress color="inherit" />
     }
 
-    const supplierDefaultMessage = `Hello, we placed the order, please write this on the package, 
+    const supplierDefaultMessage = `
+    Hello, we placed the order, please print and put this label on the packages, it is our shipping mark.
+also before shipping do not forget to send us photos. 
+
+    Hello, we placed the order, please write this on the package, 
       Exios39 - by ${formData?.shipment?.method}(${formData?.orderId}) 
       it is our shipping mark 
                         
