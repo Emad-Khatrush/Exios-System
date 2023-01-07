@@ -1,13 +1,14 @@
 import { RiDashboardLine } from 'react-icons/ri';
 import { BsBox } from 'react-icons/bs';
-import { MdContactSupport } from 'react-icons/md';
+import { MdAttachMoney, MdContactSupport, MdLocalShipping } from 'react-icons/md';
+import { ImLocation2 } from 'react-icons/im';
 
 export const routes = [
   {
     label: 'الصفحة الرئيسية',
     value: 'home',
     icon: <RiDashboardLine />,
-    path: '/'
+    path: '/home'
   },
   {
     label: 'طلبياتي',
@@ -16,9 +17,27 @@ export const routes = [
     path: '/orders'
   },
   {
+    label: 'ابدأ بالشحن',
+    value: 'startShip',
+    icon: <MdLocalShipping />,
+    path: '/start-shipment'
+  },
+  {
+    label: 'عناوننا',
+    value: 'address',
+    icon: <ImLocation2 />,
+    path: '/address'
+  },
+  {
+    label: 'الاسعار',
+    value: 'prices',
+    icon: <MdAttachMoney />,
+    path: '/prices'
+  },
+  {
     label: 'تواصل معنا',
     value: 'contactUs',
     icon: <MdContactSupport />,
-    path: '/contactUs'
+    path: '/contact-us'
   }
 ]

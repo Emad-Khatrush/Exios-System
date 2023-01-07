@@ -1,5 +1,6 @@
 import Card from "../Card/Card";
 import { BiArrowBack } from 'react-icons/bi';
+import { Link } from "react-router-dom";
 
 type Props = {}
 
@@ -17,7 +18,7 @@ const AlertWidget = (props: Props) => {
           />
         </div>
 
-        <div className="max-w-xs">
+        <div className="max-w-xs ml-4">
           <h1 className="font-bold text-xl sm:text-2xl text-gray-800 mb-2 text-end">الشحن عن طريق شركة اكسيوس</h1>
           <ul className="list-disc text-gray-500 text-xl m-6 text-start" style={{ direction: 'rtl' }}>
             <li>سهولة في استعمال</li>
@@ -25,15 +26,20 @@ const AlertWidget = (props: Props) => {
             <li>امكنية ارجاع المال بعد الشراء</li>
             <li>تتبع طلبياتك باحترافية</li>
           </ul>
-          <button
-            type="submit"
-            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-md font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+
+          <Link
+            to="/start-shipment"
           >
-            <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-              <BiArrowBack className="h-5 w-5 text-green-500 group-hover:text-green-400" aria-hidden="true" />
-            </span>
-            ابدأ الشحن الان
-          </button>
+            <button
+              type="submit"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-md font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+            >
+              <span className="absolute left-0 inset-y-0 flex items-center pl-3">
+                <BiArrowBack className="h-5 w-5 text-green-500 group-hover:text-green-400" aria-hidden="true" />
+              </span>
+              ابدأ الشحن الان
+            </button>
+          </Link>
         </div>
         
       </div>

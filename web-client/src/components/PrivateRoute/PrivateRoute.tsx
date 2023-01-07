@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import Card from '../Card/Card';
 import Navbar from '../Navbar/Navbar';
 import ResponsiveSidebar from '../Sidebar/ResponsiveSidebar';
 import Sidebar from '../Sidebar/Sidebar';

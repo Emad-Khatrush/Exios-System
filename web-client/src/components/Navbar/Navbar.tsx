@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 type Props = {
   show: boolean,
@@ -20,32 +21,37 @@ const Navbar = (props: Props) => {
                   <div className="rounded-full">
                     {profile && (
                         <ul className="p-2 w-full border-r bg-white absolute rounded left-0 shadow mt-2 sm:mt-10">
-                            <li className="flex w-full justify-between text-gray-600 hover:text-indigo-700 cursor-pointer items-center">
+                          <Link to={'/settings'}>
+                            <li className="flex w-full justify-between text-gray-600 hover:text-indigo-700 cursor-pointer items-center p-1">
                                 <div className="flex items-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-user" width={18} height={18} viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
                                         <path stroke="none" d="M0 0h24v24H0z" />
                                         <circle cx={12} cy={7} r={4} />
                                         <path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
                                     </svg>
-                                    <span className="text-sm ml-2">My Profile</span>
+                                    <span className="text-sm ml-2">الاعدادات</span>
                                 </div>
                             </li>
-                            <li className="flex w-full justify-between text-gray-600 hover:text-indigo-700 cursor-pointer items-center mt-2">
+                          </Link>
+
+                          <Link to={'/login'}>
+                            <li className="flex w-full justify-between text-gray-600 hover:text-indigo-700 cursor-pointer items-center mt-2 p-1">
                                 <div className="flex items-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-logout" width={20} height={20} viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
                                         <path stroke="none" d="M0 0h24v24H0z" />
                                         <path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2" />
                                         <path d="M7 12h14l-3 -3m0 6l3 -3" />
                                     </svg>
-                                    <span className="text-sm ml-2">Sign out</span>
+                                    <span className="text-sm ml-2">تسجيل الخروج </span>
                                 </div>
                             </li>
+                          </Link>
                         </ul>
                     )}
                   </div>
                   <p className="text-gray-800 text-sm mx-3">عماد ختروش</p>
                   <div className="relative mr-2">
-                        <img className="rounded-full h-10 w-10 object-cover" src="https://scontent-ist1-1.xx.fbcdn.net/v/t39.30808-6/253769795_10208631213013904_9018611287682636732_n.jpg?_nc_cat=100&ccb=1-7&_nc_sid=09cbfe&_nc_ohc=oA0IawRIqS8AX_4WNiK&_nc_ht=scontent-ist1-1.xx&oh=00_AT99GysFj28c9fVFS7TfP4yT0bZ5Kt1ir_LK4p5o26k2oQ&oe=62DF2704" alt="avatar" />
+                        <img className="rounded-full h-10 w-10 object-cover" src="https://storage.googleapis.com/exios-bucket/253769795_10208631213013904_9018611287682636732_n.jpg" alt="avatar" />
                         <div className="w-2 h-2 rounded-full bg-green-400 border border-white absolute inset-0 mb-0 mr-0 m-auto" />
                     </div>
                   <div className="cursor-pointer text-gray-600">
