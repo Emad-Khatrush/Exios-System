@@ -1,11 +1,55 @@
 import Card from '../../components/Card/Card'
 import image from '../../../public/images/exios-logo.png';
 import { FaLock } from 'react-icons/fa';
-import { Link } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import api from '../../api';
+import AlertInfo from '../../components/AlertInfo/AlertInfo';
+import { apiErrorsTypes } from '../../constants/errorTypes';
+import { useDispatch, useSelector } from 'react-redux';
+import { LOGIN, STATUS_SUCCESS } from '../../constants/actions';
+import { addAuthInterceptor } from '../../utils/AuthInterceptor';
 
-type Props = {}
+const Login = () => {
+  
+  const [formData, setFormData] = useState({
+    username: '',
+    password: ''
+  });
+  
+  const [errorMessage, setErrorMessage] = useState<{ type: 'info' | 'danger' | 'success' | 'warning', message: string } | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  
+  const history = useNavigate();
+  const dispatch = useDispatch()
 
-const Login = (props: Props) => {
+  const login = async (e: any) => {
+    e.preventDefault();
+    const { username } = formData;
+    setErrorMessage(null);
+    setIsLoading(true);
+    try {
+      const res = await api.login({ ...formData, username: username.toLocaleLowerCase().trim() }, 'client');
+      const data = res.data;      
+      addAuthInterceptor(data.token);
+      localStorage.setItem('authToken', data.token);
+      localStorage.setItem('user', JSON.stringify(data));
+      dispatch({
+        payload: data,
+        status: STATUS_SUCCESS,
+        type: LOGIN,
+      });
+      history('/home');
+    } catch (error: any) {
+      console.log(error);
+      setErrorMessage({
+        type: 'danger',
+        message: apiErrorsTypes[error?.data?.message] || 'حدث خطا، الرجاء المحاولة مرة اخرى لاحقا'
+      })
+    }
+    setIsLoading(false);
+  }
+
   return (
     <div className="min-h-full flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-200">
       <Card>
@@ -27,21 +71,37 @@ const Login = (props: Props) => {
               </Link>
             </p>
           </div>
-          <form className="mt-8 space-y-6" action="#" method="POST">
-            <input type="hidden" name="remember" defaultValue="true" />
+          <form 
+            className="mt-8 space-y-6" 
+            onSubmit={(e) => {
+              e.preventDefault();
+              login(e);
+            }}
+          >
             <div className="rounded-md shadow-sm -space-y-px">
               <div>
+                {errorMessage &&
+                  <AlertInfo 
+                    tint={errorMessage.type}
+                    description={errorMessage.message}
+                  />
+                }
                 <label htmlFor="email-address" className="sr-only">
                   البريد الاكتروني"
                 </label>
                 <input
                   id="email-address"
-                  name="email"
+                  name="username"
                   type="email"
                   autoComplete="email"
                   required
-                  className="mb-3"
+                  className="mb-3 mt-2"
                   placeholder="البريد الاكتروني"
+                  onChange={(e) => setFormData((prevState) => ({
+                    ...prevState,
+                    [e.target.name]: e.target.value
+                  }))}
+                  disabled={isLoading}
                 />
               </div>
               <div>
@@ -55,27 +115,20 @@ const Login = (props: Props) => {
                   autoComplete="current-password"
                   required
                   placeholder="الرمز السري"
+                  onChange={(e) => setFormData((prevState) => ({
+                    ...prevState,
+                    [e.target.name]: e.target.value
+                  }))}
+                  disabled={isLoading}
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
-                />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                  ذكرني
-                </label>
-              </div>
-
+            <div className="flex items-center justify-end">
               <div className="text-sm">
-                <a href="#" className="font-medium text-green-600 hover:text-green-500">
+                <Link to="/reset-password" className="font-medium text-green-600 hover:text-green-500">
                   هل نسيت كلمة المرور؟
-                </a>
+                </Link>
               </div>
             </div>
 
@@ -83,6 +136,7 @@ const Login = (props: Props) => {
               <button
                 type="submit"
                 className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                disabled={isLoading}
               >
                 <span className="absolute left-0 inset-y-0 flex items-center pl-3">
                   <FaLock className="h-5 w-5 text-green-500 group-hover:text-green-400" aria-hidden="true" />

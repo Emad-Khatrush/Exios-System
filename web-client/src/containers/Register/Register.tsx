@@ -1,11 +1,56 @@
+import { useState } from 'react';
 import Card from '../../components/Card/Card'
 import image from '../../../public/images/exios-logo.png';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { AiOutlineUserAdd } from 'react-icons/ai';
+import { User } from '../../models';
+import api from '../../api';
+import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
+import TermsPdf from '../../../public/terms.pdf';
+import AlertInfo from '../../components/AlertInfo/AlertInfo';
+import { apiErrorsTypes } from '../../constants/errorTypes';
 
-type Props = {}
+const Register = () => {
+  const [formData, setFormData] = useState<User | any>({
+    city: 'tripoli'
+  });
+  
+  const [openTermsModal, setOpenTermsModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<{ type: 'info' | 'danger' | 'success' | 'warning', message: string } | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
-const Register = (props: Props) => {
+  const history = useNavigate();
+  
+  const updateFormState = (name: string, value: any) => {
+    setFormData((prevState: any) => ({
+      ...prevState,
+      [name]: value
+    }))
+  }
+
+  const createAccount = async () => {
+    if (formData?.password !== formData?.repeatedPassword) {
+      return setErrorMessage({
+        type: 'warning',
+        message: 'كلمة المرور لا تطابق كلمة مرور المكرره، الرجاء اعادة كتابته'
+      });
+    }
+    setErrorMessage(null);
+    setIsLoading(true);
+    try {
+      await api.createClientAccount(formData);
+      history('/home');
+    } catch (error: any) {
+      console.log(error);
+      
+      setErrorMessage({
+        type: 'danger',
+        message: apiErrorsTypes[error?.data?.message] || 'حدث خطا اثناء انشاء الحساب'
+      });
+    }
+    setIsLoading(false);
+  }
+
   return (
     <div className="min-h-full flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-200">
       <Card>
@@ -27,11 +72,22 @@ const Register = (props: Props) => {
               </Link>
             </p>
           </div>
-          <form className="mt-8 space-y-6" action="#" method="POST">
-            <input type="hidden" name="remember" defaultValue="true" />
+          <form 
+            className="mt-8 space-y-6"
+            onSubmit={(e) => {
+              e.preventDefault();
+              createAccount();
+            }}
+          >
             <div className="rounded-md shadow-sm -space-y-px">
               <div>
-                <h5 className='mb-2 text-right'>معلومات الشخصية</h5>
+                {errorMessage &&
+                  <AlertInfo 
+                    tint={errorMessage.type}
+                    description={errorMessage.message}
+                  />
+                }
+                <h5 className='mb-2 mt-2 text-right'>معلومات الشخصية</h5>
                 <input
                   id="email-address"
                   name="email"
@@ -40,6 +96,8 @@ const Register = (props: Props) => {
                   required
                   className="mb-3"
                   placeholder="البريد الاكتروني"
+                  onChange={(e) => updateFormState(e.target.name, e.target.value)}
+                  disabled={isLoading}
                 />
                 <input
                   name="firstName"
@@ -47,6 +105,8 @@ const Register = (props: Props) => {
                   required
                   className="mb-3"
                   placeholder="الاسم الاول"
+                  onChange={(e) => updateFormState(e.target.name, e.target.value)}
+                  disabled={isLoading}
                 />
                 <input
                   name="lastName"
@@ -54,6 +114,8 @@ const Register = (props: Props) => {
                   required
                   className="mb-3"
                   placeholder="اسم العائلة"
+                  onChange={(e) => updateFormState(e.target.name, e.target.value)}
+                  disabled={isLoading}
                 />
                 <input
                   name="phone"
@@ -61,11 +123,16 @@ const Register = (props: Props) => {
                   required
                   className="mb-3"
                   placeholder="رقم الهاتف"
+                  onChange={(e) => updateFormState(e.target.name, e.target.value)}
+                  disabled={isLoading}
                 />
-                <select 
+                <select
+                  required
                   name="city" 
                   id="city"
                   className="mb-3"
+                  onChange={(e) => updateFormState(e.target.name, e.target.value)}
+                  disabled={isLoading}
                 >
                   <option value="tripoli" className='mr-96'>طرابلس</option>
                   <option value="benghazi">بنغازي</option>
@@ -76,6 +143,8 @@ const Register = (props: Props) => {
               <div>
                 <h5 className='mb-2 text-right'>معلومات الدخول</h5>
                 <input
+                  minLength={6}
+                  maxLength={16}
                   id="password"
                   name="password"
                   type="password"
@@ -83,8 +152,12 @@ const Register = (props: Props) => {
                   required
                   className="mb-3"
                   placeholder="الرمز السري"
+                  onChange={(e) => updateFormState(e.target.name, e.target.value)}
+                  disabled={isLoading}
                 />
                 <input
+                  minLength={6}
+                  maxLength={16}
                   id="repeatedPassword"
                   name="repeatedPassword"
                   type="password"
@@ -92,6 +165,8 @@ const Register = (props: Props) => {
                   required
                   className="mb-3"
                   placeholder="اعادة الرمز السري"
+                  onChange={(e) => updateFormState(e.target.name, e.target.value)}
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -102,10 +177,21 @@ const Register = (props: Props) => {
                   انا اوافق على <span className='text-green-600 cursor-pointer'>شروط</span> التسجيل
                 </label>
                 <input
-                  id="remember-me"
-                  name="remember-me"
+                  required
+                  id="isAgreeToTermsOfCompany"
+                  name="isAgreeToTermsOfCompany"
                   type="checkbox"
+                  checked={formData?.isAgreeToTermsOfCompany || false}
                   className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded cursor-pointer"
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setOpenTermsModal(true);
+                    } else {
+                      // thats mean user uncheck terms
+                      updateFormState(e.target.name, false);
+                    }
+                  }}
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -114,6 +200,7 @@ const Register = (props: Props) => {
               <button
                 type="submit"
                 className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                disabled={isLoading}
               >
                 <span className="absolute left-0 inset-y-0 flex items-center pl-3">
                   <AiOutlineUserAdd className="h-5 w-5 text-green-500 group-hover:text-green-400" aria-hidden="true" />
@@ -123,6 +210,57 @@ const Register = (props: Props) => {
             </div>
           </form>
         </div>
+
+        <Dialog
+          open={openTermsModal}
+          onClose={() => {
+            setOpenTermsModal(false);
+            setFormData((prevState: any) => ({
+              ...prevState,
+              isAgreeToTermsOfCompany: false
+            }))
+          }}
+          scroll={'paper'}
+          aria-labelledby="scroll-dialog-title"
+          aria-describedby="scroll-dialog-description"
+          fullWidth
+        >
+          <DialogTitle id="scroll-dialog-title">شروط وسياسيات شركة اكسيوس</DialogTitle>
+          <DialogContent dividers={true}>
+            <DialogContentText
+              id="scroll-dialog-description"
+              tabIndex={-1}
+            >
+              <iframe src={TermsPdf} height="600" width="100%" />
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => {
+                setOpenTermsModal(false);
+                setFormData((prevState: any) => ({
+                  ...prevState,
+                  isAgreeToTermsOfCompany: false
+                }))
+              }}
+            >
+              تراجع
+            </Button>
+            <Button
+              variant="contained"
+              color='success'
+              onClick={() => {
+                setFormData((prevState: any) => ({
+                  ...prevState,
+                  isAgreeToTermsOfCompany: true
+                }))
+                setOpenTermsModal(false);
+              }}
+            >
+              اوافق على شروط
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Card>
       </div>
   )

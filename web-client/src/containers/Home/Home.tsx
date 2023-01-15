@@ -12,10 +12,11 @@ import Contact from "../../../public/images/24-hours.png";
 import Card from "../../components/Card/Card";
 import { Link } from "react-router-dom";
 import AlertInfo from "../../components/AlertInfo/AlertInfo";
+import { useSelector } from "react-redux";
 
-type Props = {}
+const Home = () => {
+  const account = useSelector((state: any) => state.session.account);
 
-const Home = (props: Props) => {
   return (
     <div className="container mx-auto py-10 h-64 w-11/12 px-6">
       <div className="mb-5">
@@ -84,7 +85,7 @@ const Home = (props: Props) => {
               <div className="relative z-10 flex flex-col flex-auto h-full p-4 text-end">
                 <h5 className="pt-2 mb-2 font-bold text-white text-end">كود الشحن الخاص بك هو</h5>
                 <div className="flex justify-end">
-                  <h5 className="mb-4 font-bold text-white w-fit text-4xl rounded-lg p-1 bg-slate-400">S552</h5>
+                  <h5 className="mb-4 font-bold text-white w-fit text-4xl rounded-lg p-1 bg-slate-400">{account.customerId}</h5>
                 </div>
                 <p className="text-white text-end mb-5">يمكنك استعمال هذا الكود عند ارسال البضائع الى عناويننا، يعتبر هذا الكود ثابت ومخزون عليه جميع معلوماتك ماعليك الا ان تكتبه في العنوان و على صندوق</p>
                 <div className="flex justify-end">

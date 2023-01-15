@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom"
 
 type Props = {
   tint: 'info' | 'danger' | 'success' | 'warning',

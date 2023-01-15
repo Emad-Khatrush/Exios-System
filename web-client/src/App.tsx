@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
 import PrivateRoute from './components/PrivateRoute/PrivateRoute';
 import LandingPage from "./containers/LandingPage/LandingPage";
 import Register from './containers/Register/Register';
@@ -12,17 +12,25 @@ import PricesPage from './containers/PricesPage/PricesPage';
 import TermsAndPrivacy from './containers/TermsAndPrivacy/TermsAndPrivacy';
 import ContactUs from './containers/ContactUs/ContactUs';
 import SettingsPage from './containers/SettingsPage/SettingsPage';
+import { useSelector } from 'react-redux';
+import ResetPasswordPage from './containers/ResetPasswordPage/ResetPasswordPage';
 
 type Props = {}
 
 const App = (props: Props) => {
-  
+  const isLoggedIn = useSelector((state: any) => state.session.isLoggedIn);
+
   return (
       <Router>
         <Routes>
           <Route path='/' element={<LandingPage />} />
-          <Route path='/login' element={<Login />} />
-          <Route path='/signup' element={<Register />} />
+          {!isLoggedIn &&
+            <>
+              <Route path='/login' element={<Login />} />
+              <Route path='/signup' element={<Register />} />
+              <Route path='/reset-password' element={<ResetPasswordPage />} />
+            </>
+          }
           <Route element={<PrivateRoute />}>
             <Route path='/home' element={<Home />} />
             <Route path='/start-shipment' element={<StartShipmentPage />} />
@@ -33,6 +41,7 @@ const App = (props: Props) => {
             <Route path='/terms-privacy' element={<TermsAndPrivacy />} />
             <Route path='/orders' element={<ClientOrders />} />
             <Route path='/order/:id' element={<OrderInfoPage />} />
+            <Route path='*' element={<Navigate to='/home' />} />;
           </Route>
         </Routes>
       </Router>

@@ -5,14 +5,16 @@ import image from '../../../public/images/exios-logo.png';
 import { routes } from '../PrivateRoute/routes';
 import ResponsiveFooterSidbar from './ResponsiveFooterSidbar';
 import { Link } from 'react-router-dom';
+import { User } from '../../models';
 
 type Props = {
-  show: boolean,
+  show: boolean
+  account: User
   setShow: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 const ResponsiveSidebar = (props: Props) => {
-  const { show, setShow } = props;
+  const { show, setShow, account } = props;
 
   return (
     <div className={show ? "w-full h-full absolute z-40  transform  translate-x-0" : "   w-full h-full absolute z-40  transform -translate-x-full"} id="mobile-nav">
@@ -22,9 +24,9 @@ const ResponsiveSidebar = (props: Props) => {
             <div>
               <div className="flex items-center justify-between px-3">
                 <div className="h-16 w-full flex items-center">
-                  <Logo 
-                    src={image}
-                  />
+                  <div className="h-16 w-full flex items-center px-8 mt-5 justify-center">
+                    <img src={image} alt="" width={144} height={30} />
+                  </div>
                 </div>
                 <div id="closeSideBar" className="flex items-center justify-center h-10 w-10 cursor-pointer" onClick={() => setShow(!show)}>
                   <AiOutlineClose size='24' />
@@ -32,7 +34,7 @@ const ResponsiveSidebar = (props: Props) => {
               </div>
 
               <div className='flex justify-center mt-5'>
-                <h5 className="font-bold text-white w-fit text-3xl rounded-lg p-1 bg-slate-400">S552</h5>
+                <h5 className="font-bold text-white w-fit text-3xl rounded-lg p-1 bg-slate-400">{account.customerId}</h5>
               </div>
 
               <ul aria-orientation="vertical" className=" py-1">
@@ -49,7 +51,7 @@ const ResponsiveSidebar = (props: Props) => {
               </ul>
             </div>
             {/* Footer */}
-            <ResponsiveFooterSidbar />
+            <ResponsiveFooterSidbar account={account} />
         </div>
       </div>
     </div>

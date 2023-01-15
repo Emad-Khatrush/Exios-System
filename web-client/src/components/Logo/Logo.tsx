@@ -1,13 +1,14 @@
-import React from 'react'
+import { Avatar } from "@mui/material";
 
 type Props = {
   src: string
+  className?: string
 }
 
 const Logo = (props: Props) => {
   return (
-    <div className="h-16 w-full flex items-center px-8 mt-5 justify-center">
-      <img src={props.src} alt="" width={144} height={30} />
+    <div className={`h-16 w-full flex items-center justify-center ${props.className}`}>
+      <Avatar alt="avatar" src={props.src} />
     </div>
   )
 }

@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { User } from "../../models";
+import Logo from "../Logo/Logo";
 
 type Props = {
   show: boolean,
+  account: User
   setShow: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 const Navbar = (props: Props) => {
   const [profile, setProfile] = useState(false);
-  const { show, setShow } = props;
+  const { show, setShow, account } = props;
 
   return (
       <>
@@ -34,24 +37,29 @@ const Navbar = (props: Props) => {
                             </li>
                           </Link>
 
-                          <Link to={'/login'}>
-                            <li className="flex w-full justify-between text-gray-600 hover:text-indigo-700 cursor-pointer items-center mt-2 p-1">
-                                <div className="flex items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-logout" width={20} height={20} viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                                        <path stroke="none" d="M0 0h24v24H0z" />
-                                        <path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2" />
-                                        <path d="M7 12h14l-3 -3m0 6l3 -3" />
-                                    </svg>
-                                    <span className="text-sm ml-2">تسجيل الخروج </span>
-                                </div>
-                            </li>
-                          </Link>
+                          <li 
+                            className="flex w-full justify-between text-gray-600 hover:text-indigo-700 cursor-pointer items-center mt-2 p-1"
+                            onClick={() => {
+                              localStorage.removeItem('user');
+                              localStorage.removeItem('authToken');
+                              window.location.replace('/login');
+                            }}
+                          >
+                            <div className="flex items-center">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="icon icon-tabler icon-tabler-logout" width={20} height={20} viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                                  <path stroke="none" d="M0 0h24v24H0z" />
+                                  <path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2" />
+                                  <path d="M7 12h14l-3 -3m0 6l3 -3" />
+                              </svg>
+                              <span className="text-sm ml-2">تسجيل الخروج </span>
+                            </div>
+                          </li>
                         </ul>
                     )}
                   </div>
-                  <p className="text-gray-800 text-sm mx-3">عماد ختروش</p>
+                  <p className="text-gray-800 text-sm mx-3">{`${account.firstName} ${account.lastName}`}</p>
                   <div className="relative mr-2">
-                        <img className="rounded-full h-10 w-10 object-cover" src="https://storage.googleapis.com/exios-bucket/253769795_10208631213013904_9018611287682636732_n.jpg" alt="avatar" />
+                        <Logo className="rounded-full h-10 w-10 object-cover" src={account.imgUrl} />
                         <div className="w-2 h-2 rounded-full bg-green-400 border border-white absolute inset-0 mb-0 mr-0 m-auto" />
                     </div>
                   <div className="cursor-pointer text-gray-600">

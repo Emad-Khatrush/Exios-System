@@ -1,12 +1,19 @@
+import { User } from "../../models";
 
-const ResponsiveFooterSidbar = () => {
+type Props = {
+  account: User
+}
+
+const ResponsiveFooterSidbar = (props: Props) => {
+  const { account } = props;
+
   return (
     <div className="w-full">
       <div className="border-t border-gray-300">
         <div className="w-full flex items-center justify-between px-6 pt-1">
           <div className="flex items-center">
-            <img alt="profile-pic" src="https://scontent.fist4-1.fna.fbcdn.net/v/t39.30808-6/253769795_10208631213013904_9018611287682636732_n.jpg?_nc_cat=100&ccb=1-7&_nc_sid=09cbfe&_nc_ohc=gkFGsbl6aQ8AX_8YV_0&_nc_ht=scontent.fist4-1.fna&oh=00_AT-lPpHRe3ZvVTq3wMwQ2FYTK9WQq0iiiZepNzE5vjiNeQ&oe=62D73E04" className="w-8 h-8 rounded-md" />
-            <p className="md:text-xl text-gray-800 text-base leading-4 ml-2">عماد ختروش</p>
+            <img alt="profile-pic" src={account.imgUrl} className="w-8 h-8 rounded-md" />
+            <p className="md:text-xl text-gray-800 text-base leading-4 ml-2">{`${account.firstName} ${account.lastName}`}</p>
           </div>
           <ul className="flex">
             <li className="cursor-pointer text-white pt-5 pb-3">
