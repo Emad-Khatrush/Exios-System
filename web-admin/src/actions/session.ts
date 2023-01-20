@@ -3,7 +3,7 @@ import { CHECK_AUTH, LOGIN, STATUS_ERROR, STATUS_START, STATUS_SUCCESS } from '.
 import { addAuthInterceptor } from '../utils/AuthInterceptor';
 import api from '../api';
 
-export const login = function(username: string, password: string) {
+export const login = function(username: string, password: string, loginType: 'admin' = 'admin') {
   
   return (dispatch: Dispatch<Action>): void => {
         
@@ -12,7 +12,7 @@ export const login = function(username: string, password: string) {
       type: LOGIN,
     });
 
-    api.post('login', { username, password })
+    api.post('login', { username, password, loginType })
       .then(async ({ data }) => {
         addAuthInterceptor(data.token);
         localStorage.setItem('authToken', data.token);

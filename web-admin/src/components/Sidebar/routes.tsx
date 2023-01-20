@@ -1,5 +1,6 @@
 import { MdLineStyle, MdOutlineInput } from 'react-icons/md';
 import { FaFileInvoice, FaArchive } from 'react-icons/fa';
+import { FiPackage } from 'react-icons/fi';
 import { HiDocumentReport } from 'react-icons/hi';
 import { RiBillFill } from 'react-icons/ri';
 
@@ -18,6 +19,11 @@ const adminRoutes = [
         title: 'Invoices',
         path: '/invoices',      
         icon: <FaFileInvoice className="sidebar-icon" />,
+     },
+     {   
+        title: 'Shippings',
+        path: '/shippings',      
+        icon: <FiPackage className="sidebar-icon" />,
      },
      {   
         title: 'Expenses',

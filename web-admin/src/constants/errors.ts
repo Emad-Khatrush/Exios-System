@@ -6,6 +6,7 @@ export const TOKEN_NOT_FOUND = 'token-not-found';
 export const INVALID_TOKEN = 'invalid-token';
 export const Token_EXPIRED = 'authorize-invalid';
 export const USER_SUBSCRIPTION_CANCLED = 'user-subscription-canceled';
+export const USER_ROLE_INVALID = 'user-role-invalid';
 
 // order errors
 export const ORDER_ID_TAKEN = 'order-id-taken';

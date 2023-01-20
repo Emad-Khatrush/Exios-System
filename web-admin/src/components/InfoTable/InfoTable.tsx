@@ -7,6 +7,7 @@ import { DataGrid, gridPageCountSelector, gridPageSelector, GridToolbarContainer
 type Props = {
   columns: any[]
   data: any[]
+  fileName?: string
 }
 
 type State = {}
@@ -131,24 +132,11 @@ function CustomPagination() {
   );
 }
 
-function CustomToolbar() {
-  return (
-    <GridToolbarContainer>
-      <GridToolbarExport 
-        csvOptions={{
-          fileName: 'Exios-Invoices',
-          utf8WithBom: true,
-        }}
-      />
-    </GridToolbarContainer>
-  )
-}
-
 class InfoTable extends Component<Props, State> {
   state = {}
 
   render() {
-    const { columns, data } = this.props;
+    const { columns, data, fileName } = this.props;
 
     return (
       <div style={{ height: 600, width: '100%' }}>
@@ -159,7 +147,14 @@ class InfoTable extends Component<Props, State> {
           rowsPerPageOptions={[5]}
           components={{
             Pagination: CustomPagination,
-            Toolbar: CustomToolbar
+            Toolbar: () => <GridToolbarContainer>
+            <GridToolbarExport 
+              csvOptions={{
+                fileName,
+                utf8WithBom: true,
+              }}
+            />
+          </GridToolbarContainer>
           }}
           checkboxSelection
           disableSelectionOnClick

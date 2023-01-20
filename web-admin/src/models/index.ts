@@ -3,7 +3,7 @@ export type Invoice = {
   _id: string,
   madeBy: User,
   orderId: string,
-  activity: ActivityType[],
+  activity: OrderActivity[],
   customerInfo: {
     fullName: string,
     phone: String,
@@ -48,26 +48,7 @@ export type Invoice = {
     currency: string,
     total: number,
   },
-  paymentList: [{
-    deliveredPackages: {
-      arrivedAt: Date
-      exiosPrice: number
-      originPrice: number
-      receivedShipmentLYD: number
-      receivedShipmentUSD: number
-      trackingNumber: string
-      weight: {
-        total: number, 
-        measureUnit: string
-      }
-    }
-    link: string
-    note: string
-    status: {
-      arrived: boolean
-      paid: boolean
-    }
-  }],
+  paymentList: Package[],
   createdAt: Date,
   updatedAt: Date
 }
@@ -88,6 +69,29 @@ export type User = {
   username: string
   __v: number
   _id: string
+}
+
+export type Package = {
+  deliveredPackages: {
+    arrivedAt: Date
+    exiosPrice: number
+    originPrice: number
+    receivedShipmentLYD: number
+    receivedShipmentUSD: number
+    trackingNumber: string
+    weight: {
+      total: number, 
+      measureUnit: string
+    }
+  }
+  link: string
+  note: string
+  status: {
+    arrived: boolean
+    paid: boolean
+    arrivedLibya: boolean,
+    received: boolean
+  }
 }
 
 export type ActivityType = {
@@ -188,7 +192,7 @@ export type OrderActivity = {
 }
 
 export type ApiErrorMessages = 'user-not-found' | 'user-subscription-canceled' | 'invalid-credentials' | 'authorize-invalid'
-  | 'token-not-found' | 'invalid-token' | 'order-id-taken' | 'order-not-found' | 'expense-id-taken'
+  | 'token-not-found' | 'invalid-token' | 'order-id-taken' | 'order-not-found' | 'expense-id-taken' | 'user-role-invalid'
   | 'expense-not-found' | 'image-not-found' | 'fields-empty' | 'server-error';
 
 export type Session = {

@@ -17,6 +17,7 @@ const UnsureOrder = React.lazy(() => import('./containers/UnsureOrder/UnsureOrde
 const Invoices = React.lazy(() => import('./containers/Invoices/Invoices'));
 const Expenses = React.lazy(() => import('./containers/Expenses/Expenses'));
 const Incomes = React.lazy(() => import('./containers/Incomes/Incomes'));
+const Shippings = React.lazy(() => import('./containers/Shippings/Shippings'));
 const Activities = React.lazy(() => import('./containers/Activities/Activities'));
 const CreateExpense = React.lazy(() => import('./containers/CreateExpense/CreateExpense'));
 const CreateIncome = React.lazy(() => import('./containers/CreateIncome/CreateIncome'));
@@ -54,6 +55,7 @@ const getRoutesByRole = (roles: any) => {
       <Route path='/invoices' element={<Invoices />} />
       <Route path='/invoice/add' element={<AddInvoice />} />
       <Route path='/invoice/:id/edit' element={<EditInvoice />} />
+      <Route path='/shippings' element={<Shippings />} />
       <Route path='/unsureOrder/add' element={<UnsureOrder />} />
       <Route path='/xtracking' element={<XTrackingPage />} />
     </>

@@ -1,5 +1,5 @@
 import { ApiErrorMessages } from "../models";
-import { EXPENSE_ID_TAKEN, EXPENSE_NOT_FOUND, FIELDS_EMPTY, IMAGE_NOT_FOUND, INVALID_CREDENTIALS, INVALID_TOKEN, ORDER_ID_TAKEN, ORDER_NOT_FOUND, SERVER_ERROR, Token_EXPIRED, TOKEN_NOT_FOUND, USER_NOT_FOUND, USER_SUBSCRIPTION_CANCLED } from "../constants/errors";
+import { EXPENSE_ID_TAKEN, EXPENSE_NOT_FOUND, FIELDS_EMPTY, IMAGE_NOT_FOUND, INVALID_CREDENTIALS, INVALID_TOKEN, ORDER_ID_TAKEN, ORDER_NOT_FOUND, SERVER_ERROR, Token_EXPIRED, TOKEN_NOT_FOUND, USER_NOT_FOUND, USER_ROLE_INVALID, USER_SUBSCRIPTION_CANCLED } from "../constants/errors";
 
 export const getErrorMessage = (errorId: ApiErrorMessages): string => {
   
@@ -12,6 +12,9 @@ export const getErrorMessage = (errorId: ApiErrorMessages): string => {
 
     case INVALID_CREDENTIALS:
       return 'Username or password is wrong';
+
+    case USER_ROLE_INVALID:
+      return 'You do not have the access of your role to enter this site.';
 
     case TOKEN_NOT_FOUND:
       return 'The session has been expired, please login again';

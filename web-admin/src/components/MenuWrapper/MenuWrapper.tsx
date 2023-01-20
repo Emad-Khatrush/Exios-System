@@ -44,12 +44,17 @@ const MenuWrapper = (props: any) => {
           }
         }}
       >
-        {props.options.map(({ Icon, title, path }: any) => (
+        {props.options.map(({ Icon, title, path, target = '_self' }: any) => (
           <MenuItem 
             disableRipple 
             key={title} 
-            onClick={() => history(path)}
             style={{ display: 'flex', color: '#4d4d4d' }}
+            onClick={() => {
+              window.open(
+                path,
+                target
+              );
+            }}
           >
             <Icon style={{ marginRight: '8px' }} />
             {title}
