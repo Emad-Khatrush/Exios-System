@@ -25,7 +25,7 @@ const FilesPreviewers = (props: Props) => {
 
           return (<div key={index} className="col-lg-4 col-md-6 col-sm-6 col-12 mb-2">
             {!!props.deleteImage && <AiFillCloseCircle onClick={() => props.deleteImage(files[index]) } className='close-icon' />}
-            {type !== 'image/jpeg' ?
+            {( !!type && type !== 'image/jpeg') ?
               <FilePreviewer 
                 uploadedFile={{
                   path: file.path,
