@@ -22,10 +22,11 @@ const FilesPreviewers = (props: Props) => {
       <div className="row uploaded-photos mt-3">
         {previewFiles.map((file: any, index: number) => {
           const type = file.type || file.fileType;
+console.log(type !== 'image/png');
 
           return (<div key={index} className="col-lg-4 col-md-6 col-sm-6 col-12 mb-2">
             {!!props.deleteImage && <AiFillCloseCircle onClick={() => props.deleteImage(files[index]) } className='close-icon' />}
-            {( !!type && type !== 'image/jpeg') ?
+            {( !!type && (type !== 'image/jpeg' && type !== 'image/png')) ?
               <FilePreviewer 
                 uploadedFile={{
                   path: file.path,
