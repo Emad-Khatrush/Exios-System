@@ -81,15 +81,23 @@ class APIBase {
     });
   }
   
-  public async fetchFormData(url: string, method: string, body: any) {    
-    const response = await fetch(endpoint + url, {
-      method,
-      body,
-      headers: {
-        ...this.headers,
-        authorization: "Bearer " + localStorage.getItem('authToken')
-      },
-    });
+  public async fetchFormData(url: string, method: string, body: any) {
+    let response;
+    try {
+      response = await fetch(endpoint + url, {
+        method,
+        body,
+        headers: {
+          ...this.headers,
+          authorization: "Bearer " + localStorage.getItem('authToken')
+        },
+      });
+      
+    } catch (error) {
+      console.log(error);
+      
+      response = error;
+    }
     return response;
   }
 }

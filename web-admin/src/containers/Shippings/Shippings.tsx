@@ -53,7 +53,6 @@ class Shippings extends Component<Props, State> {
   getPackages = async () => {
     try {
       const packages = await api.get('packages/orders');
-      console.log(packages);
       
       this.setState({ listData: packages.data });
     } catch (error) {

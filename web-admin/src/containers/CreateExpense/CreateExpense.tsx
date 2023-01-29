@@ -187,6 +187,7 @@ class CreateExpense extends Component<Props, State> {
                   inputFileRef={inputFileRef}
                   fileUploaderHandler={this.fileUploaderHandler}
                   previewFiles={this.state.previewFiles}
+                  files={this.state.filesInput}
                   deleteImage={this.deleteImage}
                 />
               </Card>

@@ -214,6 +214,7 @@ const EditExpense = (props: Props) => {
                   inputFileRef={inputFileRef}
                   fileUploaderHandler={fileUploaderHandler}
                   previewFiles={previewFiles}
+                  files={filesInput}
                   deleteImage={deleteImage}
                 />
               </Card>

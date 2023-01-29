@@ -213,6 +213,7 @@ const EditIncome = (props: Props) => {
                   fileUploaderHandler={fileUploaderHandler}
                   previewFiles={previewFiles}
                   deleteImage={deleteImage}
+                  files={filesInput}
                 />
               </Card>
             </div>

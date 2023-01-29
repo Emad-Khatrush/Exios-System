@@ -261,6 +261,7 @@ class AddInvoice extends Component<Props, State> {
                   fileUploaderHandler={this.fileUploaderHandler}
                   previewFiles={this.state.previewInvoiceFiles}
                   deleteImage={this.deleteImage}
+                  files={this.state.invoiceFilesInput}
                 />
               </Card>
 
@@ -272,6 +273,7 @@ class AddInvoice extends Component<Props, State> {
                   fileUploaderHandler={this.fileUploaderHandler}
                   previewFiles={this.state.previewReceiptsFiles}
                   deleteImage={this.deleteImage}
+                  files={this.state.receiptsFilesInput}
                 />
               </Card>
 

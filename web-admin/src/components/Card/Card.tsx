@@ -18,7 +18,7 @@ const Card = (props: any) => {
       <div 
         {...props} 
         style={{...props.style, overflow: 'auto', boxShadow: '0 0.3rem 0.9rem rgba(0, 0, 0, 0.075)'}} 
-        className="mb-3 p-3 bg-body rounded"
+        className={`mb-3 bg-body rounded ${props.leand ? '' : 'p-3'}`}
       >
         <div>
           {props.showSearchInput &&

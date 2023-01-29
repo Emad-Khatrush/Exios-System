@@ -9,6 +9,7 @@ import AuthChecker from './utils/AuthChecker';
 import { Session } from './models';
 
 import './App.scss';
+import EditTask from './containers/EditTask/EditTask';
 
 const Home = React.lazy(() => import('./containers/Home/Home'));
 const EmployeeHomePage = React.lazy(() => import('./containers/EmployeeHomePage/EmployeeHomePage'));
@@ -25,6 +26,8 @@ const EditExpense = React.lazy(() => import('./containers/EditExpense/EditExpens
 const EditIncome = React.lazy(() => import('./containers/EditIncome/EditIncome'));
 const EditInvoice = React.lazy(() => import('./containers/EditInvoice/EditInvoice'));
 const XTrackingPage = React.lazy(() => import('./containers/XTrackingPage/XTrackingPage'));
+const MyTasks = React.lazy(() => import('./containers/MyTasks/MyTasks'));
+const CreateTask = React.lazy(() => import('./containers/CreateTask/CreateTask'));
 
 type MyProps = {
   session: Session
@@ -41,6 +44,9 @@ const getRoutesByRole = (roles: any) => {
       <Route path='/income/:id/edit' element={<EditIncome />} />
       <Route path='/expense/add' element={<CreateExpense />} />
       <Route path='/income/add' element={<CreateIncome />} />
+      <Route path='/mytasks' element={<MyTasks />} />
+      <Route path='/task/add' element={<CreateTask />} />
+      <Route path='/task/:id/edit' element={<EditTask />} />
     </>
   } else if (roles?.isAdmin) {
     return <>
@@ -58,6 +64,9 @@ const getRoutesByRole = (roles: any) => {
       <Route path='/shippings' element={<Shippings />} />
       <Route path='/unsureOrder/add' element={<UnsureOrder />} />
       <Route path='/xtracking' element={<XTrackingPage />} />
+      <Route path='/mytasks' element={<MyTasks />} />
+      <Route path='/task/add' element={<CreateTask />} />
+      <Route path='/task/:id/edit' element={<EditTask />} />
     </>
   }
 }

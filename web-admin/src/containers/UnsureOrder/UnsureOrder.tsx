@@ -63,7 +63,6 @@ class UnsureOrder extends Component<Props, State> {
   };
 
   render() {
-    console.log(this.state);
     
     return (
       <div className="m-4 row">

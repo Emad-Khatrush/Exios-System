@@ -163,6 +163,7 @@ class CreateIncome extends Component<Props, State> {
                   fileUploaderHandler={this.fileUploaderHandler}
                   previewFiles={this.state.previewFiles}
                   deleteImage={this.deleteImage}
+                  files={this.state.filesInput}
                 />
               </Card>
             </div>

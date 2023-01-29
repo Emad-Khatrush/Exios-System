@@ -15,7 +15,7 @@ export const defaultColumns = (setState: any) => ([
       return (
         <div style={{ cursor: 'pointer' }} className='MuiDataGrid-cell MuiDataGrid-cell--textLeft MuiDataGrid-cell--editable'> 
           <MenuWrapper 
-            options={[{ title: 'Edit', path: `/invoice/${params?.row?._id}/edit`, Icon: EditIcon }]}
+            options={[{ title: 'Edit', path: `/invoice/${params?.row?._id}/edit`, Icon: EditIcon, target: '_blank' }]}
           >
             <MoreVertIcon />
           </MenuWrapper>

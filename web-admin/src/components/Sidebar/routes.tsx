@@ -1,5 +1,5 @@
 import { MdLineStyle, MdOutlineInput } from 'react-icons/md';
-import { FaFileInvoice, FaArchive } from 'react-icons/fa';
+import { FaFileInvoice, FaArchive, FaTasks } from 'react-icons/fa';
 import { FiPackage } from 'react-icons/fi';
 import { HiDocumentReport } from 'react-icons/hi';
 import { RiBillFill } from 'react-icons/ri';
@@ -39,6 +39,11 @@ const adminRoutes = [
         title: 'X-Tracking',
         path: '/xtracking',      
         icon: <FaArchive className="sidebar-icon" />,
+     },
+     {   
+      title: 'My Tasks',
+      path: '/mytasks',
+      icon: <FaTasks className="sidebar-icon" />,
      }
  ];
 
@@ -67,6 +72,11 @@ const adminRoutes = [
         title: 'Incomes',
         path: '/income/add',      
         icon: <MdOutlineInput className="sidebar-icon" />,
+     },
+     {   
+      title: 'My Tasks',
+      path: '/mytasks',
+      icon: <FaTasks className="sidebar-icon" />,
      }
  ];
 
