@@ -14,8 +14,12 @@ import Typography from '@mui/joy/Typography';
 import moment from 'moment';
 import FilesPreviewers from '../../components/FilesPreviewers/FilesPreviewers';
 import { Link } from 'react-router-dom';
+import CommentsSection from '../../components/CommentsSection/CommentsSection';
+import { User } from '../../models';
 
-type MyProps = {}
+type MyProps = {
+  account: User
+}
 
 const labels: any = {
   urgent: 'عاجل',
@@ -41,6 +45,8 @@ type State = {
   }
   clickedTask: any
   isLoading: boolean
+  commentInput: string
+  comments: any
 }
 
 export class MyTasks extends Component<MyProps, State> {
@@ -60,7 +66,9 @@ export class MyTasks extends Component<MyProps, State> {
       needsApproval: 0
     },
     clickedTask: null,
-    isLoading: false
+    isLoading: false,
+    commentInput: '',
+    comments: [],
   }
 
   async componentDidMount() {
@@ -75,6 +83,15 @@ export class MyTasks extends Component<MyProps, State> {
       console.log(error);
     } finally {
       this.setState({ isLoading: false })
+    }
+  }
+
+  getTask = async (task: any) => {
+    try {
+      const comments = (await api.get(`task/${task._id}/comments`))?.data;
+      this.setState({ isDialogOpen: true, clickedTask: task, comments });
+    } catch (error) {
+      console.log(error);
     }
   }
 
@@ -93,8 +110,21 @@ export class MyTasks extends Component<MyProps, State> {
     }
   }
 
+  addNewComment = async (event: any) => {
+    const { clickedTask, commentInput }: any = this.state;
+    if (!commentInput) return;
+    
+    try {
+      await api.post(`task/${clickedTask._id}/comments`, { message: commentInput });
+      const comments = (await api.get(`task/${clickedTask._id}/comments`))?.data;
+      this.setState({ comments });
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
   render() {
-    const { tasks, isDialogOpen, countList, isLoading, clickedTask }: any = this.state;
+    const { tasks, isDialogOpen, countList, isLoading, clickedTask, comments }: any = this.state;
 
     const tabs = [
       {
@@ -177,9 +207,7 @@ export class MyTasks extends Component<MyProps, State> {
                   { icon: <FaRegComment size={18} />, count: task.comments?.length },
                 ]}
                 scheduledTime={task.limitedTime}
-                onTitleClick={() => {
-                  this.setState({ isDialogOpen: true, clickedTask: task });
-                }}
+                onTitleClick={() => this.getTask(task)}
               />
              ))
              :
@@ -241,7 +269,7 @@ export class MyTasks extends Component<MyProps, State> {
 
                 <div className='d-flex align-items-center'>
                   <p style={{ width: '150px', color: '#707070' }}> Created By </p>
-                  <p className='d-flex align-items-center gap-2'> <Avatar sx={{ width: '35px', height: '35px' }} src={clickedTask.createdBy.imgUrl} /> {clickedTask.createdBy.firstName} {clickedTask.createdBy.lastName} </p>
+                  <p className='d-flex align-items-center gap-2'> <Avatar sx={{ width: '35px', height: '35px' }} src={clickedTask.createdBy?.imgUrl} /> {clickedTask.createdBy.firstName} {clickedTask.createdBy.lastName} </p>
                 </div>
 
                 <div className='d-flex align-items-center'>
@@ -249,7 +277,7 @@ export class MyTasks extends Component<MyProps, State> {
                   <div className='d-flex align-items-center gap-2'>
                     <AvatarGroup max={4} className="mb-3" style={{ direction: 'ltr' }} >
                       {clickedTask.reviewers && clickedTask.reviewers.map((reviewer: any) => (
-                        <Avatar sx={{ width: '35px', height: '35px' }} alt="" src={reviewer.imgUrl} />
+                        <Avatar sx={{ width: '35px', height: '35px' }} alt="" src={reviewer?.imgUrl} />
                       ))}
                     </AvatarGroup>
                   </div>
@@ -296,6 +324,18 @@ export class MyTasks extends Component<MyProps, State> {
                   />
                 </Typography>
               }
+              <Typography id="modal-desc" textColor="text.tertiary" style={{ direction: 'rtl', textAlign: 'start' }}>
+                  <hr style={{ color: '#a1a1a1' }} />
+                  <h6>الانشطة</h6>
+
+                  <CommentsSection 
+                    comments={comments}
+                    account={this.props.account}
+                    onTextChange={(event: any) => this.setState({ commentInput: event.target.value })}
+                    onAddCommentClick={this.addNewComment}
+                  />
+                  
+                </Typography>
             </Box>
           </Dialog>
         }
@@ -304,7 +344,9 @@ export class MyTasks extends Component<MyProps, State> {
   }
 }
 
-const mapStateToProps = (state: any) => ({})
+const mapStateToProps = (state: any) => ({
+  account: state.session.account
+})
 
 const mapDispatchToProps = {}
 
