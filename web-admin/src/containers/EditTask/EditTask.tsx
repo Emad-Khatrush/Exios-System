@@ -8,9 +8,11 @@ import CustomButton from '../../components/CustomButton/CustomButton';
 import TaskForm from '../TaskForm/TaskForm';
 import { RouteMatch } from 'react-router-dom';
 import withRouter from '../../utils/WithRouter/WithRouter';
+import { User } from '../../models';
 
 type Props = {
   router: RouteMatch
+  account: User
 }
 
 type State = {
@@ -29,6 +31,7 @@ export class EditTask extends Component<Props, State> {
     files: [],
     form: {
       title: '',
+      status: '',
       reviewers: [],
       description: '',
       label: '',
@@ -36,6 +39,9 @@ export class EditTask extends Component<Props, State> {
       orderId: '',
       order: {
         orderId: ''
+      },
+      createdBy: {
+        _id: ''
       },
       files: []
     },
@@ -150,8 +156,22 @@ export class EditTask extends Component<Props, State> {
     }
   }
 
+  changeStatusOfTask = async (status: 'processing' | 'needsApproval' | 'finished') => {
+    try {
+      this.setState({ isUpdating: true });
+      const body = {
+        status
+      }
+      await api.update(`task/${this.props.router.params.id}/status`, body);
+      this.setState({ isUpdating: false, responseMessage: 'تم ارسال طلب التحقق من انتهاء المهمه', isSuccess: true });
+    } catch (error: any) {
+      this.setState({ isUpdating: false, responseMessage: error.data.message, isSuccess: false });   
+    }
+  }
+
   render() {
-    const { employees, files, isLoading, responseMessage, isSuccess, form, isUpdating} = this.state;
+    const { employees, files, isLoading, responseMessage, isSuccess, form, isUpdating } = this.state;
+    const { account } = this.props;
 
     const filesRef = React.createRef();
 
@@ -165,6 +185,41 @@ export class EditTask extends Component<Props, State> {
           <div className="col-md-12">
             <h4 className='mb-4'>Edit Task</h4>
             <Card>
+              {form.status === 'processing' &&
+                <CustomButton
+                  className='mb-3'
+                  background='rgb(61, 139, 230)' 
+                  size="small"
+                  onClick={() => this.changeStatusOfTask('needsApproval')}
+                >
+                  Finish My Task
+                </CustomButton>
+              }
+
+              <div className='d-flex gap-2'>
+                {form.status === 'needsApproval' && form.createdBy._id === account._id &&
+                  <CustomButton
+                    className='mb-3'
+                    background='rgb(61, 139, 230)' 
+                    size="small"
+                    onClick={() => this.changeStatusOfTask('finished')}
+                  >
+                    Agree For The Solution
+                  </CustomButton>
+                }
+                {['needsApproval', 'finished'].includes(form.status) &&
+                  <CustomButton
+                    className='mb-3'
+                    background='rgb(230, 81, 61)' 
+                    size="small"
+                    onClick={() => this.changeStatusOfTask('processing')}
+                  >
+                    Request Modify
+                  </CustomButton>
+                }
+              </div>
+
+
               <form className="row" onSubmit={this.onSubmit}>
                 <TaskForm 
                   onChange={this.onChange}
@@ -183,13 +238,16 @@ export class EditTask extends Component<Props, State> {
                   />
                 </div>
 
-                <div className="col-md-12 mb-2 text-end">
-                  <CustomButton 
-                    background='rgb(0, 171, 85)' 
-                    size="small"
-                  >
-                    Update
-                  </CustomButton>
+                <div className="col-md-12 mb-2">
+                  <div className="d-flex justify-content-end gap-2">
+                    <CustomButton 
+                      background='rgb(0, 171, 85)' 
+                      size="small"
+                    >
+                      Update Task
+                    </CustomButton>
+
+                  </div>
                 </div>
               </form>
             </Card>
@@ -221,7 +279,9 @@ export class EditTask extends Component<Props, State> {
   }
 }
 
-const mapStateToProps = (state: any) => ({})
+const mapStateToProps = (state: any) => ({
+  account: state.session.account
+})
 
 const mapDispatchToProps = {}
 

@@ -39,7 +39,7 @@ const Task = (props: Props) => {
       <p className='task-description mb-1'>{description}</p>
       <AvatarGroup max={4} className="mb-3" style={{ direction: 'ltr' }} >
         {avatars && avatars.map((avatar: any) => (
-          <Avatar alt="" src={avatar.imgUrl} />
+          <Avatar alt="" src={avatar?.imgUrl} />
         ))}
       </AvatarGroup>
       <div className='d-flex justify-content-between'>

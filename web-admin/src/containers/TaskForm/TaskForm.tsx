@@ -159,33 +159,6 @@ const TaskForm = (props: Props) => {
               defaultValue={task?.description}
             />
           </Box>
-
-          {!!task &&
-            <div className='col-md-3 mb-3'>
-              <FormControl style={{ width: '100%' }} required>
-                <InputLabel id="demo-select-small">Task Status</InputLabel>
-                <Select
-                  labelId={'status'}
-                  id={'status'}
-                  defaultValue={task?.status}
-                  label={'status'}
-                  name="status"
-                  onChange={(event: any) => {
-                    onChange(event);
-                    setLabel(event.target.value);
-                  }}
-                  // disabled={invoice?.isCanceled}
-                >
-                  <MenuItem value={'processing'}>
-                    <em> في قيد العمل </em>
-                  </MenuItem>
-                  <MenuItem value={'finished'}>
-                    <em> المهمه اكتملت </em>
-                  </MenuItem>
-                </Select>
-              </FormControl>
-            </div>
-          }
         </div>
     </div>
   )

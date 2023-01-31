@@ -26,6 +26,7 @@ const labels: any = {
 const statusLabels: any = {
   processing: 'في قيد تجهيز ',
   finished: 'اكتملت',
+  needsApproval: 'تحتاج للموافقة'
 }
 
 type State = {
@@ -55,6 +56,8 @@ export class MyTasks extends Component<MyProps, State> {
       myTasksCount: 0,
       urgentCount: 0,
       finishedCount: 0,
+      requestedTasksCount: 0,
+      needsApproval: 0
     },
     clickedTask: null,
     isLoading: false
@@ -113,6 +116,11 @@ export class MyTasks extends Component<MyProps, State> {
         label: 'Requested Tasks',
         value: 'requestedTasks',
         icon: <Badge style={{ marginLeft: '8px'}} text={String(countList.requestedTasksCount)} color="primary" />
+      },
+      {
+        label: 'Needs Approval',
+        value: 'needsApproval',
+        icon: <Badge style={{ marginLeft: '8px'}} text={String(countList.needsApproval)} color="primary" />
       },
       {
         label: 'Finished Tasks',
