@@ -14,7 +14,6 @@ type Props = {
 
 const CommentsSection = (props: Props) => {
   const { comments, account, onTextChange, onAddCommentClick } = props;
-console.log(comments);
 
   return (
     <div className='mt-2'>

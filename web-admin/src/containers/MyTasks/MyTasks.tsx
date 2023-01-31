@@ -45,6 +45,7 @@ type State = {
   }
   clickedTask: any
   isLoading: boolean
+  isCommentsFetching: boolean
   commentInput: string
   comments: any
 }
@@ -67,6 +68,7 @@ export class MyTasks extends Component<MyProps, State> {
     },
     clickedTask: null,
     isLoading: false,
+    isCommentsFetching: false,
     commentInput: '',
     comments: [],
   }
@@ -87,11 +89,14 @@ export class MyTasks extends Component<MyProps, State> {
   }
 
   getTask = async (task: any) => {
+    this.setState({ isDialogOpen: true, clickedTask: task, isCommentsFetching: true });
     try {
       const comments = (await api.get(`task/${task._id}/comments`))?.data;
-      this.setState({ isDialogOpen: true, clickedTask: task, comments });
+      this.setState({  clickedTask: task, comments });
     } catch (error) {
       console.log(error);
+    } finally {
+      this.setState({ isCommentsFetching: false })
     }
   }
 
@@ -328,13 +333,16 @@ export class MyTasks extends Component<MyProps, State> {
                   <hr style={{ color: '#a1a1a1' }} />
                   <h6>الانشطة</h6>
 
-                  <CommentsSection 
-                    comments={comments}
-                    account={this.props.account}
-                    onTextChange={(event: any) => this.setState({ commentInput: event.target.value })}
-                    onAddCommentClick={this.addNewComment}
-                  />
-                  
+                  {this.state.isCommentsFetching ? 
+                    <CircularProgress />
+                    :
+                    <CommentsSection 
+                      comments={comments}
+                      account={this.props.account}
+                      onTextChange={(event: any) => this.setState({ commentInput: event.target.value })}
+                      onAddCommentClick={this.addNewComment}
+                    />
+                  }
                 </Typography>
             </Box>
           </Dialog>
