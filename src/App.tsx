@@ -19,7 +19,6 @@ type Props = {}
 
 const App = (props: Props) => {
   const isLoggedIn = useSelector((state: any) => state.session.isLoggedIn);
-  const account = useSelector((state: any) => state.session.account);
 
   return (
       <Router>
