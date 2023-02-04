@@ -78,8 +78,6 @@ const TaskForm = (props: Props) => {
               }}
               input={<OutlinedInput id="select-multiple-chip" label="Chip" />}
               renderValue={(employeeIds: any) => {
-                console.log(employeeIds);
-                
                 return ( 
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                     {(employeeIds || []).map((empId: any) => {

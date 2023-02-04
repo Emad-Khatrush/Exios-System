@@ -3,6 +3,7 @@ const Schema = mongoose.Schema;
 
 const orderSchema = new Schema({
   user: { type: Schema.Types.ObjectId, ref: 'User' },
+  madeBy: { type: Schema.Types.ObjectId, ref: 'User' },
   orderId: {
     type: String,
     required: true,
@@ -111,13 +112,23 @@ const orderSchema = new Schema({
     type: Boolean,
     default: false,
   },
+  cancelation: {
+    date: {
+      type: Date,
+      default: Date.now
+    },
+    reason: {
+      type: String
+    }
+  },
   images: [{
     filename: String,
     path: String,
     category: {
       type: String,
       enum: ['invoice', 'receipts']
-    }
+    },
+    fileType: String
   }],
   debt: {
     currency: String,
@@ -134,10 +145,18 @@ const orderSchema = new Schema({
         type: Boolean,
         default: false
       },
+      arrivedLibya: {
+        type: Boolean,
+        default: false
+      },
       paid: {
         type: Boolean,
         default: false
       },
+      received: {
+        type: Boolean,
+        default: false
+      }
     },
     note: {
       type: String,
@@ -167,6 +186,14 @@ const orderSchema = new Schema({
         default: 0
       },
       exiosPrice: {
+        type: Number,
+        default: 0
+      },
+      receivedShipmentLYD: {
+        type: Number,
+        default: 0
+      },
+      receivedShipmentUSD: {
         type: Number,
         default: 0
       },

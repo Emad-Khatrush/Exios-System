@@ -13,9 +13,36 @@ import Card from "../../components/Card/Card";
 import { Link } from "react-router-dom";
 import AlertInfo from "../../components/AlertInfo/AlertInfo";
 import { useSelector } from "react-redux";
+import { useEffect, useState } from "react";
+import api from "../../api";
 
 const Home = () => {
   const account = useSelector((state: any) => state.session.account);
+  
+  const [countList, setCountList] = useState({
+    activeOrders: 0,
+    readyForReceivement: 0,
+    receivedOrders: 0,
+    totalPaidInvoices: 0
+  });
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    getHomeData();
+  }, [])
+  
+  const getHomeData = async () => {
+    try {
+      setIsLoading(true);
+      const response = await api.getHomeData();
+      const data = response.data.results;
+      
+      setCountList(data.countList);
+    } catch (error) {
+      console.log(error);
+    }
+    setIsLoading(false);
+  }
 
   return (
     <div className="container mx-auto py-10 h-64 w-11/12 px-6">
@@ -34,51 +61,41 @@ const Home = () => {
         <InfoWidget
           icon={<FiPackage color="#3d3d3d" size={'46px'} />}
           description={'طلبيات النشطه'}
-          total={'25'}
+          total={String(countList?.activeOrders)}
           bgColor={'bg-yellow-200'}
+          isLoading={isLoading}
         />
         <InfoWidget 
           icon={<FaFileInvoiceDollar color="#3d3d3d" size={'40px'} />}
           description={'فواتير هذا الشهر'}
-          total={'1500 $'}
+          total={String(countList?.totalPaidInvoices) + '$'}
           bgColor={'bg-gray-200'}
+          isLoading={isLoading}
         />
         <InfoWidget 
           icon={<FaWarehouse color="#3d3d3d" size={'40px'} />}
           description={'جاهزه للتسليم'}
-          total={'5'}
+          total={String(countList?.readyForReceivement)}
           bgColor={'bg-sky-100'}
+          isLoading={isLoading}
         />
         <InfoWidget 
           icon={<FaCheck color="#3d3d3d" size={'40px'} />}
           description={'تم التسليم'}
-          total={'12'}
+          total={String(countList?.receivedOrders)}
           bgColor={'bg-emerald-100'}
+          isLoading={isLoading}
         />
       </div>
 
       <div className="grid gap-4 grid-cols-12 mb-4">
-        <div className="col-span-12 2xl:col-span-6 xl:col-span-5">
-          <Card>
-            <h2 className=" text-end text-2xl mb-3 font-bold">سعر التصريف مقابل الدولار</h2>
-            <div className="flex p-2 justify-between flex-row-reverse">
-              <div className="flex flex-row-reverse">
-                <img className="w-16 h-16 ml-5" src="https://static.thenounproject.com/png/2857854-200.png" alt="" />
-                <div>
-                  <h3 className="mb-3 font-bold">دينار الليبي</h3>
-                  <h3 className="text-gray-400 font-bold text-end">د.ل</h3>
-                </div>
-              </div>
+        <div className="col-span-12 2xl:col-span-8 xl:col-span-8">
+          <AlertWidget 
 
-              <div>
-                <p className="mb-3  font-bold">5.30</p>
-                <p className="text-green-500 font-bold ">5%</p>
-              </div>
-            </div>
-          </Card>
+          />
         </div>
 
-        <div className="col-span-12 2xl:col-span-6 xl:col-span-7">
+        <div className="col-span-12 2xl:col-span-4 xl:col-span-4">
           <Card>
             <div className="relative h-full overflow-hidden bg-cover rounded-xl" style={{ backgroundImage: `url('https://demos.creative-tim.com/soft-ui-dashboard-tailwind/assets/img/ivancik.jpg')` }}>
               <span className="absolute top-0 left-0 w-full h-full bg-center bg-cover bg-gradient-to-tl from-gray-900 to-slate-800 opacity-80"></span>
@@ -98,13 +115,10 @@ const Home = () => {
             </div>
           </Card>
         </div>
-        
-        <div className="col-span-12 2xl:col-span-7 xl:col-span-8">
-          <AlertWidget 
+      </div>
 
-          />
-        </div>
-        <div className="col-span-12 2xl:col-span-5 xl:col-span-4">
+      <div className="grid gap-4 2xl:gap-10 2xl:grid-cols-9 xl:grid-cols-6">
+        <div className="col-span-1 2xl:col-span-3 xl:col-span-3">
           <ShortcutInfoWidget 
             title={'طلبياتي'}
             description={'الخاص بنا، ايضا من خلاله ستستطيع ان ترى صور البضائع الخاصه بك وحالته واين وصلت واي اي انشطه اخرى تخص بطلبياتك X-Tracking يمكن تتبع طلبياتك عن طريق ميزة'}
@@ -113,10 +127,7 @@ const Home = () => {
             path={"/orders"}
           />
         </div>
-      </div>
-
-      <div className="grid gap-4 2xl:gap-10 2xl:grid-cols-12">
-        <div className="col-span-1 2xl:col-span-3 ">
+        <div className="col-span-1 2xl:col-span-3 xl:col-span-3">
           <ShortcutInfoWidget 
             title={'عناوننا'}
             description={'عرض جميع العناوين الخاصه بالشركة للشحن منه'}
@@ -125,7 +136,7 @@ const Home = () => {
             path={"/address"}
           />
         </div>
-        <div className="col-span-1 2xl:col-span-3">
+        <div className="col-span-1 2xl:col-span-3 xl:col-span-3">
           <ShortcutInfoWidget 
             title={'الاسعار'}
             description={'اسعار الشراء والشحن من جميع الدول التي نتعامل معه'}
@@ -134,7 +145,7 @@ const Home = () => {
             path={"/prices"}
           />
         </div>
-        <div className="col-span-1 2xl:col-span-3">
+        <div className="col-span-1 2xl:col-span-3 xl:col-span-3">
           <ShortcutInfoWidget 
             title={'الشروط'}
             description={'شروط الشركة للشراء والشحن من عن طريقنا ونقاط مهمه في تفاصيل الشحن'}
@@ -143,7 +154,7 @@ const Home = () => {
             path={'/terms-privacy'}
           />
         </div>
-        <div className="col-span-1 2xl:col-span-3">
+        <div className="col-span-1 2xl:col-span-3 xl:col-span-3">
           <ShortcutInfoWidget 
             title={'التواصل'}
             description={'موجودين في خدمتكم على مدار 24 ساعة متواصله خلال 7 ايام'}
@@ -153,6 +164,8 @@ const Home = () => {
           />
         </div>
       </div>
+      
+      <br />
     </div>
   )
 }

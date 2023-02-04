@@ -22,6 +22,13 @@ const userSchema = new Schema({
     type: String,
     required: true,
   },
+  phone: {
+    type: Number,
+    required: true,
+  },
+  city: {
+    type: String,
+  },
   password: {
     type: String,
     required: true,
@@ -29,10 +36,14 @@ const userSchema = new Schema({
   imgUrl: {
     type: String,
   },
-  orders: [{
-    type: Schema.Types.ObjectId,
-    ref: "Order",
-  }],
+  isCanceled: {
+    type: Boolean,
+    default: false,
+  },
+  isAgreeToTermsOfCompany: {
+    type: Boolean,
+    default: false,
+  },
   roles: {
     isAdmin: {
       type: Boolean,

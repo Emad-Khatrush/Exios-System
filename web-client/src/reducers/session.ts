@@ -1,7 +1,8 @@
-import { CHECK_AUTH, LOGIN, STATUS_ERROR, STATUS_START, STATUS_SUCCESS } from "../constants/actions";
+import { CHECK_AUTH, LOGIN, STATUS_ERROR, STATUS_START, STATUS_SUCCESS, UPDATE_USER } from "../constants/actions";
+import { User } from "../models";
   
 interface ISession {
-  account: any
+  account: User
   token: string | null
   isError: boolean
   isLoggedIn: boolean
@@ -22,7 +23,6 @@ export const initialState: ISession = {
   isLoggedIn: (!!user?.account && !!token) || false,
   isLoading: false,
 };
-
 
 export const session = (state: ISession = initialState, action: any) => {  
 
@@ -58,6 +58,7 @@ export const session = (state: ISession = initialState, action: any) => {
         }
       }
       break;
+
     case CHECK_AUTH:
       switch (action.status) {    
         case STATUS_SUCCESS: {
@@ -82,6 +83,22 @@ export const session = (state: ISession = initialState, action: any) => {
         }
       }
       break;
+
+    case UPDATE_USER:
+      switch (action.status) {    
+        case STATUS_SUCCESS: {
+          return {
+            ...state,
+            account: action.payload.account
+          }
+        }
+        case STATUS_ERROR: {
+          return {
+            ...state,
+          }
+        }
+      }
+      
     default:
       return state;
   }

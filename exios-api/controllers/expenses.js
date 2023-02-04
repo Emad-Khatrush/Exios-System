@@ -1,7 +1,7 @@
 const Expenses = require("../models/expenses");
 const Activities = require("../models/activities");
 const ErrorHandler = require('../utils/errorHandler');
-const { cloudinary, uploadFromBuffer } = require('../utils/cloudinary');
+const { uploadToGoogleCloud } = require('../utils/googleClould');
 const { errorMessages } = require("../constants/errorTypes");
 const Offices = require("../models/office");
 const { addChangedField } = require("../middleware/helper");
@@ -9,7 +9,9 @@ const { expenseLabels } = require("../constants/expenseLabels");
 
 module.exports.getExpenses = async (req, res, next) => {
   try {
-    const expenses = await Expenses.find({}).populate('user');
+    const { office } = req.query;
+    const mongoQuery = office ? { placedAt: office } : {}
+    const expenses = await Expenses.find(mongoQuery).populate('user');
     res.status(200).json(expenses);
   } catch (error) {
     return next(new ErrorHandler(404, error.message));
@@ -25,12 +27,13 @@ module.exports.createExpense = async (req, res, next) => {
     const images = [];
     if (req.files) {
       for (let i = 0; i < req.files.length; i++) {
-        const uploadedImg = await uploadFromBuffer(req.files[i], "exios-admin-expenses");
+        const uploadedImg = await uploadToGoogleCloud(req.files[i], "exios-admin-expenses");
         images.push({
-          path: uploadedImg.secure_url,
-          filename: uploadedImg.public_id,
+          path: uploadedImg.publicUrl,
+          filename: uploadedImg.filename,
           folder: uploadedImg.folder,
-          bytes: uploadedImg.bytes
+          bytes: uploadedImg.bytes,
+          fileType: req.files[i].mimetype
         });
       }
     }
@@ -151,18 +154,19 @@ module.exports.uploadFiles= async (req, res, next) => {
 
   if (req.files) {
     for (let i = 0; i < req.files.length; i++) {
-      const uploadedImg = await uploadFromBuffer(req.files[i], "exios-admin-expenses");
+      const uploadedImg = await uploadToGoogleCloud(req.files[i], "exios-admin-expenses");
       images.push({
-        path: uploadedImg.secure_url,
-        filename: uploadedImg.public_id,
+        path: uploadedImg.publicUrl,
+        filename: uploadedImg.filename,
         folder: uploadedImg.folder,
-        bytes: uploadedImg.bytes
+        bytes: uploadedImg.bytes,
+        fileType: req.files[i].mimetype
       });
       changedFields.push({
         label: 'image',
         value: 'image',
         changedFrom: '',
-        changedTo: uploadedImg.secure_url
+        changedTo: uploadedImg.publicUrl
       })
     }
   }

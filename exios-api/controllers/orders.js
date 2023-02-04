@@ -2,16 +2,17 @@ const Orders = require('../models/order');
 const Activities = require('../models/activities');
 const orderid = require('order-id')('key');
 const ErrorHandler = require('../utils/errorHandler');
-const { uploadFromBuffer } = require('../utils/cloudinary');
+const { uploadToGoogleCloud } = require('../utils/googleClould');
 const { errorMessages } = require('../constants/errorTypes');
 const Offices = require('../models/office');
 const { addChangedField, getTapTypeQuery } = require('../middleware/helper');
 const { orderLabels } = require('../constants/orderLabels');
 const mongoose = require('mongoose');
+const order = require('../models/order');
 
 module.exports.getInvoices = async (req, res, next) => {
   try {
-    const orders = await Orders.find({});
+    const orders = await Orders.find({}).populate(['user', 'madeBy']);
     res.status(200).json({
       orders
     });
@@ -25,40 +26,52 @@ module.exports.getOrders = async (req, res, next) => {
     const { limit, skip, tabType } = req.query;
     // await Orders.deleteMany({})
     const tabTypeQuery = getTapTypeQuery(tabType);
+    tabTypeQuery.isCanceled = false;
     const orders = await Orders.find(tabTypeQuery).populate('user').sort({ createdAt: -1 }).skip(skip).limit(limit);
-    const totalOrders = await Orders.count();
-    const activeOrders = await Orders.aggregate([
-      { $match: { isFinished: false,  unsureOrder: false } },
-    ])
+    const allOrders = await Orders.find({ isCanceled: false });
+    const totalOrders = allOrders.length;
 
-    const shipmentOrders = await Orders.aggregate([
-      { $match: { isShipment: true,  unsureOrder: false, isPayment: false,  isFinished: false } },
-    ])
-
-    const arrivingOrders = await Orders.aggregate([
-      { $match: { isPayment: true,  orderStatus: 1 } },
-    ])
-
-    const unpaidOrders = await Orders.aggregate([
-      { $match: { unsureOrder: false,  orderStatus: 0, isPayment: true } },
-    ])
-
-    const finishedOrders = await Orders.aggregate([
-      { $match: { isFinished: true } },
-    ])
-    
-    const unsureOrders = await Orders.aggregate([
-      { $match: { unsureOrder: true } },
-    ])
+    let activeOrders = 0, arrivingOrders = 0, shipmentOrders = 0, unpaidOrders = 0, finishedOrders = 0, unsureOrders = 0;
+    allOrders.forEach((order => {
+      if (!order.isFinished &&  !order.unsureOrder) activeOrders++;
+      if (order.isShipment &&  !order.unsureOrder && !order.isPayment &&  !order.isFinished) shipmentOrders++;
+      if (order.isPayment &&  order.orderStatus === 1) arrivingOrders++;
+      if (order.isPayment &&  !order.unsureOrder && order.orderStatus === 0) unpaidOrders++;
+      if (order.isFinished) finishedOrders++;
+      if (order.unsureOrder) unsureOrders++;
+    }))
     
     res.status(200).json({
       orders,
-      activeOrdersCount: activeOrders.length,
-      shipmentOrdersCount: shipmentOrders.length,
-      finishedOrdersCount: finishedOrders.length,
-      unpaidOrdersCount: unpaidOrders.length,
-      unsureOrdersCount: unsureOrders.length,
-      arrivingOrdersCount: arrivingOrders.length,
+      activeOrdersCount: activeOrders,
+      shipmentOrdersCount: shipmentOrders,
+      finishedOrdersCount: finishedOrders,
+      unpaidOrdersCount: unpaidOrders,
+      unsureOrdersCount: unsureOrders,
+      arrivingOrdersCount: arrivingOrders,
+      tabType: tabType ? tabType : 'active',
+      total: totalOrders,
+      query: {
+        limit: Number(limit),
+        skip: Number(skip)
+      }
+    });
+  } catch (error) {
+    return next(new ErrorHandler(404, error.message));
+  }
+}
+
+module.exports.getOrdersTab = async (req, res, next) => {
+  try {
+    const { limit, skip, tabType } = req.query;
+    // await Orders.deleteMany({})
+    const tabTypeQuery = getTapTypeQuery(tabType);
+    tabTypeQuery.isCanceled = false;
+    const orders = await Orders.find(tabTypeQuery).populate('user').sort({ createdAt: -1 }).skip(skip).limit(limit);
+    const totalOrders = await Orders.count();
+    
+    res.status(200).json({
+      orders,
       tabType: tabType ? tabType : 'active',
       total: totalOrders,
       query: {
@@ -83,39 +96,9 @@ module.exports.getOrdersBySearch = async (req, res, next) => {
     ]
   }
   try {
-    const activeOrders = await Orders.aggregate([
-      { $match: { isFinished: false,  unsureOrder: false } },
-    ])
-
-    const shipmentOrders = await Orders.aggregate([
-      { $match: { isShipment: true,  unsureOrder: false, isPayment: false,  isFinished: false } },
-    ])
-
-    const arrivingOrders = await Orders.aggregate([
-      { $match: { isPayment: true,  orderStatus: 1 } },
-    ])
-
-    const unpaidOrders = await Orders.aggregate([
-      { $match: { unsureOrder: false,  orderStatus: 0 } },
-    ])
-
-    const finishedOrders = await Orders.aggregate([
-      { $match: { isFinished: true } },
-    ])
-    
-    const unsureOrders = await Orders.aggregate([
-      { $match: { unsureOrder: true } },
-    ])
-    
     const orders = await Orders.aggregate(query);
     res.status(200).json({
       orders,
-      activeOrdersCount: activeOrders.length,
-      shipmentOrdersCount: shipmentOrders.length,
-      finishedOrdersCount: finishedOrders.length,
-      unpaidOrdersCount: unpaidOrders.length,
-      unsureOrdersCount: unsureOrders.length,
-      arrivingOrdersCount: arrivingOrders.length,
       tabType: tabType ? tabType : 'active',
       total: totalOrders
     })
@@ -139,13 +122,14 @@ module.exports.createOrder = async (req, res, next) => {
     const images = [];
     if (req.files) {
       for (let i = 0; i < req.files.length; i++) {
-        const uploadedImg = await uploadFromBuffer(req.files[i], "exios-admin-invoices");
+        const uploadedImg = await uploadToGoogleCloud(req.files[i], "exios-admin-invoices");
         images.push({
-          path: uploadedImg.secure_url,
-          filename: uploadedImg.public_id,
+          path: uploadedImg.publicUrl,
+          filename: uploadedImg.filename,
           folder: uploadedImg.folder,
           bytes: uploadedImg.bytes,
-          category: req.body.invoicesCount > i ? 'invoice' : 'receipts'
+          category: req.body.invoicesCount > i ? 'invoice' : 'receipts',
+          fileType: req.files[i].mimetype
         });
       }
     }
@@ -154,7 +138,9 @@ module.exports.createOrder = async (req, res, next) => {
       link: data.paymentLink,
       status: {
         arrived: data.arrived,
+        arrivedLibya: data.arrivedLibya,
         paid: data.paid,
+        received: data.received
       },
       deliveredPackages: {
         weight: {
@@ -163,7 +149,9 @@ module.exports.createOrder = async (req, res, next) => {
         },
         trackingNumber: data.deliveredPackages?.trackingNumber,
         originPrice: data.deliveredPackages.originPrice,
-        exiosPrice: data.deliveredPackages.exiosPrice
+        exiosPrice: data.deliveredPackages.exiosPrice,
+        receivedShipmentUSD: data.deliveredPackages.receivedShipmentUSD,
+        receivedShipmentLYD: data.deliveredPackages.receivedShipmentLYD,
       },
       note: data.note,
     }))
@@ -212,41 +200,29 @@ module.exports.createOrder = async (req, res, next) => {
       }
     })
 
-    // add money if the office received
-    if (order.receivedShipmentUSD !== 0) {
-      await Offices.findOneAndUpdate({ office: order.placedAt }, {
-        $inc: {
-          'usaDollar.value': order.receivedShipmentUSD
-        }
-      }, {
-        new: true
-      });
+    let totalIncreaseOfDollar = (order.receivedShipmentUSD + order.receivedUSD) || 0;
+    let totalIncreaseOfDinnar = (order.receivedShipmentLYD + order.receivedLYD) || 0;
+
+    // calculate received shipment for each package
+    for (let i = 0; i < order.paymentList?.length; i++) {
+      console.log(order.paymentList[i]?.deliveredPackages?.receivedShipmentUSD);
+      totalIncreaseOfDollar += (order.paymentList[i]?.deliveredPackages?.receivedShipmentUSD || 0);
+      totalIncreaseOfDinnar += (order.paymentList[i]?.deliveredPackages?.receivedShipmentLYD || 0);
     }
 
-    if (order.receivedShipmentLYD !== 0) {
-      await Offices.findOneAndUpdate({ office: order.placedAt }, {
-        $inc: {
-          'libyanDinar.value': order.receivedShipmentLYD
-        }
-      }, {
-        new: true
-      });
+    const updateQuery = {};
+
+    if (totalIncreaseOfDollar !== 0) {
+      updateQuery['usaDollar.value'] = totalIncreaseOfDollar;
     }
 
-    if (order.receivedUSD !== 0) {
-      await Offices.findOneAndUpdate({ office: order.placedAt }, {
-        $inc: {
-          'usaDollar.value': order.receivedUSD
-        }
-      }, {
-        new: true
-      });
+    if (totalIncreaseOfDinnar !== 0) {
+      updateQuery['libyanDinar.value'] = totalIncreaseOfDinnar;
     }
-    if (order.receivedLYD !== 0) {
+
+    if (totalIncreaseOfDollar || totalIncreaseOfDinnar) {
       await Offices.findOneAndUpdate({ office: order.placedAt }, {
-        $inc: {
-          'libyanDinar.value': order.receivedLYD
-        }
+        $inc: updateQuery
       }, {
         new: true
       });
@@ -268,7 +244,35 @@ module.exports.getOrder = async (req, res, next) => {
     if (mongoose.Types.ObjectId.isValid(id)) {
       query = { _id: id };
     }
-    const order = await Orders.findOne(query);
+    const order = await Orders.findOne(query).populate('madeBy');
+
+    if (!order) return next(new ErrorHandler(404, errorMessages.ORDER_NOT_FOUND));
+    
+    res.status(200).json(order);
+  } catch (error) {
+    console.log(error);
+    return next(new ErrorHandler(404, error.message));
+  }
+}
+
+module.exports.cancelOrder = async (req, res, next) => {
+  const id = req.params.id;
+  if (!id) return next(new ErrorHandler(404, errorMessages.ORDER_NOT_FOUND));
+
+  try {
+    let query = { orderId : String(id) };
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      query = { _id: id };
+    }
+
+    const updateQuery = {
+      isCanceled: true,
+      cancelation: {
+        reason: req.body.cancelationReason
+      }
+    }
+
+    const order = await Orders.findOneAndUpdate(query, updateQuery, { new: true }).populate('madeBy');
 
     if (!order) return next(new ErrorHandler(404, errorMessages.ORDER_NOT_FOUND));
     
@@ -302,7 +306,7 @@ module.exports.updateOrder = async (req, res, next) => {
     }
     const newOrder = await Orders.findOneAndUpdate({ _id: String(id) }, update, { new: true });
     if (!newOrder) return next(new ErrorHandler(404, errorMessages.ORDER_NOT_FOUND));
-    
+
     // calculate the revenue of the order
     const dollarDifference =  newOrder.receivedUSD - oldOrder.receivedUSD;
     const dinnarDifference =  newOrder.receivedLYD - oldOrder.receivedLYD;
@@ -310,43 +314,32 @@ module.exports.updateOrder = async (req, res, next) => {
     const dinnarShipmentDifference =  newOrder.receivedShipmentLYD - oldOrder.receivedShipmentLYD;
     const dollarShipmentDifference =  newOrder.receivedShipmentUSD - oldOrder.receivedShipmentUSD;
 
-    if (dollarShipmentDifference !== 0) {
-      await Offices.findOneAndUpdate({ office: newOrder.placedAt }, {
-        $inc: {
-          'usaDollar.value': dollarShipmentDifference
-        }
-      }, {
-        new: true
-      });
+    let totalIncreaseOfDollar = dollarDifference + dollarShipmentDifference;
+    let totalIncreaseOfDinnar = dinnarDifference + dinnarShipmentDifference;
+
+    // calculate received shipment for each package
+    for (let i = 0; i < newOrder.paymentList?.length; i++) {
+      totalIncreaseOfDollar += (newOrder.paymentList[i]?.deliveredPackages?.receivedShipmentUSD - (oldOrder.paymentList[i]?.deliveredPackages?.receivedShipmentUSD || 0)) || 0;
+      totalIncreaseOfDinnar += (newOrder.paymentList[i]?.deliveredPackages?.receivedShipmentLYD - (oldOrder.paymentList[i]?.deliveredPackages?.receivedShipmentLYD || 0)) || 0;
     }
-    if (dinnarShipmentDifference !== 0) {
-      await Offices.findOneAndUpdate({ office: newOrder.placedAt }, {
-        $inc: {
-          'libyanDinar.value': dinnarShipmentDifference
-        }
-      }, {
-        new: true
-      });
+    const updateQuery = {};
+
+    if (totalIncreaseOfDollar !== 0) {
+      updateQuery['usaDollar.value'] = totalIncreaseOfDollar;
     }
 
-    if (dollarDifference !== 0) {
+    if (totalIncreaseOfDinnar !== 0) {
+      updateQuery['libyanDinar.value'] = totalIncreaseOfDinnar;
+    }
+
+    if (totalIncreaseOfDollar || totalIncreaseOfDinnar) {
       await Offices.findOneAndUpdate({ office: newOrder.placedAt }, {
-        $inc: {
-          'usaDollar.value': dollarDifference
-        }
+        $inc: updateQuery
       }, {
         new: true
       });
     }
-    if (dinnarDifference !== 0) {
-      await Offices.findOneAndUpdate({ office: newOrder.placedAt }, {
-        $inc: {
-          'libyanDinar.value': dinnarDifference
-        }
-      }, {
-        new: true
-      });
-    }
+    
     // add activity to the order
     const changedFields = [];
     if (Object.keys(req.body).length > 3) {
@@ -373,6 +366,25 @@ module.exports.updateOrder = async (req, res, next) => {
   }
 }
 
+module.exports.getPackagesOfOrders = async (req, res, next) => {
+  try {
+    let packages = await Orders.aggregate([
+      {
+        $match: { isCanceled: false }
+      },
+      {
+        $unwind: '$paymentList'
+      }
+    ]);
+    packages = await Orders.populate(packages, { path: "madeBy" });
+
+    res.status(200).send(packages);
+  } catch (error) {
+    console.log(error);
+    return next(new ErrorHandler(400, error.message));
+  }
+}
+
 module.exports.createUnsureOrder = async (req, res, next) => {
   try {
     if (!req.body) {
@@ -392,8 +404,8 @@ module.exports.createUnsureOrder = async (req, res, next) => {
       },
       placedAt: req.body.placedAt,
       shipment: {
-        fromWhere: '.',
-        toWhere: '.',
+        fromWhere: req.body.fromWhere,
+        toWhere: req.body.toWhere,
         method: req.body.method
       },
       isShipment: true,
@@ -408,25 +420,26 @@ module.exports.createUnsureOrder = async (req, res, next) => {
 
 module.exports.uploadFiles= async (req, res, next) => {
   const { id } = req.body;
-
+  
   const images = [];
   const changedFields = [];
 
     if (req.files) {
       for (let i = 0; i < req.files.length; i++) {
-        const uploadedImg = await uploadFromBuffer(req.files[i], "exios-admin-invoices");
+        const uploadedImg = await uploadToGoogleCloud(req.files[i], "exios-admin-invoices");
         images.push({
-          path: uploadedImg.secure_url,
-          filename: uploadedImg.public_id,
+          path: uploadedImg.publicUrl,
+          filename: uploadedImg.filename,
           folder: uploadedImg.folder,
           bytes: uploadedImg.bytes,
-          category: req.body.type
+          category: req.body.type,
+          fileType: req.files[i].mimetype
         });
         changedFields.push({
           label: 'image',
           value: 'image',
           changedFrom: '',
-          changedTo: uploadedImg.secure_url
+          changedTo: uploadedImg.publicUrl
         })
       }
     }
@@ -506,6 +519,142 @@ module.exports.createOrderActivity = async (req, res, next) => {
         actionId: order._id
       }
     })
+    res.status(200).json(order);
+  } catch (error) {
+    console.log(error);
+    return next(new ErrorHandler(404, error.message));
+  }
+}
+
+// Client Interface Controllers
+module.exports.getClientHomeData = async (req, res, next) => {
+  try {
+    const orders = await Orders.find({ user: req.user._id, isCanceled: false });
+    let receivedOrders = 0;
+    let readyForReceivement = 0;
+    let totalPaidInvoices = 0;
+    let activeOrders = 0;
+
+    orders.forEach((order) => {
+      if (order.isCanceled) return;
+
+      totalPaidInvoices += order.totalInvoice;
+      if (order.isFinished) {
+        receivedOrders++;
+      }
+      if (!order.isFinished) {
+        activeOrders++;
+      }
+      if ((order.isPayment && order.orderStatus === 4) || (!order.isPayment && order.orderStatus === 3)) {
+        readyForReceivement++;
+      }
+    })
+
+    res.status(200).json({
+      results: {
+        countList: {
+          receivedOrders,
+          readyForReceivement,
+          totalPaidInvoices,
+          activeOrders
+        }
+      }
+    });
+  } catch (error) {
+    console.log(error);
+    return next(new ErrorHandler(404, error.message));
+  }
+}
+
+module.exports.getOrdersForUser = async (req, res, next) => {
+  try {
+    const { id, type } = req.params;
+
+    let orders;
+    if (type === 'all') {
+      orders = await Orders.find({ user: id, isCanceled: false });
+    } else {
+      const queryType = getTapTypeQuery(type);
+      orders = await Orders.find({ ...queryType, user: id, isCanceled: false});
+    }
+    let finishedOrders = 0;
+    let readyForReceivement = 0;
+    let warehouseArrived = 0;
+    let activeOrders = 0;
+
+    orders.forEach((order) => {
+      if (order.isCanceled) return;
+
+      if (order.isFinished) {
+        finishedOrders++;
+      }
+      if (!order.isFinished) {
+        activeOrders++;
+      }
+      if ((order.isPayment && order.orderStatus === 2) || (!order.isPayment && order.orderStatus === 1)) {
+        warehouseArrived++;
+      }
+      if ((order.isPayment && order.orderStatus === 4) || (!order.isPayment && order.orderStatus === 3)) {
+        readyForReceivement++;
+      }
+    })
+
+    res.status(200).json({
+      results: {
+        orders,
+        countList: {
+          finishedOrders,
+          readyForReceivement,
+          warehouseArrived,
+          activeOrders
+        }
+      }
+    });
+  } catch (error) {
+    console.log(error);
+    return next(new ErrorHandler(404, error.message));
+  }
+}
+
+module.exports.getOrdersClientBySearch= async (req, res, next) => {
+  const { value } = req.params;
+
+  let query = [
+    { $match: { $or: [ {orderId: { $regex: new RegExp(value.toLowerCase(), 'i') }, user: req.user._id}, { 'paymentList.deliveredPackages.trackingNumber': { $regex: new RegExp(value.trim().toLowerCase(), 'i') }, user: req.user._id }, { 'customerInfo.fullName': { $regex: new RegExp(value.toLowerCase(), 'i') }, user: req.user._id } ] } }
+  ]
+
+  if (value === '') {
+    query = [
+      { $match: { user: req.user._id, isCanceled: false } }
+    ]
+  }
+
+  try {
+    const orders = await Orders.aggregate(query);
+    res.status(200).json({
+      results: {
+        orders
+      }
+    })
+  } catch (error) {
+    return next(new ErrorHandler(404, error.message));
+  }
+}
+
+module.exports.getClientOrder = async (req, res, next) => {
+  const id = req.params.id;
+  if (!id) return next(new ErrorHandler(404, errorMessages.ORDER_NOT_FOUND));
+
+  try {
+    let query = { orderId : String(id), user: req.user._id };
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      query = { _id: id, user: req.user._id };
+    }
+    const order = await Orders.findOne(query);
+
+    if (!order) return next(new ErrorHandler(404, errorMessages.ORDER_NOT_FOUND));
+    order.images = order.images.filter(img => img.category === 'receipts');
+    
     res.status(200).json(order);
   } catch (error) {
     console.log(error);

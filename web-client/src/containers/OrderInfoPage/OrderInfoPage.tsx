@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DataGrid } from "@mui/x-data-grid";
 import { BiInfoCircle } from "react-icons/bi";
 import { FaShippingFast } from "react-icons/fa";
@@ -8,51 +8,85 @@ import Card from "../../components/Card/Card";
 import CustomStepper from "../../components/CustomStepper/CustomStepper";
 import ImageViewer from "../../components/ImageViewer/ImageViewer";
 import InfoDetailsCard from "../../components/InfoDetailsCard/InfoDetailsCard";
-import { defaultColumns } from "./generateData";
-import { Accordion, AccordionDetails, AccordionSummary, Avatar, AvatarGroup, Typography } from "@mui/material";
+import { defaultColumns, generateDataToListType } from "./generateData";
+import { Accordion, AccordionDetails, AccordionSummary, Avatar, AvatarGroup, Box, CircularProgress, Typography } from "@mui/material";
 import Badge from "../../components/Badge/Badge";
+import { useParams } from "react-router-dom";
+import api from "../../api";
+import { Package } from "../../models";
+import moment from "moment-timezone";
+import { getStatusOfPackage } from "../../utils/methods";
+import AlertInfo from "../../components/AlertInfo/AlertInfo";
 
+const currencyLabels: any = {
+  USD: '$',
+  LYD: 'دينار'
+}
 
-type Props = {}
+const shipmentMethodsLabels = {
+  air: 'جوي',
+  sea: 'بحري'
+}
 
-const testData = [
-  'https://storage.cloud.google.com/exios-bucket/2.jpg',
-  'https://storage.cloud.google.com/exios-bucket/253769795_10208631213013904_9018611287682636732_n.jpg',
-  'https://storage.cloud.google.com/exios-bucket/20220903_171451.jpg'
-]
-
-const OrderInfoPage = (props: Props) => {
+const OrderInfoPage = () => {
   const [ activeStep, setActiveStep ] = useState(0);
+  const [order, setOrder] = useState<Package>();
+  const [isLoading, setIsLoading] = useState(false);
+
+  let { id: orderId } = useParams();
+
+  const fetchOrder = async () => {
+    setIsLoading(true);
+    const order = await api.getSingleOrder(orderId || '');
+    setOrder(order.data);
+    setActiveStep(order.data.orderStatus);
+    setIsLoading(false);
+  }
+
+  useEffect(() => {
+    fetchOrder();
+  }, [])
 
   const steps = generateSteps();
 
-  const data = [
+  if (isLoading || !order) {
+    return (
+      <Box className='h-full items-center justify-center' sx={{ display: 'flex' }}>
+        <CircularProgress />
+      </Box>
+    )
+  }
+
+  const columns = [...defaultColumns()];
+  const list = generateDataToListType(order.activity).reverse();
+
+  const customerInfo = [
     {
       label: 'رقم الكود',
-      value: '0552-3665'
+      value: order.orderId
     },
     {
       label: 'اسم الزبون',
-      value: 'عماد ختروش'
+      value: order.customerInfo.fullName
     },
     {
       label: 'رقم الهاتف',
-      value: '09215547585'
+      value: order.customerInfo.phone
     },
     {
       label: 'بريد الاكتروني',
-      value: 'qwe.emad@hotmail.com'
+      value: order.customerInfo.email || '-'
     },
   ]
 
-  const data2 = [
+  const packageInfo = [
     {
       label: 'نوع البضائع',
-      value: 'ملابس'
+      value: order.productName
     },
     {
       label: 'وزن الشحنة',
-      value: '23 KG'
+      value: '-'
     },
     {
       label: 'CBM',
@@ -60,28 +94,48 @@ const OrderInfoPage = (props: Props) => {
     },
     {
       label: 'نوع الشحن',
-      value: 'جوي'
+      value: shipmentMethodsLabels[order.shipment.method]
     }
   ]
 
-  const columns = [...defaultColumns()];
-  const list = [
+  const otherInfo = [
     {
-      id: 1,
-      description: 'تم وصول البضائع الى المخزن',
-      createdAt: '01-09-2022 01:55 PM',
-      placedAt: 'طرابلس'
+      label: 'تاريخ الانشاء',
+      value: moment(order.createdAt).format('DD/MM/YYYY')
     },
     {
-      id: 2,
-      description: 'تم وصول البضائع الى المخزن',
-      createdAt: '01-09-2022 01:55 PM',
-      placedAt: 'طرابلس'
+      label: 'مكان التسليم',
+      value: order.shipment.toWhere
+    },
+    {
+      label: 'قيمة الفاتورة',
+      value: `${order.totalInvoice} $`
+    },
+    {
+      label: 'ديون',
+      value: order.debt.total > 0 ? `${order?.debt.total} ${currencyLabels[order?.debt?.currency]}` : 'لا يوجد'
     }
   ]
+
+  const relatedImages: any = []; 
+  order.images.forEach(img => {
+    relatedImages.push(img.path);
+  })
+console.log(order);
+
+  const packages = order.paymentList;
 
   return (
     <div className="container mx-auto py-10 h-64 w-11/12 px-6">
+      {order.isCanceled &&
+        <div className="mb-4">
+          <AlertInfo
+            tint="danger"
+            description={'هذه طلبية قد تم الغاءها من قبل ادارة الشركة، اذا تظن ان حدث خطا يرجى تواصل مع اقرب مندوب للشركة'}
+          />
+        </div>
+      }
+
       <Card
         className="rounded-2xl mb-5"
       >
@@ -94,17 +148,17 @@ const OrderInfoPage = (props: Props) => {
       <div className="grid gap-6 grid-cols-1 xl:grid-cols-3 md:grid-cols-2 mb-5">
         <InfoDetailsCard 
           title="تفاصيل العميل"
-          data={data as any}
+          data={customerInfo as any}
         />
 
         <InfoDetailsCard 
           title="تفاصيل الشحنه"
-          data={data2 as any}
+          data={packageInfo as any}
         />
 
         <InfoDetailsCard 
-          title="تفاصيل العميل"
-          data={data as any}
+          title="تفاصيل اخرى"
+          data={otherInfo as any}
         />
 
         <div>
@@ -113,7 +167,7 @@ const OrderInfoPage = (props: Props) => {
           >
             <h2 className='text-right text-2xl font-medium mb-7 mt-2'>صور متعلقة بالطلبية</h2>
             <ImageViewer
-              images={testData}
+              images={relatedImages}
             />
           </Card>
         </div>
@@ -122,7 +176,7 @@ const OrderInfoPage = (props: Props) => {
           <Card
             className="rounded-2xl mb-5"
           >
-            <h2 className='text-right text-2xl font-medium mb-7 mt-2'>الانشطة</h2>
+            <h2 className='text-right text-2xl font-medium mb-7 mt-2'>الانشطة العامة</h2>
             <div style={{ height: 400, width: '100%' }}>
               <DataGrid
                 rows={list}
@@ -137,46 +191,57 @@ const OrderInfoPage = (props: Props) => {
         </div>
 
         <div className="col-span-1 xl:col-span-3 md:col-span-2">
-          <Card
-            leaned
-          >
-            <Accordion defaultExpanded>
-              <AccordionSummary
-                expandIcon={<MdExpandMore />}
-                aria-controls="panel1bh-content"
-                id="panel1bh-header"
+          {packages.length > 0 && packages.map((packageDetails, i) => {
+            const { statusIndex, lastActivity } = getStatusOfPackage(packageDetails);
+            const step = linkSteps[statusIndex];
+            const trackingNumber = packageDetails.deliveredPackages.trackingNumber;
+            return (
+              <Card
+                leaned
+                className="mb-5"
               >
-                <Typography sx={{ width: '30%', flexShrink: 0, fontSize: '16px', fontWeight: 'bold' }}>
-                  Package 1#
-                </Typography>
-                <Badge class=" text-base" text="وصلت الى المخزن" color="primary" />
-              </AccordionSummary>
-              <AccordionDetails>
-                <div className="flex items-center justify-end mb-8">
-                  <p>وصلت البضائع الى مخزن</p>
-                  <h3 className=" font-bold ml-5">:اخر نشاط</h3>
-                </div>
-                <div className="flex items-center justify-end mb-8">
-                  <AvatarGroup max={4}>
-                    <Avatar alt="Remy Sharp" src="/static/images/avatar/1.jpg" />
-                    <Avatar alt="Travis Howard" src="/static/images/avatar/2.jpg" />
-                    <Avatar alt="Cindy Baker" src="/static/images/avatar/3.jpg" />
-                    <Avatar alt="Agnes Walker" src="/static/images/avatar/4.jpg" />
-                    <Avatar alt="Trevor Henderson" src="/static/images/avatar/5.jpg" />
-                  </AvatarGroup>
-                  <h3 className=" font-bold ml-5">:صور البضائع</h3>
-                </div>
-                
-                <CustomStepper 
-                  acriveStep={activeStep}
-                  steps={linkSteps}
-                />
-              </AccordionDetails>
-            </Accordion>
-          </Card>
+                <Accordion defaultExpanded={statusIndex !== 3}>
+                  <AccordionSummary
+                    expandIcon={<MdExpandMore />}
+                    aria-controls="panel1bh-content"
+                    id="panel1bh-header"
+                  >
+                    <Typography sx={{ width: '30%', flexShrink: 0, fontSize: '16px', fontWeight: 'bold' }}>
+                      Package { trackingNumber ? trackingNumber : i + 1}
+                    </Typography>
+                    <Badge class=" text-sm md:text-base" text={step.label} color={statusIndex === 3 ? 'success' : 'primary'} />
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <div className="flex items-center justify-end mb-8">
+                      <p>{lastActivity}</p>
+                      <h3 className=" font-bold ml-5">:اخر نشاط</h3>
+                    </div>
+                    <div className="flex items-center justify-end mb-8">
+                      <p>{trackingNumber || 'لا يوجد'}</p>
+                      <h3 className=" font-bold ml-5">:{trackingNumber.length === 4 ? 'اخر 4 ارقام من رقم التتبع' : 'رقم التتبع'}</h3>
+                    </div>
+                    <div className="flex items-center justify-end mb-8">
+                      <AvatarGroup max={4}>
+                        <Avatar alt="Remy Sharp" src="/static/images/avatar/1.jpg" />
+                        <Avatar alt="Travis Howard" src="/static/images/avatar/2.jpg" />
+                        <Avatar alt="Cindy Baker" src="/static/images/avatar/3.jpg" />
+                        <Avatar alt="Agnes Walker" src="/static/images/avatar/4.jpg" />
+                        <Avatar alt="Trevor Henderson" src="/static/images/avatar/5.jpg" />
+                      </AvatarGroup>
+                      <h3 className=" font-bold ml-5">:صور البضائع</h3>
+                    </div>
+                    
+                    <CustomStepper 
+                      acriveStep={statusIndex}
+                      steps={linkSteps}
+                    />
+                  </AccordionDetails>
+                </Accordion>
+              </Card>
+            )
+          })}
         </div>
       </div>
-      <br />
       <br />
       <br />
       <br />

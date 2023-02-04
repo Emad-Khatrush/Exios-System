@@ -1,3 +1,4 @@
+import { Box, CircularProgress } from '@mui/material';
 import Card from '../Card/Card';
 
 type Props = {
@@ -5,11 +6,20 @@ type Props = {
   description: string
   total: string
   bgColor?: string
+  isLoading?: boolean
 }
 
 const InfoWidget = (props: Props) => {
-  const { description, total, bgColor } = props;
-
+  const { description, total, bgColor, isLoading } = props;
+  if (isLoading) {
+    return <Card
+      className="h-32 rounded-lg"
+    >
+      <Box className='h-full items-center justify-center' sx={{ display: 'flex' }}>
+      <CircularProgress />
+    </Box>
+      </Card>
+  }
   return (
     <Card
       className="h-32 rounded-lg text-end"

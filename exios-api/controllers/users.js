@@ -9,23 +9,29 @@ const moment = require('moment-timezone');
 const Office = require('../models/office');
 const { generateString } = require('../middleware/helper');
 
-module.exports.createUser = async (req, res) => {
-  try {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const numbers = '0123456789';
+const os = require('os');
+console.log(os.cpus().length);
 
+module.exports.createUser = async (req, res, next) => {
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const numbers = '0123456789';
+  const { repeatedPassword, password, email } = req.body;
+
+  try {
+    if (repeatedPassword !== password) return next(new ErrorHandler(400, errorMessages.PASSWORD_NOT_MATCH));
     const customerId = generateString(1, characters) + generateString(3, numbers);
-    const userFound = await User.findOne({ customerId });
+    const userFound = await User.findOne({ $or: [ { customerId }, { username: email } ] });
     if (!!userFound) return next(new ErrorHandler(400, errorMessages.USER_EXIST));
     
     const hashedPassword = await bcrypt.hash(req.body.password, 12);
     const user = await User.create({
-      username: req.body.username,
-      firstName: req.body.firstName,
-      lastName: req.body.lastName,
-      imgUrl: req.body.imgUrl,
+      ...req.body,
+      username: email,
       password: hashedPassword,
-      customerId
+      customerId,
+      roles: {
+        isClient: true
+      }
     });
 
     const token = await user.getSignedToken();
@@ -36,8 +42,75 @@ module.exports.createUser = async (req, res) => {
   }
 }
 
+module.exports.updateUser = async (req, res, next) => {
+  const { firstName, lastName, email, city, phone } = req.body;
+
+  try {
+    const user = await User.findByIdAndUpdate(req.user._id, {
+      firstName,
+      lastName,
+      city,
+      phone
+    }, { new: true });
+    console.log(user);
+    res.status(200).json(user);
+  } catch (error) {
+    console.log(error);
+    return next(new ErrorHandler(404, errorMessages.SERVER_ERROR));
+  }
+}
+
+// module.exports.createUser = async (req, res) => {
+//   try {
+//     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+//     const numbers = '0123456789';
+
+//     const customerId = generateString(1, characters) + generateString(3, numbers);
+//     const userFound = await User.findOne({ customerId });
+//     if (!!userFound) return next(new ErrorHandler(400, errorMessages.USER_EXIST));
+    
+//     const hashedPassword = await bcrypt.hash(req.body.password, 12);
+//     const user = await User.create({
+//       username: req.body.username,
+//       firstName: req.body.firstName,
+//       lastName: req.body.lastName,
+//       imgUrl: req.body.imgUrl,
+//       password: hashedPassword,
+//       customerId,
+//       roles: {
+//         isEmployee: true
+//       }
+//     });
+
+//     const token = await user.getSignedToken();
+//     res.status(200).json({ success: true, token: token });
+//   } catch (error) {
+//     console.log(error);
+//     return next(new ErrorHandler(404, errorMessages.SERVER_ERROR));
+//   }
+// }
+
+module.exports.getEmployees = async (req, res, next) => {
+  try {
+    let query = [{ $match: {
+      $or: [{ 'roles.isAdmin': true }, { 'roles.isEmployee': true }]
+    }},
+    {
+      $match: {
+        $or: [{ isCanceled: false }, { isCanceled: undefined }]
+      }
+    }
+  ];
+    const employees = await User.aggregate(query);
+    res.status(200).json({ results: employees });
+  } catch (error) {
+    console.log(error);
+    return next(new ErrorHandler(404, errorMessages.SERVER_ERROR));
+  }
+}
+
 module.exports.login = async (req, res, next) => {
-  const { username, password } = req.body;
+  const { username, password, loginType } = req.body;
 
   if (!username || !password) {
     return next(new ErrorHandler(400, errorMessages.FIELDS_EMPTY));
@@ -47,6 +120,15 @@ module.exports.login = async (req, res, next) => {
     const user = await User.findOne({ username: { $regex: `^${username}$`, $options: 'i'} }).select('+password');
     if (!user) {
       return next(new ErrorHandler(404, errorMessages.USER_NOT_FOUND));
+    }
+    if (user.isCanceled) {
+      return next(new ErrorHandler(400, errorMessages.USER_SUBSCRIPTION_CANCLED));
+    }
+    if (loginType === 'client' && !user.roles.isClient) { 
+      return next(new ErrorHandler(400, errorMessages.USER_ROLE_INVALID));
+    }
+    if (loginType === 'admin' && user.roles.isClient) {
+      return next(new ErrorHandler(400, errorMessages.USER_ROLE_INVALID));
     }
     const isMatch = await user.matchPassword(password);
 
@@ -83,6 +165,19 @@ module.exports.verifyToken = async (req, res, next) => {
   }
 }
 
+module.exports.getEmpoyeeHomeData = async (req, res, next) => {
+  try {
+    const offices = await Office.find({ office: 'tripoli' });
+    const debts = await Orders.find({ 'debt.total': { $gt: 0 }, placedAt: 'tripoli' });
+    res.status(200).json({
+      offices,
+      debts
+    })
+  } catch (error) {
+    return next(new ErrorHandler(401, errorMessages.INVALID_TOKEN));
+  }
+}
+
 module.exports.getHomeData = async (req, res, next) => {
   const currentMonthByNumber = moment().month() + 1; // from Jun 0 to Dec 11
   try {
@@ -90,23 +185,18 @@ module.exports.getHomeData = async (req, res, next) => {
 
     const activeOrdersCount = await Orders.count({ isFinished: false, unsureOrder: false, isCanceled: false });
 
-    const totalDebts = await Orders.aggregate([
-      { $match: { 'debt.total': { $ne: 0 } } },
-      { $group: { _id: { office: '$placedAt', currency: '$debt.currency'}, totalDebts: { $sum: '$debt.total' } } },
-      { $project: { _id: 0, office: '$_id.office', currency: '$_id.currency', totalDebts: 1 } },
-      { $sort: { office: 1 , currency: -1 } }
-    ])
+    const debts = await Orders.find({ 'debt.total': { $gt: 0 } });
 
     const totalInvoices = (await Orders.aggregate([
       { $addFields: { 'month': { $month: '$createdAt' } } },
-      { $match: { isFinished: false, unsureOrder: false, isCanceled: false, month: currentMonthByNumber } },
+      { $match: { unsureOrder: false, isCanceled: false, month: currentMonthByNumber } },
       { $group: { _id: '$month', totalInvoices: { $sum: '$totalInvoice' } } },
       { $project: { totalInvoices: 1, _id: 0 } },
     ]))[0]?.totalInvoices || 0;
 
     const thisMonthlyEarning = (await Orders.aggregate([
       { $addFields: { 'month': { $month: '$createdAt' } } },
-      { $match: { isFinished: false, unsureOrder: false, isCanceled: false, month: currentMonthByNumber } },
+      { $match: { unsureOrder: false, isCanceled: false, month: currentMonthByNumber } },
       { $unwind: '$netIncome' },
       { $group: { _id: '$month', totalNetOfMonth: { $sum: '$netIncome.total' } } },
       { $project: { _id: 0, totalNetOfMonth: 1 } },
@@ -114,16 +204,16 @@ module.exports.getHomeData = async (req, res, next) => {
 
     const previousMonthlyEarning = (await Orders.aggregate([
       { $addFields: { 'month': { $month: '$createdAt' } } },
-      { $match: { isFinished: false, unsureOrder: false, isCanceled: false, month: currentMonthByNumber - 1 } },
+      { $match: { unsureOrder: false, isCanceled: false, month: currentMonthByNumber - 1 } },
       { $unwind: '$netIncome' },
       { $group: { _id: '$month', totalNetOfMonth: { $sum: '$netIncome.total' } } },
       { $project: { _id: 0, totalNetOfMonth: 1 } },
     ]))[0]?.totalNetOfMonth || 0;
 
     const thisShipmentMonthlyEarning = (await Orders.aggregate([
-      { $addFields: { 'month': { $month: '$createdAt' } } },
-      { $match: { isFinished: false, unsureOrder: false, isCanceled: false, month: currentMonthByNumber } },
       { $unwind: '$paymentList' },
+      { $addFields: { 'month': { $month: '$paymentList.deliveredPackages.arrivedAt' } } },
+      { $match: { unsureOrder: false, isCanceled: false, month: currentMonthByNumber } },
       {
         $group: {
           _id: '$month', totalNetOfMonth: {
@@ -135,11 +225,11 @@ module.exports.getHomeData = async (req, res, next) => {
       },
       { $project: { _id: 0, totalNetOfMonth: 1 } },
     ]))[0]?.totalNetOfMonth || 0;
-
+    
     const previousShipmentMonthlyEarning = (await Orders.aggregate([
-      { $addFields: { 'month': { $month: '$createdAt' } } },
-      { $match: { isFinished: false, unsureOrder: false, isCanceled: false, month: currentMonthByNumber - 1 } },
       { $unwind: '$paymentList' },
+      { $addFields: { 'month': { $month: '$paymentList.deliveredPackages.arrivedAt' } } },
+      { $match: { unsureOrder: false, isCanceled: false, month: currentMonthByNumber - 1 } },
       {
         $group: {
           _id: '$month', totalNetOfMonth: {
@@ -172,7 +262,7 @@ module.exports.getHomeData = async (req, res, next) => {
       activeOrdersCount,
       totalInvoices,
       offices,
-      totalDebts
+      debts
     })
   } catch (error) {
     console.log(error);

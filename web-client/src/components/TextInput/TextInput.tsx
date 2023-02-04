@@ -4,7 +4,7 @@ type Props = {
   placeholder: string
   className?: string
   type?: 'text' | 'password' | 'search'
-  onChange?: any
+  onChange?: (event: any) => void
   icon: any
   name?: string
   buttonLabel: string

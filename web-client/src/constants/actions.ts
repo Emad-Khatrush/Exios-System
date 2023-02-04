@@ -8,6 +8,7 @@ export const SWITCH_TAB = 'SWITCH_TAB';
 // region session
 export const LOGIN = 'LOGIN';
 export const CHECK_AUTH = 'CHECK_AUTH';
+export const UPDATE_USER = 'UPDATE_USER';
 
 // region invoices
 export const RESET_INVOICE = 'RESET_INVOICE';

@@ -9,6 +9,7 @@ import { Button, Dialog, DialogActions, DialogContent, DialogContentText, Dialog
 import TermsPdf from '../../../public/terms.pdf';
 import AlertInfo from '../../components/AlertInfo/AlertInfo';
 import { apiErrorsTypes } from '../../constants/errorTypes';
+import { libyanCities } from '../../constants/info';
 
 const Register = () => {
   const [formData, setFormData] = useState<User | any>({
@@ -134,9 +135,9 @@ const Register = () => {
                   onChange={(e) => updateFormState(e.target.name, e.target.value)}
                   disabled={isLoading}
                 >
-                  <option value="tripoli" className='mr-96'>طرابلس</option>
-                  <option value="benghazi">بنغازي</option>
-                  <option value="misurata">مصراته</option>
+                  {libyanCities.map((city) => (
+                    <option key={city.code} value={city.value} className='mr-96'>{city.label}</option>
+                  ))}
                 </select>
               </div>
 

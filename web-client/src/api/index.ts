@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { User } from '../models';
+import { OrderStatusType } from '../models';
 
 const endpoint = 'http://localhost:8000/api/';
 
@@ -130,11 +131,24 @@ export default {
 
   createClientAccount: (formData: User) => base.post(`account/create`, formData),
 
+  updateAccount: (formData: User) => base.put(`account/update`, formData),
+
   // Auth Endpoints
   login: (body: { username: string, password: string }, loginType: 'admin' | 'client') => base.post(`/login`, { ...body, loginType }),
 
   getPasswordToken: (body: { email: string }) => base.post(`get-token-password`, { ...body }),
 
   resetNewPassword: (body: { userId: string, password: string, token: string }) => base.post(`reset-password`, { ...body }),
+
+  verifyToken: (token: string) => base.post(`verifyToken`, { token }),
+
+  // Orders Endpoints
+  getHomeData: () => base.get(`client/home`),
+
+  getOrdersForUser: (id: string, orderType: OrderStatusType) => base.get(`user/${id}/orders/${orderType}`),
+
+  getOrdersBySearch: (value: string) => base.get(`client/orders/search/${value}`),
+
+  getSingleOrder: (orderId: string) => base.get(`client/order/${orderId}`),
 
 }

@@ -13,7 +13,6 @@ type Props = {
 const ShipFromTo = (props: Props) => {
   const [ searchParams ] = useSearchParams();
   const shipmentFromWhere = searchParams.get("shipmentFromWhere");
-  console.log(shipmentFromWhere);
   
   useEffect(() => {
     props.shipFromChange(shipmentFromWhere || '');
