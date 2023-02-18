@@ -192,7 +192,7 @@ class XTrackingPage extends Component<Props, State> {
                   ))}
                 </>
               }
-              
+
               {listData.listStatus.isLoading &&
                 <div className="text-center">
                   <CircularProgress />
