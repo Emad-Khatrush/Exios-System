@@ -529,26 +529,14 @@ module.exports.createOrderActivity = async (req, res, next) => {
 // Client Interface Controllers
 module.exports.getClientHomeData = async (req, res, next) => {
   try {
-    const orders = await Orders.find({ user: req.user._id, isCanceled: false });
-    let receivedOrders = 0;
-    let readyForReceivement = 0;
-    let totalPaidInvoices = 0;
-    let activeOrders = 0;
-
-    orders.forEach((order) => {
-      if (order.isCanceled) return;
-
-      totalPaidInvoices += order.totalInvoice;
-      if (order.isFinished) {
-        receivedOrders++;
-      }
-      if (!order.isFinished) {
-        activeOrders++;
-      }
-      if ((order.isPayment && order.orderStatus === 4) || (!order.isPayment && order.orderStatus === 3)) {
-        readyForReceivement++;
-      }
-    })
+    const receivedOrders = await Orders.count({ user: req.user._id, isFinished: true, unsureOrder: false });
+    const readyForReceivement = await Orders.count({ user: req.user._id, $or: [ { isPayment: true, orderStatus: 4 }, { isPayment: false, orderStatus: 3 } ] });
+    const activeOrders = await Orders.count({ user: req.user._id, isCanceled: false, unsureOrder: false, isFinished: false });
+    const totalPaidInvoices = (await Orders.aggregate([
+      { $match: { user: req.user._id, isCanceled: false, unsureOrder: false } },
+      { $group: { _id: 'id', total: { $sum: '$totalInvoice' } } },
+      { $project: { _id: 0 } }
+    ]))[0]?.total;
 
     res.status(200).json({
       results: {
@@ -568,33 +556,38 @@ module.exports.getClientHomeData = async (req, res, next) => {
 
 module.exports.getOrdersForUser = async (req, res, next) => {
   try {
-    const { id, type } = req.params;
+    const { type } = req.params;
 
     let orders;
+    const allOrders = await Orders.find({ user: req.user._id }).sort({ createdAt: -1 });
     if (type === 'all') {
-      orders = await Orders.find({ user: id, isCanceled: false });
+      orders = await Orders.find({ user: req.user._id, isCanceled: false, unsureOrder: false, }).sort({ createdAt: -1 });
     } else {
       const queryType = getTapTypeQuery(type);
-      orders = await Orders.find({ ...queryType, user: id, isCanceled: false});
+      orders = await Orders.find({ ...queryType, user: req.user._id, isCanceled: false }).sort({ createdAt: -1 });
     }
     let finishedOrders = 0;
     let readyForReceivement = 0;
     let warehouseArrived = 0;
     let activeOrders = 0;
+    let unsureOrders = 0;
 
-    orders.forEach((order) => {
+    allOrders.forEach((order) => {
       if (order.isCanceled) return;
 
       if (order.isFinished) {
         finishedOrders++;
       }
-      if (!order.isFinished) {
+      if (!order.isFinished && !order.unsureOrder) {
         activeOrders++;
       }
-      if ((order.isPayment && order.orderStatus === 2) || (!order.isPayment && order.orderStatus === 1)) {
+      if (!order.isFinished && order.unsureOrder) {
+        unsureOrders++;
+      }
+      if ((order.isPayment && order.orderStatus === 2) || (!order.isPayment && order.orderStatus === 1) && !order.unsureOrder) {
         warehouseArrived++;
       }
-      if ((order.isPayment && order.orderStatus === 4) || (!order.isPayment && order.orderStatus === 3)) {
+      if ((order.isPayment && order.orderStatus === 4) || (!order.isPayment && order.orderStatus === 3) && !order.unsureOrder) {
         readyForReceivement++;
       }
     })
@@ -606,7 +599,8 @@ module.exports.getOrdersForUser = async (req, res, next) => {
           finishedOrders,
           readyForReceivement,
           warehouseArrived,
-          activeOrders
+          activeOrders,
+          unsureOrders
         }
       }
     });
@@ -620,14 +614,19 @@ module.exports.getOrdersClientBySearch= async (req, res, next) => {
   const { value } = req.params;
 
   let query = [
-    { $match: { $or: [ {orderId: { $regex: new RegExp(value.toLowerCase(), 'i') }, user: req.user._id}, { 'paymentList.deliveredPackages.trackingNumber': { $regex: new RegExp(value.trim().toLowerCase(), 'i') }, user: req.user._id }, { 'customerInfo.fullName': { $regex: new RegExp(value.toLowerCase(), 'i') }, user: req.user._id } ] } }
+    { $match: { unsureOrder: false, $or: [ {orderId: { $regex: new RegExp(value.toLowerCase(), 'i') }, user: req.user._id}, { 'paymentList.deliveredPackages.trackingNumber': { $regex: new RegExp(value.trim().toLowerCase(), 'i') }, user: req.user._id }, { 'customerInfo.fullName': { $regex: new RegExp(value.toLowerCase(), 'i') }, user: req.user._id } ] } }
   ]
 
   if (value === '') {
     query = [
-      { $match: { user: req.user._id, isCanceled: false } }
+      { $match: { user: req.user._id, isCanceled: false, unsureOrder: false } }
     ]
   }
+
+  // sort newest order to top
+  query.push({
+    $sort: { createdAt: -1 }
+  })
 
   try {
     const orders = await Orders.aggregate(query);
@@ -637,6 +636,56 @@ module.exports.getOrdersClientBySearch= async (req, res, next) => {
       }
     })
   } catch (error) {
+    return next(new ErrorHandler(404, error.message));
+  }
+}
+
+module.exports.deleteUnsureOrder = async (req, res, next) => {
+  try {
+    const order = await Orders.findOne({ user: req.user, _id: req.params.id });
+    if (!order) return next(new ErrorHandler(404, errorMessages.ORDER_NOT_FOUND));
+    if (!order.unsureOrder) return next(new ErrorHandler(404, errorMessages.ORDER_CANT_DELETE));
+
+    await Orders.deleteOne({ user: req.user, _id: req.params.id });
+    res.status(200).json(order);
+  } catch (error) {
+    console.log(error);
+    return next(new ErrorHandler(404, error.message));
+  }
+}
+
+module.exports.createTrackingNumbersForClient = async (req, res, next) => {
+  try {
+    const trackingArray = [];
+    req.body.forEach(({ trackingNumber }) => {
+      trackingArray.push({
+        deliveredPackages: {
+          trackingNumber
+        }
+      })
+    })
+    const orderId = orderid.generate().slice(7, 17);
+
+    const order = await Orders.create({
+      user: req.user,
+      orderId,
+      customerInfo: {
+        fullName: '.',
+        phone: 0,
+      },
+      placedAt: 'tripoli',
+      shipment: {
+        fromWhere: '.',
+        toWhere: '.',
+        method: 'air'
+      },
+      isShipment: true,
+      unsureOrder: true,
+      paymentList: trackingArray
+    });
+    res.status(200).json(order);
+  } catch (error) {
+    console.log(error);
     return next(new ErrorHandler(404, error.message));
   }
 }

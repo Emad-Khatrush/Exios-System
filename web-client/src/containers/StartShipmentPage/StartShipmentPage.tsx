@@ -6,6 +6,7 @@ import Card from '../../components/Card/Card';
 import CustomStepper from '../../components/CustomStepper/CustomStepper';
 import ShipFromTo from './ShipFromTo';
 import ShipToPage from './ShipToPage';
+import ShipmentGuide from './ShipmentGuide';
 
 const StartShipmentPage = () => {
   const [activeStep, setActiveStep] = useState(0);
@@ -39,7 +40,16 @@ const StartShipmentPage = () => {
                />
   
       case 2:
-        return <div></div>
+        if (!shipmentMethod || !shipmentFrom || !shipmentTo) {
+          return;
+        }
+        return <ShipmentGuide 
+                 data={{
+                  shipmentMethod,
+                  shipmentFrom,
+                  shipmentTo
+                 }}
+                />
     
       default:
         return <div></div>;
@@ -64,12 +74,19 @@ const StartShipmentPage = () => {
             <button
               type="submit"
               className="mr-5 py-2 px-4 text-lg font-medium text-sky-600"
-              onClick={() => setActiveStep((prev) => prev - 1)}
+              onClick={() => {       
+                // get active step becuase it is go back
+                if ((activeStep - 1) === 0) {
+                  setShipmentFrom(null);
+                  setShipmentTo(null);
+                }
+                setActiveStep((prev) => prev - 1);
+              }}
             >
               تراجع
             </button>
           }
-          {activeStep !== 1 &&
+          {activeStep !== 2 &&
             <button
               type="submit"
               disabled={!shipmentFrom || !shipmentTo}

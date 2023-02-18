@@ -1,7 +1,7 @@
 import { Box, CircularProgress } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { AiOutlineSearch } from 'react-icons/ai';
-import { useSelector } from 'react-redux';
+import { Link } from 'react-router-dom';
 import api from '../../api';
 import Card from '../../components/Card/Card';
 import OrderDetails from '../../components/OrderDetails/OrderDetails';
@@ -10,15 +10,15 @@ import TextInput from '../../components/TextInput/TextInput';
 import { OrderStatusType, Package } from '../../models';
 
 const ClientOrders = () => {
-  const account = useSelector((state: any) => state.session.account);
-
   const [activeTab, setActiveTab] = useState<OrderStatusType>('active');
+  const [quickSearchDelayTimer, setQuickSearchDelayTimer] = useState();
   const [orders, setOrders] = useState<Package[]>([]);
   const [countList, setCountList] = useState({
     finishedOrders: 0,
     readyForReceivement: 0,
     warehouseArrived: 0,
-    activeOrders: 0
+    activeOrders: 0,
+    unsureOrders: 0
   });
   const [isLoading, setIsLoading] = useState(false);
 
@@ -26,7 +26,7 @@ const ClientOrders = () => {
     setIsLoading(true);
     setActiveTab(tab);
     try {
-      const response = await api.getOrdersForUser(account._id, tab);
+      const response = await api.getOrdersForUser(tab);
       const orders = response.data.results.orders;
       setOrders(orders);
     } catch (error) {
@@ -38,7 +38,7 @@ const ClientOrders = () => {
   const getOrders = async () => {
     try {
       setIsLoading(true);
-      const response = await api.getOrdersForUser(account._id, 'all');
+      const response = await api.getOrdersForUser('all');
       const orders = response.data.results.orders;
       const countList = response.data.results.countList;
       setOrders(orders);
@@ -49,21 +49,27 @@ const ClientOrders = () => {
     setIsLoading(false);
   }
 
-  const searchInputChange = async (event: any) => {
+  const searchInputChange = (event: any) => {
     const value = event.target.value;
     try {
-      let response;
-      setIsLoading(true);
+      let promise: Promise<any>;
       if (!value) {
-        response = await api.getOrdersForUser(account._id, activeTab);
+        promise = api.getOrdersForUser(activeTab);
       } else {
-        response = await api.getOrdersBySearch(value);
+        promise = api.getOrdersBySearch(value);
       }
-      const orders = response.data.results.orders;      
-      setOrders(orders);      
+      clearTimeout(quickSearchDelayTimer);
+      setQuickSearchDelayTimer((): any => {
+        setIsLoading(true);
+        return setTimeout(async () => {
+          const response = await promise;
+          const orders = response.data.results.orders;      
+          setOrders(orders);
+          setIsLoading(false);
+        }, 750)
+      })
     } catch (error) {
       console.log(error);
-      
     }
     setIsLoading(false);
   }
@@ -94,11 +100,25 @@ const ClientOrders = () => {
       label: 'تم التسليم',
       value: 'finished',
       count: countList.finishedOrders
+    },
+    {
+      label: 'ارقام التتبع',
+      value: 'unsure',
+      count: countList.unsureOrders
     }
   ]
 
   return (
     <div className="container mx-auto py-10 h-64 w-11/12 px-6">
+      <div className='text-end'>
+        <Link to="/add-tracking-numbers">
+          <button
+            className="disabled:bg-slate-400 disabled:text-white-500 group my-1 relative py-2 px-4 border border-transparent w-52 md:w-fit text-xs md:text-sm font-bold rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+          >
+            هل ارسلت بضائع الى مخزننا؟ ارسل ارقام التتبع للشركة
+          </button>
+        </Link>
+      </div>
       <Card>
         <Tabs 
           data={data as any}

@@ -9,9 +9,9 @@ import CustomStepper from "../../components/CustomStepper/CustomStepper";
 import ImageViewer from "../../components/ImageViewer/ImageViewer";
 import InfoDetailsCard from "../../components/InfoDetailsCard/InfoDetailsCard";
 import { defaultColumns, generateDataToListType } from "./generateData";
-import { Accordion, AccordionDetails, AccordionSummary, Avatar, AvatarGroup, Box, CircularProgress, Typography } from "@mui/material";
+import { Accordion, AccordionDetails, AccordionSummary, Alert, AlertColor, Avatar, AvatarGroup, Box, CircularProgress, Snackbar, Typography } from "@mui/material";
 import Badge from "../../components/Badge/Badge";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import api from "../../api";
 import { Package } from "../../models";
 import moment from "moment-timezone";
@@ -32,8 +32,13 @@ const OrderInfoPage = () => {
   const [ activeStep, setActiveStep ] = useState(0);
   const [order, setOrder] = useState<Package>();
   const [isLoading, setIsLoading] = useState(false);
-
+  const [alert, setAlert] = useState({
+    tint: 'success',
+    message: ''
+  });
+  
   let { id: orderId } = useParams();
+  const history = useNavigate();
 
   const fetchOrder = async () => {
     setIsLoading(true);
@@ -46,6 +51,25 @@ const OrderInfoPage = () => {
   useEffect(() => {
     fetchOrder();
   }, [])
+
+  const deleteUnsureOrder = async () => {
+    try {
+      setIsLoading(true);
+      await api.deleteUnsureOrder(orderId as string);
+      setAlert({
+        message: 'تم حذف الطلب بنجاح',
+        tint: 'success'
+      });
+      history('/orders');
+    } catch (error) {
+      console.log(error);
+      setAlert({
+        message: 'حدث خطا اثناء انشاء العملية',
+        tint: 'error'
+      });
+    }
+    setIsLoading(false);
+  }
 
   const steps = generateSteps();
 
@@ -109,11 +133,11 @@ const OrderInfoPage = () => {
     },
     {
       label: 'قيمة الفاتورة',
-      value: `${order.totalInvoice} $`
+      value: `${order?.totalInvoice} $`
     },
     {
       label: 'ديون',
-      value: order.debt.total > 0 ? `${order?.debt.total} ${currencyLabels[order?.debt?.currency]}` : 'لا يوجد'
+      value: order?.debt?.total > 0 ? `${order?.debt?.total} ${currencyLabels[order?.debt?.currency]}` : 'لا يوجد'
     }
   ]
 
@@ -134,6 +158,26 @@ console.log(order);
             description={'هذه طلبية قد تم الغاءها من قبل ادارة الشركة، اذا تظن ان حدث خطا يرجى تواصل مع اقرب مندوب للشركة'}
           />
         </div>
+      }
+
+      {order.unsureOrder &&
+        <Card
+          className="rounded-2xl mb-5 text-end"
+        >
+          <p>
+            بعد ادخالك ارقام التتبع تقوم الشركة بالتتبع هذه ارقام وعندى وصوله الى مخزننا سيتم تحديث الطلبية الى الحالة النشطه
+          </p>
+          <p>
+            اذا لم ترسل بضائع الى مخزننا، او انشأت طلب تتبع الطلبية بالخطأ، يمكنك حذف الطلب عبر زر الحذف ادناه 
+          </p>
+          <button
+            className="disabled:bg-slate-400 disabled:text-white-500 group my-1 relative py-2 px-4 mt-2 border border-transparent w-52 md:w-fit text-xs md:text-sm font-bold rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            onClick={deleteUnsureOrder}
+            disabled={isLoading}
+          >
+            حذف هذه الطلبية
+          </button>
+        </Card>
       }
 
       <Card
@@ -245,6 +289,19 @@ console.log(order);
       <br />
       <br />
       <br />
+      <Snackbar 
+        open={!!alert.message} 
+        autoHideDuration={1500}
+        onClose={() => setAlert({ tint: 'success', message: ''})}
+      >
+        <Alert 
+          severity={alert.tint as AlertColor}
+          onClose={() => setAlert({ tint: 'success', message: ''})}
+          style={{ fontSize: '1.3rem', display: 'flex', alignItems: 'center', gap: '10px' }}
+        >
+          {alert.message}
+        </Alert>
+      </Snackbar>
     </div>
   )
 }

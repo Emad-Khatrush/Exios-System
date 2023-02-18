@@ -145,10 +145,14 @@ export default {
   // Orders Endpoints
   getHomeData: () => base.get(`client/home`),
 
-  getOrdersForUser: (id: string, orderType: OrderStatusType) => base.get(`user/${id}/orders/${orderType}`),
+  getOrdersForUser: (orderType: OrderStatusType) => base.get(`client/orders/${orderType}`),
 
   getOrdersBySearch: (value: string) => base.get(`client/orders/search/${value}`),
 
   getSingleOrder: (orderId: string) => base.get(`client/order/${orderId}`),
+
+  createTrackingNumbers: (trackingNumbers: any[]) => base.post(`client/create/trackingNumber`, trackingNumbers),
+
+  deleteUnsureOrder: (id: string) => base.delete(`client/unsureOrder/${id}/delete`, {}),
 
 }

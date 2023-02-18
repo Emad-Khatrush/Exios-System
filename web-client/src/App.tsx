@@ -14,12 +14,12 @@ import ContactUs from './containers/ContactUs/ContactUs';
 import SettingsPage from './containers/SettingsPage/SettingsPage';
 import { useSelector } from 'react-redux';
 import ResetPasswordPage from './containers/ResetPasswordPage/ResetPasswordPage';
+import AddTrackingNumbers from './containers/AddTrackingNumbers/AddTrackingNumbers';
 
 type Props = {}
 
 const App = (props: Props) => {
   const isLoggedIn = useSelector((state: any) => state.session.isLoggedIn);
-  const account = useSelector((state: any) => state.session.account);
 
   return (
       <Router>
@@ -35,6 +35,7 @@ const App = (props: Props) => {
           <Route element={<PrivateRoute />}>
             <Route path='/home' element={<Home />} />
             <Route path='/start-shipment' element={<StartShipmentPage />} />
+            <Route path='/add-tracking-numbers' element={<AddTrackingNumbers />} />
             <Route path='/address' element={<AddressPage />} />
             <Route path='/prices' element={<PricesPage />} />
             <Route path='/settings' element={<SettingsPage />} />

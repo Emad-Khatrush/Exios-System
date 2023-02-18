@@ -1,12 +1,12 @@
 import Card from '../../components/Card/Card'
 import image from '../../../public/images/exios-logo.png';
 import { FaLock } from 'react-icons/fa';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
-import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useDispatch } from 'react-redux';
 import api from '../../api';
 import AlertInfo from '../../components/AlertInfo/AlertInfo';
 import { apiErrorsTypes } from '../../constants/errorTypes';
-import { useDispatch, useSelector } from 'react-redux';
 import { LOGIN, STATUS_SUCCESS } from '../../constants/actions';
 import { addAuthInterceptor } from '../../utils/AuthInterceptor';
 

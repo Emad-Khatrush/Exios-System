@@ -8,8 +8,6 @@ import Card from "../../components/Card/Card";
 import CurrencyInput from "../../components/CurrencyInput/CurrencyInput";
 import ShipmentPricesText from "./ShipmentPricesText";
 
-type Props = {}
-
 const websites = [
   {
     value: 'alibaba',
@@ -21,7 +19,7 @@ const websites = [
   }
 ]
 
-const PricesPage = (props: Props) => {
+const PricesPage = () => {
   const [ totalInvoice, setTotalInvoice ] = useState<number | string | undefined>(undefined);
   const [ websiteName, setWebsiteName ] = useState<any>({
     value: 'alibaba',

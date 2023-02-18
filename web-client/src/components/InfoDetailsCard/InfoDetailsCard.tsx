@@ -14,7 +14,7 @@ const InfoDetailsCard = (props: Props) => {
   const { title, data } = props;
   return (
     <Card
-      className=' rounded-2xl'
+      className='rounded-2xl'
     >
       <h2 className='text-right text-2xl font-medium mb-7 mt-2'>{title}</h2>
 

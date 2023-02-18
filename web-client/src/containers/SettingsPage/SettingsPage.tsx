@@ -1,3 +1,4 @@
+import { Alert, AlertColor, Snackbar } from '@mui/material';
 import { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateUser } from '../../actions/session';
@@ -8,7 +9,13 @@ import { User } from '../../models';
 const SettingsPage = () => {
   const account: User = useSelector((state: any) => state.session.account);
   const session: any = useSelector((state: any) => state.session);
+
+  const [isLoading, setIsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<User>(account)
+  const [alert, setAlert] = useState({
+    tint: 'success',
+    message: ''
+  });
 
   const dispatch = useDispatch();
   
@@ -21,7 +28,21 @@ const SettingsPage = () => {
 
   const updateUserData = async (event: any) => {
     event.preventDefault();
-    await updateUser(currentUser, session, dispatch);
+    try {
+      setIsLoading(true);
+      await updateUser(currentUser, session, dispatch);
+      setAlert({
+        message: 'تم تحديث معلومات بنجاح',
+        tint: 'success'
+      });
+    } catch (error) {
+      console.log(error);
+      setAlert({
+        message: 'حدث خطا اثناء انشاء العملية',
+        tint: 'error'
+      });
+    }
+    setIsLoading(false);
   }
   
   return (
@@ -91,7 +112,7 @@ const SettingsPage = () => {
                     </div>
                   </div>
                   <div className="bg-gray-50 px-4 py-3 text-right sm:px-6">
-                    <button type="submit" className="inline-flex justify-center rounded-md border border-transparent bg-green-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">حفظ</button>
+                    <button disabled={isLoading} type="submit" className="inline-flex justify-center rounded-md border border-transparent bg-green-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">حفظ</button>
                   </div>
                 </div>
               </form>
@@ -99,6 +120,20 @@ const SettingsPage = () => {
           </div>
         </div>
       </Card>
+
+      <Snackbar 
+        open={!!alert.message} 
+        autoHideDuration={1500}
+        onClose={() => setAlert({ tint: 'success', message: ''})}
+      >
+        <Alert 
+          severity={alert.tint as AlertColor}
+          onClose={() => setAlert({ tint: 'success', message: ''})}
+          style={{ fontSize: '1.3rem', display: 'flex', alignItems: 'center', gap: '10px' }}
+        >
+          {alert.message}
+        </Alert>
+      </Snackbar>
     </div>
   )
 }

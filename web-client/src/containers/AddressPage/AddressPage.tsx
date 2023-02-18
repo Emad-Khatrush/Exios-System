@@ -43,7 +43,7 @@ const AddressPage = (props: Props) => {
           }
           buttonLabel={'ابدا الشحن'}
           disableHoverEffect={true}
-          buttonPath={'/start-shipment?shipmentFromWhere=UAE'}
+          buttonPath={'/start-shipment?shipmentFromWhere=uae'}
         />
 
         <InfoCard 

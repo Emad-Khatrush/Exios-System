@@ -75,3 +75,31 @@ export const libyanCities = [
     code: 'OT'
   }
 ]
+
+export const exiosWorkingCountries = [
+  {
+    label: 'الصين',
+    value: 'china',
+    code: 'CN'
+  },
+  {
+    label: 'الاماارات',
+    value: 'uae',
+    code: 'UAE'
+  },
+  {
+    label: 'امريكا',
+    value: 'usa',
+    code: 'USA'
+  },
+  {
+    label: 'تركيا',
+    value: 'turkey',
+    code: 'TR'
+  },
+  {
+    label: 'بريطانيا',
+    value: 'uk',
+    code: 'UK'
+  }
+]

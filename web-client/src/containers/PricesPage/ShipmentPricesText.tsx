@@ -1,9 +1,6 @@
 import InfoCard from "../../components/InfoCard/InfoCard";
-import { AiFillAlipayCircle } from "react-icons/ai";
 
-type Props = {}
-
-const ShipmentPricesText = (props: Props) => {
+const ShipmentPricesText = () => {
   return (
     <div className="grid gap-4 xl:grid-cols-2 lg:grid-cols-2 mb-5 place-items-center">
       <InfoCard 
@@ -21,7 +18,7 @@ const ShipmentPricesText = (props: Props) => {
         infoList={['شحن الجوي 11 دولار للكيلو الواحد', 'المده من 7-19 يوم من تاريخ وصوله الى مخزن الامارات الى ليبيا']}
         buttonLabel={'ابدا الشحن'}
         disableHoverEffect={true}
-        buttonPath={'/start-shipment?shipmentFromWhere=UAE'}
+        buttonPath={'/start-shipment?shipmentFromWhere=uae'}
       />
 
       <InfoCard 
@@ -30,7 +27,7 @@ const ShipmentPricesText = (props: Props) => {
         infoList={['شحن الجوي 15 دولار للكيلو الواحد', 'المده من 18-30 يوم من تاريخ وصوله الى مخزن الامارات الى ليبيا']}
         buttonLabel={'ابدا الشحن'}
         disableHoverEffect={true}
-        buttonPath={'/start-shipment?shipmentFromWhere=USA'}
+        buttonPath={'/start-shipment?shipmentFromWhere=usa'}
       />
 
       {/* Turkey Text */}

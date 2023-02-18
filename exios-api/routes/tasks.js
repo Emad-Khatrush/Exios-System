@@ -1,7 +1,7 @@
 const express = require('express');
 
 const tasks = require('../controllers/tasks');
-const { protect } = require('../middleware/check-auth');
+const { protect, isAdmin, isEmployee } = require('../middleware/check-auth');
 const multer = require('multer');
 const upload = multer({
       storage: multer.memoryStorage(),
@@ -12,24 +12,24 @@ const upload = multer({
 const router  = express.Router();
 
 router.route('/mytasks')
-      .get(protect, tasks.getMyTasks)
+      .get(protect, isAdmin, isEmployee, tasks.getMyTasks)
 
 router.route('/task/:id')
-      .get(protect, tasks.getTask)
-      .put(protect, tasks.updateTask)
+      .get(protect, isAdmin, isEmployee, tasks.getTask)
+      .put(protect, isAdmin, isEmployee, tasks.updateTask)
 
 router.route('/task/:id/status')
-      .put(protect, tasks.changeTaskStatus)
+      .put(protect, isAdmin, isEmployee, tasks.changeTaskStatus)
 
 router.route('/create/task')
-      .post(protect, upload.array('files'), tasks.createTask)
+      .post(protect, isAdmin, isEmployee, upload.array('files'), tasks.createTask)
 
 router.route('/task/uploadFiles')
-      .post(protect, upload.array('files'), tasks.uploadFiles)
-      .delete(protect, tasks.deleteFile)
+      .post(protect, isAdmin, isEmployee, upload.array('files'), tasks.uploadFiles)
+      .delete(protect, isAdmin, isEmployee, tasks.deleteFile)
 
 router.route('/task/:id/comments')
-      .get(protect, tasks.getComments)
-      .post(protect, tasks.createComment)
+      .get(protect, isAdmin, isEmployee, tasks.getComments)
+      .post(protect, isAdmin, isEmployee, tasks.createComment)
 
 module.exports = router;

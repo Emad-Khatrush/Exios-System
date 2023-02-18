@@ -4,6 +4,7 @@ import Delivery from "../../../public/images/trolley.png";
 import { isMobile } from "react-device-detect";
 import { useSearchParams } from "react-router-dom";
 import { useEffect } from "react";
+import { exiosWorkingCountries, libyanCities } from "../../constants/info";
 
 type Props = {
   shipFromChange: (value: string) => void
@@ -17,6 +18,7 @@ const ShipFromTo = (props: Props) => {
   useEffect(() => {
     props.shipFromChange(shipmentFromWhere || '');
   }, [shipmentFromWhere]);
+  console.log(shipmentFromWhere);
   
   return (
     <div className={`flex justify-center items-center my-10 ${isMobile ? 'flex-col' : ''}`}>
@@ -28,11 +30,9 @@ const ShipFromTo = (props: Props) => {
         <p className="text-md text-gray-500 mb-3">من اي دولة تريد شحن بضائعك منه</p>
         <select name="fromCountry" id="fromCountry" onChange={(e) => props.shipFromChange(e.target.value)} defaultValue={shipmentFromWhere || ''}>
           <option disabled selected value={''}>اختار الدولة</option>
-          <option value="china">الصين</option>
-          <option value="UAE">الامارات</option>
-          <option value="USA">امريكا</option>
-          <option value="UK">بريطانيا</option>
-          <option value="turkey">تركيا</option>
+          {exiosWorkingCountries.map(country => (
+            <option value={country.value}>{country.label}</option>
+          ))}
         </select>
       </Card>
       
@@ -46,12 +46,9 @@ const ShipFromTo = (props: Props) => {
         <p className="text-md text-gray-500 mb-3">اي مدينة تريد استلام بضائعك في ليبيا</p>
         <select name="fromCountry" id="fromCountry" onChange={(e) => props.shipToChange(e.target.value)}>
           <option disabled selected>اختار المدينة</option>
-          <option value="tripoli">طرابلس</option>
-          <option value="benghazi">بنغازي</option>
-          <option value="">مصراتة</option>
-          <option value="">زليتن</option>
-          <option value="">الزاوية</option>
-          <option value="">زليتن</option>
+          {libyanCities.map(city => (
+            <option value={city.value}>{city.label}</option>
+          ))}
         </select>
       </Card>
     </div>
