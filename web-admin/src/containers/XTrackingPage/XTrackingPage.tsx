@@ -198,7 +198,7 @@ class XTrackingPage extends Component<Props, State> {
                   <CircularProgress />
                 </div>
               }
-  
+
               {filteredList?.length <= 0 && !listData.listStatus.isLoading &&
                 <p className="text-center"> No orders found </p>
               }
