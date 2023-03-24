@@ -1,6 +1,6 @@
 import { MdLineStyle, MdOutlineInput } from 'react-icons/md';
 import { FaFileInvoice, FaArchive, FaTasks } from 'react-icons/fa';
-import { FiPackage } from 'react-icons/fi';
+import { FiPackage, FiSettings } from 'react-icons/fi';
 import { HiDocumentReport } from 'react-icons/hi';
 import { RiBillFill } from 'react-icons/ri';
 
@@ -44,6 +44,11 @@ const adminRoutes = [
       title: 'My Tasks',
       path: '/mytasks',
       icon: <FaTasks className="sidebar-icon" />,
+     },
+     {
+      title: 'Settings',
+      path: '/settings',
+      icon: <FiSettings className="sidebar-icon" />,
      }
  ];
 
@@ -77,6 +82,11 @@ const adminRoutes = [
       title: 'My Tasks',
       path: '/mytasks',
       icon: <FaTasks className="sidebar-icon" />,
+     },
+     {
+      title: 'Settings',
+      path: '/settings',
+      icon: <FiSettings className="sidebar-icon" />,
      }
  ];
 

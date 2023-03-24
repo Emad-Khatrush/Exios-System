@@ -84,7 +84,6 @@ export class EditTask extends Component<Props, State> {
       this.setState({ isUpdating: true });
       await api.fetchFormData('task/uploadFiles', 'POST', data);
       const res = await api.get('task/' + String(this.props.router.params.id));
-      console.log(res);
       
       this.setState({
         form: res.data,
