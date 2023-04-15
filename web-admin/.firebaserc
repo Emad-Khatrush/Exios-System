@@ -1,7 +1,9 @@
 {
   "projects": {
     "default": "exios-admin-frontend",
-    "exios-admin-qa": "exios-admin-qa"
+    "exios-admin-qa": "exios-admin-qa",
+    "ad": "exios-admin-frontend"
   },
-  "targets": {}
+  "targets": {},
+  "etags": {}
 }
