@@ -53,10 +53,30 @@ export type Invoice = {
   updatedAt: Date
 }
 
+export type ShipmentPrice = {
+  country: string
+  createdAt: string
+  currency: string
+  _id: string
+  shippingType: 'air' | 'sea'
+}
+
+export type ExchangeRate = {
+  fromCurrency: 'usd' | 'lyd'
+  toCurrency: 'usd' | 'lyd'
+  rate: number
+  createdAt: string
+  _id: string
+}
+
 export type User = {
   createdAt: Date
   firstName: string
   lastName: string
+  phone: number
+  city: string
+  isCanceled: boolean
+  isAgreeToTermsOfCompany: boolean
   imgUrl: string
   customerId: string
   orders: any[]

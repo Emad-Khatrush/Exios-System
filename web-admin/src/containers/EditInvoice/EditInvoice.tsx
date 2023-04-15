@@ -111,6 +111,9 @@ export class EditInvoice extends Component<Props, State> {
         received: false,
       },
       note: '',
+      settings: {
+        visableForClient: true
+      },
       deliveredPackages: {
         trackingNumber: '',
         arrivedAt: new Date(),
@@ -208,20 +211,24 @@ export class EditInvoice extends Component<Props, State> {
           netIncome
         }
       }))
-    } else if (['trackingNumber', 'packageWeight', 'measureUnit', 'originPrice', 'exiosPrice', 'receivedShipmentLYDPackage', 'receivedShipmentUSDPackage', 'arrivedAt'].includes(name)) {      
+    } else if (['trackingNumber', 'packageWeight', 'measureUnit', 'originPrice', 'exiosPrice', 'receivedShipmentLYDPackage', 'receivedShipmentUSDPackage', 'arrivedAt', 'visableForClient', 'shipmentMethod'].includes(name)) {      
       const fieldName = formatInvoiceFields(name);
-      const fieldId = child ? Number(child.props.id) : id; 
-     
+      const fieldId = child ? Number(child.props.id) : id;      
       let paymentList: any = [...this.state.paymentList!];
+      console.log(fieldId);
+
       
       if (fieldName === 'weight') {
         paymentList[fieldId]['deliveredPackages']['weight'].total = value;
       } else if (fieldName === 'measureUnit') {        
         paymentList[fieldId]['deliveredPackages']['weight'].measureUnit = value;
+      } else if (fieldName === 'visableForClient') {
+        paymentList[fieldId]['settings'].visableForClient = value;        
       } else {
         paymentList[fieldId]['deliveredPackages'][fieldName] = value;
       }
-
+      console.log(paymentList);
+      
       this.setState((oldValues) => ({
         changedFields: {
           ...oldValues.changedFields,
@@ -286,6 +293,30 @@ export class EditInvoice extends Component<Props, State> {
           resMessage: err.message
         })
       })
+  }
+
+  deleteFileOfLink = async (file: any, paymentListId: string) => {
+    this.setState({ isUpdating: true });  
+    try {
+      const res = await api.delete('order/upload/fileLink', { filename: file.filename, id: String(this.props.router.params.id), paymentListId });
+      
+      this.setState({
+        formData: res.data,
+        paymentList: res.data.paymentList,
+        isFinished: true,
+        isUpdating: false,
+        resMessage: 'Image has been deleted successfully'
+      })
+
+      return res.data.paymentList.find(((link: any) => link?._id === paymentListId))?.images;
+    } catch (error: any) {
+      this.setState({
+        isError: true,
+        isUpdating: false,
+        resMessage: error.message
+      })
+      return this.state.paymentList.find(((link: any) => link?._id === paymentListId))?.images;
+    }
   }
 
   fileUploaderHandler = async (event: any, type: string) => {
@@ -444,6 +475,57 @@ export class EditInvoice extends Component<Props, State> {
           resMessage: err.data.message
         })
       })
+  }
+
+  uploadFilesToLinks = async (event: any) => {
+    const files = event.target.files;
+
+    const newFiles: any = [];
+    
+    for (const file of files) {
+      newFiles.unshift(file)
+    }
+
+    // upload it in the google could
+    const data = new FormData()
+    if (newFiles) {
+      newFiles.forEach((file: any) => {
+        data.append('files', file);
+      });
+    }
+    data.append('id', String(this.props.router.params.id));
+    data.append('paymentListId', event.target.id);
+    this.setState({ isUpdating: true });
+
+    try {
+      await api.fetchFormData('order/upload/fileLink', 'POST', data);
+      const res = await api.get('order/' + String(this.props.router.params.id));
+      this.setState({
+        formData: res.data,
+        paymentList: res.data.paymentList,
+        isFinished: true,
+        isUpdating: false,
+        resMessage: 'Images has been updated successfully.'
+      })
+      
+      return res.data.paymentList.find(((link: any) => link._id === event.target.id)).images;
+    } catch (error: any) {
+      this.setState({
+        isFinished: true,
+        isUpdating: false,
+        isError: true,
+        resMessage: error.data.message
+      })
+      return [];
+    }
+  }
+
+  displayAlert = (alert: { type: 'error' | 'success', message: string }) => {
+    this.setState({
+      isFinished: true,
+      isError: alert.type === 'error',
+      resMessage: alert.message
+    })
   }
 
   render() {
@@ -702,6 +784,9 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
                     handleChange={this.handleChange}
                     paymentList={this.state.paymentList}
                     addNewPaymentField={this.addNewPaymentField}
+                    fileUploaderHandler={this.uploadFilesToLinks}
+                    displayAlert={this.displayAlert}
+                    deleteFileOfLink={this.deleteFileOfLink}
                     deteteRow={this.deteteRow}
                     invoice={formData || null}
                     isEmployee={this.props.isEmployee}
@@ -722,7 +807,7 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
           </div>
         </div>
         <Backdrop
-          sx={{ color: '#fff', zIndex: (theme: any) => theme.zIndex.drawer + 1 }}
+          sx={{ color: '#fff', zIndex: (theme: any) => theme.zIndex.drawer + 1000 }}
           open={isUpdating}
         >
           <CircularProgress color="inherit" />

@@ -33,6 +33,8 @@ type State = {
   formData: any
   paymentList: any
   showResponseMessage: boolean
+  alertMessage: string
+  isError: boolean
 }
 
 const breadcrumbs = [
@@ -72,7 +74,9 @@ class AddInvoice extends Component<Props, State> {
         originPrice: null
       }
     }],
-    showResponseMessage: false
+    showResponseMessage: false,
+    alertMessage: '',
+    isError: false
   }
 
   componentDidMount() {
@@ -148,7 +152,7 @@ class AddInvoice extends Component<Props, State> {
       paymentList[event.target.id][fieldName] = fieldName ===  'paymentLink' || fieldName ===  'note' ? event.target.value : !inputValue;
       
       this.setState({ paymentList });
-    } else if (['trackingNumber', 'packageWeight', 'measureUnit', 'originPrice', 'exiosPrice', 'receivedShipmentLYDPackage', 'receivedShipmentUSDPackage', 'arrivedAt'].includes(fieldName)) {
+    } else if (['trackingNumber', 'packageWeight', 'measureUnit', 'originPrice', 'exiosPrice', 'receivedShipmentLYDPackage', 'receivedShipmentUSDPackage', 'arrivedAt', 'shipmentMethod'].includes(fieldName)) {
       
       const convertToApiFieldName = formatInvoiceFields(fieldName);
       const id = child ? Number(child.props.id) : event.target.id;
@@ -233,11 +237,20 @@ class AddInvoice extends Component<Props, State> {
     this.setState({ showResponseMessage: true })
   };
 
+  displayAlert = (alert: { type: 'error' | 'success', message: string }) => {
+    this.setState({
+      showResponseMessage: true,
+      isError: alert.type === 'error',
+      alertMessage: alert.message
+    })
+  }
+
   render() {
     const { employees } = this.state;
     const { invoice, isEmployee } = this.props;
     const invoiceFileRef = React.createRef();
     const receiptsFileRef = React.createRef();    
+    console.log(this.state);
     
     return (
       <div className="m-4">
@@ -284,6 +297,7 @@ class AddInvoice extends Component<Props, State> {
                   handleChange={this.handleChange}
                   paymentList={this.state.paymentList}
                   addNewPaymentField={this.addNewPaymentField}
+                  displayAlert={this.displayAlert}
                   deteteRow={this.deteteRow}
                   isEmployee={isEmployee}
                   employees={employees}
@@ -311,14 +325,14 @@ class AddInvoice extends Component<Props, State> {
         <Snackbar 
           open={invoice.listStatus.isLoading ? false : this.state.showResponseMessage} 
           autoHideDuration={6000}
-          onClose={() => this.setState({ showResponseMessage: false })}
+          onClose={() => this.setState({ showResponseMessage: false, alertMessage: '' })}
         >
           <Alert 
-            severity={invoice.listStatus.isSuccess ? 'success' : 'error'}
+            severity={(invoice.listStatus.isSuccess || !this.state.isError) ? 'success' : 'error'}
             sx={{ width: '100%' }}
-            onClose={() => this.setState({ showResponseMessage: false })}
+            onClose={() => this.setState({ showResponseMessage: false, alertMessage: '' })}
           >
-            {invoice.listStatus.message}
+            {invoice.listStatus.message || this.state.alertMessage}
           </Alert>
         </Snackbar>
       </div>

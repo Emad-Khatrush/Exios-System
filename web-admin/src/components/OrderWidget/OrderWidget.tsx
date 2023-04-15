@@ -105,6 +105,11 @@ const OrderWidget = (props: Props) => {
                 style={{ marginRight: '10px' }}
               />
               <BoxText 
+                firstText={order.user?.customerId}
+                secondText='Customer ID'
+                style={{ marginRight: '10px' }}
+              />
+              <BoxText 
                 firstText={order.productName}
                 secondText='Details'
                 style={{ marginRight: '10px' }}

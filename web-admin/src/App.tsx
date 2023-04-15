@@ -10,6 +10,10 @@ import { Session } from './models';
 
 import './App.scss';
 import EditTask from './containers/EditTask/EditTask';
+import Settings from './containers/Settings/Settings';
+
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
 
 const Home = React.lazy(() => import('./containers/Home/Home'));
 const EmployeeHomePage = React.lazy(() => import('./containers/EmployeeHomePage/EmployeeHomePage'));
@@ -33,6 +37,16 @@ type MyProps = {
   session: Session
 }
 
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_ANALYTICS_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: "exios-admin-frontend",
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGE_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
+};
+
 const getRoutesByRole = (roles: any) => {
   if (roles?.isEmployee) {
     return <>
@@ -47,6 +61,7 @@ const getRoutesByRole = (roles: any) => {
       <Route path='/mytasks' element={<MyTasks />} />
       <Route path='/task/add' element={<CreateTask />} />
       <Route path='/task/:id/edit' element={<EditTask />} />
+      <Route path='/settings' element={<Settings />} />
     </>
   } else if (roles?.isAdmin) {
     return <>
@@ -67,6 +82,7 @@ const getRoutesByRole = (roles: any) => {
       <Route path='/mytasks' element={<MyTasks />} />
       <Route path='/task/add' element={<CreateTask />} />
       <Route path='/task/:id/edit' element={<EditTask />} />
+      <Route path='/settings' element={<Settings />} />
     </>
   }
 }
@@ -77,20 +93,23 @@ class App extends React.Component<MyProps> {
     const { session } = this.props;
     
     const routes = getRoutesByRole(session?.account?.roles);
-    
-      return (
-          <Router>
-            <AuthChecker />
-            <Routes>
-              <Route path='/shouldAllowToAccessApp' element={<AllowToAccessApp session={session} />} />
-              <Route path='/login' element={<Login />} />;
-              <Route element={<PrivateRoute session={session} />}>
-                {routes}
-              <Route path='*' element={<Navigate to='/' />} />;
-              </Route>
-            </Routes>
-          </Router>
-      );
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    getAnalytics(app);
+
+    return (
+        <Router>
+          <AuthChecker />
+          <Routes>
+            <Route path='/shouldAllowToAccessApp' element={<AllowToAccessApp session={session} />} />
+            <Route path='/login' element={<Login />} />;
+            <Route element={<PrivateRoute session={session} />}>
+              {routes}
+            <Route path='*' element={<Navigate to='/' />} />;
+            </Route>
+          </Routes>
+        </Router>
+    );
   }
 }
 
