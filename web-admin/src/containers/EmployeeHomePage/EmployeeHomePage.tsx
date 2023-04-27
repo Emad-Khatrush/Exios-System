@@ -30,13 +30,15 @@ class EmployeeHomePage extends React.Component<Props, State> {
   async componentDidMount() {
     try {
       this.setState({ isLoading: true });
-      const homeResponse = await api.get('employeeHome');
+      const homeResponse = await api.get(`employeeHome?office=${this.props.session?.account.city || 'tripoli'}`);
+
       const expensesResponse = await api.get('expenses?office=tripoli');
       this.setState({ HomeData: homeResponse.data, expenses: expensesResponse.data, isLoading: false });
     } catch (error) {
       console.log(error);
     }
   }
+
   render() {
 
     if (!this.state.isLoading && !this.state.HomeData) {

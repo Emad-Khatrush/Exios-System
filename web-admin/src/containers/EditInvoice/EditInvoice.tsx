@@ -1,6 +1,6 @@
 import { connect } from 'react-redux'
 import React, { Component } from 'react'
-import { Alert, Autocomplete, Backdrop, Breadcrumbs, Button, ButtonGroup, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Link, Snackbar, Switch, TextField, Typography } from '@mui/material'
+import { Alert, Autocomplete, Backdrop, Breadcrumbs, Button, ButtonGroup, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link, Snackbar, Switch, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import Card from '../../components/Card/Card'
 import ImageUploader from '../../components/ImageUploader/ImageUploader'
 import InvoiceForm from '../../components/InvoiceForm/InvoiceForm'
@@ -41,6 +41,8 @@ type State = {
   isCancelOrderDialogOpen: boolean
   cancelationReason: string
   shippingLabelDialogOpen: boolean
+  shippingMethodForLabel: 'air' | 'sea'
+  inspectionCheckbox: boolean
 }
 
 const breadcrumbs = [
@@ -87,14 +89,16 @@ export class EditInvoice extends Component<Props, State> {
     shouldVerifyQrCode: false,
     isCancelOrderDialogOpen: false,
     cancelationReason: '',
-    shippingLabelDialogOpen: false
+    shippingLabelDialogOpen: false,
+    shippingMethodForLabel: 'air',
+    inspectionCheckbox: false
   }
 
   async componentDidMount() {
     try {
       const order = (await api.get(`order/${this.props.router.params.id}`)).data;
       const employees = (await api.get(`employees`)).data?.results;
-      this.setState({ formData: order, paymentList: order?.paymentList, employees, isInvoicePending: false })
+      this.setState({ formData: order, paymentList: order?.paymentList, employees, isInvoicePending: false, shippingMethodForLabel: order.shipment.method })
     } catch (error) {
       console.log(error);
     }
@@ -851,17 +855,44 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
 
         <Dialog open={shippingLabelDialogOpen} onClose={() => this.setState({ shippingLabelDialogOpen: false })}>
           <DialogContent>
-            <div style={{ background: 'white', textAlign: 'center', border: '2px solid black', width: '400px', height: '460px' }} id='test222'>
-              <div style={{ border: '2px solid black' }} className="p-3">
-                <img src="/images/exios-logo.png" alt="Exios" width={160} height={90} />
-              </div>
-              <div style={{ border: '2px solid black' }} className="p-3">
-                <QRCode value={`http://exios-admin-frontend.web.app/shouldAllowToAccessApp?id=${formData?._id}`} />
-              </div>
-              <div style={{ border: '2px solid black' }} className="p-3">
-                <p> <strong>Customer ID:</strong> {formData?.orderId} </p>
-                <p> <strong>Shipment Method:</strong> {formData?.shipment?.method} </p>
-              </div>
+            <div>
+              <ToggleButtonGroup
+                color="success"
+                value={this.state.shippingMethodForLabel}
+                exclusive
+                onChange={(event: any, value: 'air' | 'sea') => this.setState({ shippingMethodForLabel: value }) }
+                size="small"
+              >
+                <ToggleButton value="air">Air</ToggleButton>
+                <ToggleButton value="sea">Sea</ToggleButton>
+              </ToggleButtonGroup>
+
+              <FormControlLabel 
+                style={{ marginLeft: '5px' }} 
+                label="Inspection Required" 
+                control={
+                  <Checkbox 
+                    defaultChecked={this.state.inspectionCheckbox}
+                    onChange={(e: any) => this.setState({ inspectionCheckbox: e.target.checked })}
+                  />
+                } 
+              />
+
+              <div style={{ background: 'white', textAlign: 'center', border: '2px solid black', width: '400px', height: '460px' }} id='test222'>
+                <div style={{ border: '2px solid black' }} className="p-3">
+                  <img src="/images/exios-logo.png" alt="Exios" width={160} height={90} />
+                </div>
+                <div style={{ border: '2px solid black' }} className="p-3">
+                  <QRCode value={`http://exios-admin-frontend.web.app/shouldAllowToAccessApp?id=${formData?._id}`} />
+                </div>
+                <div style={{ border: '2px solid black' }} className="p-3">
+                  <p> <strong>Customer ID:</strong> {formData?.orderId} </p>
+                  <p className={this.state.inspectionCheckbox ? 'mb-1' : ''}> <strong>Shipment Method:</strong> {this.state.shippingMethodForLabel} </p>
+                  {this.state.inspectionCheckbox && 
+                    <p className='mt-0' style={{ color: 'red' }}>Inspection Required</p>
+                  }
+                </div>
+              </div>  
             </div>
           </DialogContent>
           <DialogActions>

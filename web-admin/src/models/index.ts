@@ -234,5 +234,6 @@ export type Account = {
     isAdmin: boolean,
     isEmployee: boolean,
     isClient: boolean,
-  }
+  },
+  city: string
 }

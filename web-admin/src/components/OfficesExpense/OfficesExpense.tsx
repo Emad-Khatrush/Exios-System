@@ -14,7 +14,7 @@ type Props = {
 }
 
 const OfficesExpense = (props: Props) => {
-  const [ currentOffice, setCurrentOffice ] = useState('tripoli');
+  const [ currentOffice, setCurrentOffice ] = useState(props.account?.city || 'tripoli');
 
   const office = props.offices.find((data: Office) => data.office === currentOffice);
 
