@@ -570,6 +570,8 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
 يرجى التواصل مع اقرب مندوب لك او زيارة مقر الشركة للاستلام
 تحياتي لكم
     `;
+
+    const activities = (formData.activity || []).sort((a: any, b: any) => (new Date(b.createdAt) as any) - (new Date(a.createdAt) as any))
     
     return (
       <div className="m-4 edit-invoice">
@@ -769,6 +771,24 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
                 >
                 </textarea>
               </div>
+
+              <Card>
+                <h5 className='mb-3'> Activities </h5>
+                
+                {activities.length > 0 ? activities.map((data: OrderActivity) => (
+                  <>
+                    <div className="d-flex gap-3 overflow-auto" style={{ direction: 'rtl' }}>
+                      <p>{moment(data.createdAt).format('DD/MM/YYYY')}</p>
+                      <p>{data.country}</p>
+                      <p>{data.description}</p>
+                    </div>
+                    <hr style={{ color: '#a1a1a1', height: '1px' }} />
+                  </>
+                ))
+                :
+                <p>No activity found</p>
+                }
+              </Card>
 
             </div>
 
