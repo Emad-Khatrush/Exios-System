@@ -182,6 +182,7 @@ export type HomeData = {
     currency: string
   }[],
   debts: Invoice[]
+  clientUsersCount: number
 }
 
 export type Expense = {

@@ -1,5 +1,5 @@
 import React from "react";
-import { FaBoxOpen, FaEye, FaMoneyBillWave } from "react-icons/fa";
+import { FaBoxOpen, FaMoneyBillWave } from "react-icons/fa";
 import EarningWidget from "../../components/EarningWidget/EarningWidget";
 import InfoWidget from "../../components/InfoWidget/InfoWidget";
 import OfficesExpense from "../../components/OfficesExpense/OfficesExpense";
@@ -8,9 +8,10 @@ import { CircularProgress } from "@mui/material";
 import { connect } from "react-redux";
 
 import api from "../../api";
+import { AiOutlineUserAdd } from "react-icons/ai";
 
 type State = {
-  HomeData: HomeData | null
+  homeData: HomeData | null
 }
 
 type Props = {
@@ -20,16 +21,16 @@ type Props = {
 class Home extends React.Component<Props, State> {
 
   state: State = {
-    HomeData: null
+    homeData: null
   }
 
   async componentDidMount() {
     const { data } = await api.get('home');
-    this.setState({ HomeData: data });
+    this.setState({ homeData: data });
   }
   render() {
 
-    if (!this.state.HomeData) {
+    if (!this.state.homeData) {
       return <CircularProgress />
     }    
       
@@ -37,26 +38,26 @@ class Home extends React.Component<Props, State> {
       <div className="m-3">
         <div className="row">
             <div className="col-md-4">
-              <InfoWidget title="Active Orders" value={`${this.state.HomeData.activeOrdersCount}`} icon={<FaBoxOpen />} />
+              <InfoWidget title="Active Orders" value={`${this.state.homeData.activeOrdersCount}`} icon={<FaBoxOpen />} />
             </div>
             <div className="col-md-4">
-              <InfoWidget title="Total Invoices" value={`$${this.state.HomeData.totalInvoices}`} icon={<FaMoneyBillWave />} />
+              <InfoWidget title="Total Invoices" value={`$${this.state.homeData.totalInvoices}`} icon={<FaMoneyBillWave />} />
             </div>
             <div className="col-md-4">
-              <InfoWidget title="Website Views" value="3540" icon={<FaEye />} />
+              <InfoWidget title="Client Users" value={`${this.state.homeData.clientUsersCount}`} icon={<AiOutlineUserAdd />} />
             </div>
         </div>
           
         <div className="row">
             <div className="col-md-5">
               <EarningWidget 
-                earingData={this.state.HomeData}
+                earingData={this.state.homeData}
               />
             </div>
             <div className="col-md-7">
               <OfficesExpense 
-                offices={this.state.HomeData.offices}
-                debts={this.state.HomeData.debts}
+                offices={this.state.homeData.offices}
+                debts={this.state.homeData.debts}
                 account={this.props.session?.account}
               />
             </div>
