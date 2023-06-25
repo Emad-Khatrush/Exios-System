@@ -364,7 +364,7 @@ const InvoiceForm = (props: Props) => {
 
         <div className="col-md-12 mb-4">
           <textarea 
-            style={{ height: '100px' }} 
+            rows={5}
             placeholder='Order Note...' 
             className='form-control' 
             name={'orderNote'} 
