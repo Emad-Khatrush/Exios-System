@@ -70,9 +70,9 @@ class Shippings extends Component<Props, State> {
 
     if (dateFilterValue && dateFilterValue[0] && dateFilterValue[1]) {     
       filteredList = list.filter(order => {
-        const dataDate = moment(order.paymentList.deliveredPackages?.arrivedAt).format('MM-DD-YYYY');
-        const startDate = moment(dateFilterValue[0]).format('MM-DD-YYYY');
-        const endDate = moment(dateFilterValue[1]).format('MM-DD-YYYY');
+        const dataDate = moment(order.paymentList.deliveredPackages?.arrivedAt);
+        const startDate = moment(dateFilterValue[0]);
+        const endDate = moment(dateFilterValue[1]);
         return (startDate <= dataDate && dataDate <= endDate);
       })
     }
