@@ -73,7 +73,7 @@ class Shippings extends Component<Props, State> {
         const dataDate = moment(order.paymentList.deliveredPackages?.arrivedAt).format('MM-DD-YYYY');
         const startDate = moment(dateFilterValue[0]).format('MM-DD-YYYY');
         const endDate = moment(dateFilterValue[1]).format('MM-DD-YYYY');
-        return (startDate <= dataDate && dataDate <= endDate) && order.paymentList.status.arrived;
+        return (startDate <= dataDate && dataDate <= endDate);
       })
     }
 
