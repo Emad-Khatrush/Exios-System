@@ -49,11 +49,13 @@ class Home extends React.Component<Props, State> {
         </div>
           
         <div className="row">
+          {['62af31fcaf74074f4a4a0f61', '62c1e22a2ffce24ae343cc23'].includes(this.props.session?.account._id) &&
             <div className="col-md-5">
               <EarningWidget 
                 earingData={this.state.homeData}
               />
             </div>
+          }
             <div className="col-md-7">
               <OfficesExpense 
                 offices={this.state.homeData.offices}
