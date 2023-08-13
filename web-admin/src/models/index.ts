@@ -48,6 +48,10 @@ export type Invoice = {
     currency: string,
     total: number,
   },
+  credit: {
+    currency: string,
+    total: number,
+  },
   paymentList: Package[],
   createdAt: Date,
   updatedAt: Date
@@ -182,6 +186,7 @@ export type HomeData = {
     currency: string
   }[],
   debts: Invoice[]
+  credits: Invoice[]
   clientUsersCount: number
 }
 

@@ -250,7 +250,6 @@ class AddInvoice extends Component<Props, State> {
     const { invoice, isEmployee } = this.props;
     const invoiceFileRef = React.createRef();
     const receiptsFileRef = React.createRef();    
-    console.log(this.state);
     
     return (
       <div className="m-4">

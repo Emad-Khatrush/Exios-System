@@ -10,6 +10,7 @@ import './OfficesExpense.scss';
 type Props = {
   offices: Office[]
   debts: Invoice[]
+  credits: Invoice[]
   account?: Account
 }
 
@@ -29,6 +30,17 @@ const OfficesExpense = (props: Props) => {
     return invoice.placedAt === currentOffice;
   });
 
+  let totalCreditUsd = 0;
+  let totalCreditLyd = 0;
+  const credits = props.credits.filter((invoice: Invoice) => {
+    if (invoice.credit.currency === 'USD' && invoice.placedAt === currentOffice) {
+      totalCreditUsd += invoice.credit.total;
+    } else if (invoice.credit.currency === 'LYD' && invoice.placedAt === currentOffice) {
+      totalCreditLyd += invoice.credit.total;
+    }
+    return invoice.placedAt === currentOffice;
+  });
+
   const hasTotalDebtToDisplay = totalUsd > 0 || totalLyd > 0;
   const hasDebts = debts.length > 0;
   const totalDebts = [
@@ -39,6 +51,19 @@ const OfficesExpense = (props: Props) => {
     {
       currency: 'LYD',
       total: totalLyd
+    }
+  ]
+
+  const hasTotalCreditsToDisplay = totalCreditUsd > 0 || totalCreditLyd > 0;
+  const hasCredits = credits.length > 0;
+  const totalCredits = [
+    {
+      currency: 'USD',
+      total: totalCreditUsd
+    },
+    {
+      currency: 'LYD',
+      total: totalCreditLyd
     }
   ]  
   
@@ -79,6 +104,7 @@ const OfficesExpense = (props: Props) => {
             {debts.map((invoice: Invoice) => (
               <div className='d-flex justify-content-between mb-2 debts'>
                 <div className='d-flex gap-4'>
+                  <p>{invoice.user?.customerId}</p>
                   <Link style={{ textDecoration: 'none' }} to={`/invoice/${invoice._id}/edit`}>{invoice.orderId}</Link>
                   <p></p>
                   <p>{invoice.customerInfo.fullName}</p>
@@ -86,7 +112,7 @@ const OfficesExpense = (props: Props) => {
                 <p style={{ color: '#f53d3d' }}>{invoice.debt.total} {invoice.debt.currency}</p>
               </div>
             ))}
-            <hr />
+            <br />
             {hasTotalDebtToDisplay && 
               <div className='mb-2'>
                 {totalDebts.map(debt => {
@@ -103,6 +129,40 @@ const OfficesExpense = (props: Props) => {
             }
           </div>
         }
+
+        {hasCredits &&
+          <div>
+            <hr />
+            <h6> Credits </h6>
+            {credits.map((invoice: Invoice) => (
+              <div className='d-flex justify-content-between mb-2 debts'>
+                <div className='d-flex gap-4'>
+                  <p>{invoice.user?.customerId}</p>
+                  <Link style={{ textDecoration: 'none' }} to={`/invoice/${invoice._id}/edit`}>{invoice.orderId}</Link>
+                  <p></p>
+                  <p>{invoice.customerInfo.fullName}</p>
+                </div>
+                <p style={{ color: '#17d310' }}>{invoice.credit.total} {invoice.credit.currency}</p>
+              </div>
+            ))}
+            <br />
+            {hasTotalCreditsToDisplay && 
+              <div className='mb-2'>
+                {totalCredits.map(credit => {
+                  // eslint-disable-next-line array-callback-return
+                  if (credit.total <= 0) return;
+                  return (
+                    <div className='d-flex justify-content-between'>
+                      <p>Total Credits of {credit.currency}</p>
+                      <p style={{ color: '#17d310' }}>{credit.total} {credit.currency}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            }
+          </div>
+        }
+
         {props.account?.roles.isAdmin &&
           <CustomButton href='/expenses' background='rgb(0, 171, 85)' size='small'>
             Check All Expenses

@@ -56,6 +56,11 @@ const InvoiceForm = (props: Props) => {
     total: 0,
     currency: ''
   });
+
+  const [ credit, setCredit ] = useState<{total: number, currency: string}>({
+    total: 0,
+    currency: ''
+  });
   
   const [ confirmRemoveLinkModal, setConfirmRemoveLinkModal ] = useState(false);
   const [ invoice, setInvoice ] = useState<Invoice | undefined>(props.invoice);
@@ -343,6 +348,60 @@ const InvoiceForm = (props: Props) => {
                 onChange={(event) => {
                   setDebt({
                     ...debt,
+                    currency: String(event.target.value)
+                  })
+                  return props.handleChange(event);
+                }}
+                disabled={invoice?.isCanceled}
+              >
+                <MenuItem value={'USD'}>
+                  <em> USD </em>
+                </MenuItem>
+                <MenuItem value={'LYD'}>
+                  <em> LYD </em>
+                </MenuItem>
+                <MenuItem value={'TRY'}>
+                  <em> TRY </em>
+                </MenuItem>
+              </Select>
+            </FormControl>
+        </div>
+
+        <div className="d-flex col-md-6 mb-4">
+          <TextField
+              className='connect-field-right'
+              id={'outlined-helperText'}
+              name="credit"
+              type={'number'}
+              inputProps={{ inputMode: 'numeric' }}
+              label={'Credit'}
+              required={!!credit.currency}
+              onChange={(event) => {
+                setCredit({
+                  ...credit,
+                  total: Number(event.target.value)
+                })
+                props.handleChange(event);
+              }}
+              defaultValue={invoice?.credit?.total}
+              onWheel={(event: any) => event.target.blur()}
+              disabled={invoice?.isCanceled}
+            />
+            <FormControl 
+              required={credit.total > 0 ? true : false} 
+              style={{ width: '100%' }}
+            >
+              <InputLabel id="demo-select-small">Currency</InputLabel>
+              <Select
+                className='connect-field-left'
+                labelId={'currency'}
+                id={'creditCurrency'}
+                defaultValue={invoice?.credit?.currency}
+                label={'Currency'}
+                name="creditCurrency"
+                onChange={(event) => {
+                  setCredit({
+                    ...credit,
                     currency: String(event.target.value)
                   })
                   return props.handleChange(event);

@@ -200,6 +200,16 @@ export class EditInvoice extends Component<Props, State> {
           }
         }
       }))
+    } else if (name === 'credit' || name === 'creditCurrency') {
+      this.setState((oldValues) => ({
+        changedFields: {
+          ...oldValues.changedFields,
+          credit: {
+            ...oldValues.changedFields?.credit,
+            [name === 'credit' ? 'total' : name]: value
+          }
+        }
+      }))
     } else if (name === 'netIncome') {
       const netIncome = [...this.state.formData.netIncome];
       // modify the payment income of the invoice

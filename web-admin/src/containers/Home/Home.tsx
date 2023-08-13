@@ -60,6 +60,7 @@ class Home extends React.Component<Props, State> {
               <OfficesExpense 
                 offices={this.state.homeData.offices}
                 debts={this.state.homeData.debts}
+                credits={this.state.homeData.credits}
                 account={this.props.session?.account}
               />
             </div>

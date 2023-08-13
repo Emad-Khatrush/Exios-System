@@ -66,6 +66,7 @@ class EmployeeHomePage extends React.Component<Props, State> {
             <OfficesExpense 
               offices={this.state.HomeData?.offices || []}
               debts={this.state.HomeData?.debts || []}
+              credits={this.state.HomeData?.credits || []}
               account={this.props.session.account}
             />
           </div>

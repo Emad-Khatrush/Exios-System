@@ -1,5 +1,5 @@
 import { Action, Dispatch } from "redux"
-import api, { base } from "../api";
+import api from "../api";
 import { CREATE_INVOICE, GET_INVOICES, RESET_INVOICE, STATUS_ERROR, STATUS_LOADING, STATUS_START, STATUS_SUCCESS, SWITCH_TAB } from "../constants/actions";
 
 export const resetInvoice = () => {
@@ -156,8 +156,6 @@ export const getInvoicesBySearch = (query?: { searchValue: string, selectorValue
       status: SWITCH_TAB,
       type: GET_INVOICES,
     });
-
-    // const cancelTokenSource: any = base.cancelRequests(); // Call this before making a request
             
     api.get(`orders/${query?.searchValue}/${query?.selectorValue}?tabType=${query?.tabType}`, { cancelToken: query?.cancelToken?.token })
       .then(({ data }) => {
@@ -176,7 +174,5 @@ export const getInvoicesBySearch = (query?: { searchValue: string, selectorValue
           type: GET_INVOICES,
         });
       })
-      
-    // cancelTokenSource?.cancel('Request canceled by user');
   }
 }
