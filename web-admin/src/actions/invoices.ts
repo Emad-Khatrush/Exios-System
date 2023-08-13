@@ -157,9 +157,9 @@ export const getInvoicesBySearch = (query?: { searchValue: string, selectorValue
       type: GET_INVOICES,
     });
 
-    const cancelTokenSource: any = base.cancelRequests(); // Call this before making a request
+    // const cancelTokenSource: any = base.cancelRequests(); // Call this before making a request
             
-    api.get(`orders/${query?.searchValue}/${query?.selectorValue}?tabType=${query?.tabType}`, { cancelToken: cancelTokenSource?.token })
+    api.get(`orders/${query?.searchValue}/${query?.selectorValue}?tabType=${query?.tabType}`)
       .then(({ data }) => {
         dispatch({
           payload: { data, dontUpdateOrdersCount: true },
@@ -175,6 +175,6 @@ export const getInvoicesBySearch = (query?: { searchValue: string, selectorValue
         });
       })
       
-    cancelTokenSource.cancel('Request canceled by user');
+    // cancelTokenSource.cancel('Request canceled by user');
   }
 }
