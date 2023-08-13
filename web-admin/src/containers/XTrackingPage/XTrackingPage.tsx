@@ -10,6 +10,7 @@ import { LocalTabs } from "../../models";
 import { IInvoice } from "../../reducers/invoices";
 import { getTabOrdersCount } from "../../utils/methods";
 import { generateTabs } from "./utils";
+import { base } from "../../api";
 
 type Props = {
   getInvoices: (config?: {
@@ -27,7 +28,7 @@ type Props = {
     limit?: number
     tabType?: string
   }) => void
-  getInvoicesBySearch: (query: { searchValue: string, selectorValue: string, tabType: string }) => void
+  getInvoicesBySearch: (query: { searchValue: string, selectorValue: string, tabType: string, cancelToken: any }) => void
   listData: IInvoice
 }
 
@@ -39,6 +40,7 @@ type State = {
   searchForOrder: boolean
   isTabOrdersLoading: boolean
   quickSearchDelayTimer: any
+  cancelToken: any
 }
 
 const selectValues = [
@@ -61,7 +63,8 @@ class XTrackingPage extends Component<Props, State> {
     filteredOrders: [],
     searchForOrder: false,
     isTabOrdersLoading: false,
-    quickSearchDelayTimer: undefined
+    quickSearchDelayTimer: undefined,
+    cancelToken: null
   }
 
   componentDidMount() {
@@ -69,6 +72,13 @@ class XTrackingPage extends Component<Props, State> {
       skip: 0,
       limit: 10
     });
+  }
+
+  componentWillUnmount() {
+    const { cancelToken } = this.state;
+    if (cancelToken) {
+      this.state.cancelToken?.cancel('Request canceled by user');
+    }
   }
 
   onTabChange = (value: string) => {
@@ -108,6 +118,8 @@ class XTrackingPage extends Component<Props, State> {
         limit: 10,
       });
     } else {
+      console.log("test");
+      
       clearTimeout(this.state.quickSearchDelayTimer);
       this.setState(() => {
         return {
@@ -115,9 +127,10 @@ class XTrackingPage extends Component<Props, State> {
             this.props.getInvoicesBySearch({
               searchValue: searchValue,
               selectorValue: selectorValue,
-              tabType: this.props.listData.tabType
+              tabType: this.props.listData.tabType,
+              cancelToken: this.state.cancelToken
             })
-          }, 800)
+          }, 1)
         }
       })
     }
@@ -166,7 +179,8 @@ class XTrackingPage extends Component<Props, State> {
                 marginTop: '20px'
               }}
               searchInputOnChange={(event: any) => {
-                this.setState({ searchValue: event.target.value });
+                const cancelTokenSource: any = base.cancelRequests(); // Call this before making a request
+                this.setState({ searchValue: event.target.value, cancelToken: cancelTokenSource });
                 this.filterList(event);
               }}
               selectorInputOnChange={(event: any) => {
