@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, CancelTokenSource } from 'axios';
 
 const endpoint = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/';
 
@@ -12,7 +12,8 @@ class APIBase {
   public axios: AxiosInstance;
   private filesEndpoint: string;
   private headers: any = {};
-  
+  private cancelTokenSource: CancelTokenSource | null = null;
+
   constructor(endpoint: string, headers: any = {}) {
     this.filesEndpoint = `${endpoint}/files`;
     this.axios = axios.create({
@@ -21,7 +22,18 @@ class APIBase {
       // timeout: 10000,
     });
   }
+
+  private createCancelTokenSource(): void {
+    this.cancelTokenSource = axios.CancelToken.source();
+  }
   
+  public cancelRequests(): void {
+    if (this.cancelTokenSource) {
+      this.cancelTokenSource.cancel('Request canceled');
+      this.cancelTokenSource = null; // Reset the source after canceling
+    }
+  }
+
   public getFileAckEndpoint(): string {
     return this.filesEndpoint + '/xlsx';
   }
@@ -46,8 +58,8 @@ class APIBase {
     return this.send('get', `/${url}`, params);
   }
   
-  public send(method: string, url: string, data?: any): Promise<any> {
-    
+  public send(method: string, url: string, data?: any): any {
+
     // join array fields with ',' in query
     const param = method === 'get' ? data : null;
     if (param) {
@@ -57,28 +69,52 @@ class APIBase {
         }
       });
     }
-    
-    return this.axios.request({
+    this.createCancelTokenSource(); // Create a new cancel token source
+
+    const requestConfig: AxiosRequestConfig = {
       data: method !== 'get' ? data : null,
       headers: this.headers,
       method,
       params: method === 'get' ? data : null,
       url,
-    }).catch((error) => {
-      if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        console.log(error.response);
-        
-        throw ApiError.decode(error.response);
-      } else if (error.request) {
-        // The request was made but no response was received
-        // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
-        // http.ClientRequest in node.js
-      } else {
-        // Something happened in setting up the request that triggered an Error
-      }
+      cancelToken: this.cancelTokenSource?.token, // Include cancel token here
+    };
+
+    const requestPromise = new Promise<any>((resolve, reject) => {
+      this.axios
+        .request(requestConfig)
+        .then((response) => {
+          resolve(response);
+        })
+        .catch((error) => {
+          reject(error);
+        });
     });
+  
+    return requestPromise;
+    
+    // return this.axios.request({
+    //   data: method !== 'get' ? data : null,
+    //   headers: this.headers,
+    //   method,
+    //   params: method === 'get' ? data : null,
+    //   url,
+    //   cancelToken: source.token, // Set the cancel token
+    // }).catch((error) => {
+    //   if (error.response) {
+    //     // The request was made and the server responded with a status code
+    //     // that falls out of the range of 2xx
+    //     console.log(error.response);
+        
+    //     throw ApiError.decode(error.response);
+    //   } else if (error.request) {
+    //     // The request was made but no response was received
+    //     // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
+    //     // http.ClientRequest in node.js
+    //   } else {
+    //     // Something happened in setting up the request that triggered an Error
+    //   }
+    // });
   }
   
   public async fetchFormData(url: string, method: string, body: any) {

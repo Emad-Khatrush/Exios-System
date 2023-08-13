@@ -111,13 +111,13 @@ class XTrackingPage extends Component<Props, State> {
       clearTimeout(this.state.quickSearchDelayTimer);
       this.setState(() => {
         return {
-          quickSearchDelayTimer: setTimeout(() => {
+          quickSearchDelayTimer: setTimeout(async () => {
             this.props.getInvoicesBySearch({
               searchValue: searchValue,
               selectorValue: selectorValue,
               tabType: this.props.listData.tabType
             })
-          }, 750)
+          }, 1)
         }
       })
     }
@@ -126,7 +126,7 @@ class XTrackingPage extends Component<Props, State> {
 
   render() {
     const { listData } = this.props;    
-    const { selectorValue, searchValue} = this.state;    
+    const { selectorValue, searchValue } = this.state;    
     const filteredList = listData.list.reverse();
 
     const tabs: LocalTabs = generateTabs({
