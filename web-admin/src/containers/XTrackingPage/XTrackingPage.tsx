@@ -117,7 +117,7 @@ class XTrackingPage extends Component<Props, State> {
               selectorValue: selectorValue,
               tabType: this.props.listData.tabType
             })
-          }, 1)
+          }, 800)
         }
       })
     }
