@@ -458,16 +458,19 @@ export class EditInvoice extends Component<Props, State> {
     }
   }
 
-  sendWhatsupMessage = () => {
+  getQrCode = async () => {
+    const response = await api.get('get-qr-code');
+    this.setState({ qrCode: response.data.qrCode });
+  }
+
+  sendWhatsupMessage = async () => {
     const { formData, whatsupMessage, shouldVerifyQrCode } = this.state;
 
     if (!whatsupMessage) {
       return;
     }
-
-    this.setState({ isUpdating: true });
-
-    api.post(`sendWhatsupMessage`, { phone: formData.customerInfo.phone, message: whatsupMessage, shouldVerifyQrCode })
+// formData.customerInfo.phone
+    api.post(`sendWhatsupMessage`, { phoneNumber: '905535728209@c.us', message: whatsupMessage, shouldVerifyQrCode })
       .then((res) => {
         this.setState({
           isUpdating: false,
@@ -757,6 +760,17 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
                     onClick={this.sendWhatsupMessage}
                   >
                     Send Message
+                  </CustomButton>
+                </div>
+
+                <div className="col-md-12 mb-4 text-end">
+                  <CustomButton 
+                    background='rgb(0, 74, 171)' 
+                    size="small"
+                    disabled={(isUpdating || formData?.isCanceled) ? true : false}
+                    onClick={this.getQrCode}
+                  >
+                    Get QR
                   </CustomButton>
                 </div>
 
