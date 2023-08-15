@@ -464,13 +464,13 @@ export class EditInvoice extends Component<Props, State> {
   }
 
   sendWhatsupMessage = async () => {
-    const { formData, whatsupMessage, shouldVerifyQrCode } = this.state;
+    const { formData, whatsupMessage } = this.state;
 
     if (!whatsupMessage) {
       return;
     }
-// formData.customerInfo.phone
-    api.post(`sendWhatsupMessage`, { phoneNumber: '905535728209@c.us', message: whatsupMessage, shouldVerifyQrCode })
+
+    api.post(`sendWhatsupMessage`, { phoneNumber: `${formData.customerInfo.phone}@c.us`, message: whatsupMessage })
       .then((res) => {
         this.setState({
           isUpdating: false,
