@@ -571,9 +571,10 @@ also before shipping do not forget to send us photos.
 
     const warehouseDefaultMessage = `
 اهلا بك عميلنا ${formData.customerInfo.fullName}
-لقد حدثنا طلبيتك رقم ${formData.orderId} على ان تم وصوله الى المخزن
-يرجى زيارة موقعنا الاكتروني لكي تتابع التفاصيل
-https://www.exioslibya.com/xtracking/${formData.orderId}/ar
+لقد حدثنا طلبيتك رقم ${formData.orderId} على ان تم وصوله الى مخازننا الخارجية
+يرجى زيارة موقعنا الاكتروني لكي تتابع شحنتك بالتفصيل
+https://www.exioslibya.com/login
+شركة اكسيوس للشراء والشحن
 شكرا لكم
     `;
 
@@ -581,6 +582,7 @@ https://www.exioslibya.com/xtracking/${formData.orderId}/ar
 اهلا بك عميلنا ${formData.customerInfo.fullName}
 رقم الطلبية ${formData.orderId} الخاص بك قد وصل الى مخزننا في ليبيا
 يرجى التواصل مع اقرب مندوب لك او زيارة مقر الشركة للاستلام
+شركة اكسيوس للشراء والشحن
 تحياتي لكم
     `;
 
