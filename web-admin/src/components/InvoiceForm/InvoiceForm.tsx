@@ -40,6 +40,8 @@ const InvoiceForm = (props: Props) => {
   const [ deliveredPackages, setDeliveredPackages ] = useState<any>({
     openModal: false,
     trackingNumber: '',
+    containerNumber: '',
+    receiptNo: '',
     packageWeight: null,
     measureUnit: '',
     exiosShipmentPrice: '',
@@ -703,7 +705,9 @@ const InvoiceForm = (props: Props) => {
                         setDeliveredPackages({
                           measureUnit: payment?.deliveredPackages?.measureUnit, 
                           packageWeight: payment?.deliveredPackages?.weight, 
-                          trackingNumber: payment?.deliveredPackages?.trackingNumber, 
+                          trackingNumber: payment?.deliveredPackages?.trackingNumber,
+                          containerNumber: payment?.deliveredPackages?.container?.number,
+                          receiptNo: payment?.deliveredPackages?.receiptNo,
                           originPrice: payment?.deliveredPackages?.originPrice,  
                           exiosPrice: payment?.deliveredPackages?.exiosPrice,
                           receivedShipmentUSD: payment?.deliveredPackages?.receivedShipmentUSD,  
@@ -881,6 +885,32 @@ const InvoiceForm = (props: Props) => {
             </div>
 
             <hr />
+
+            {/* <DialogTitle className='p-0 mb-3'>Package Info</DialogTitle>
+            <div className="row mt-1">
+              <div className="col-md-6 mb-4 d-flex">
+                <TextField
+                  id={deliveredPackages.id}
+                  label={'Container Number'}
+                  name="containerNumber"
+                  onChange={props.handleChange}
+                  defaultValue={deliveredPackages?.container?.number}
+                  onWheel={(event: any) => event.target.blur()}
+                />
+              </div>
+              <div className="col-md-6 mb-4 d-flex">
+                <TextField
+                  id={deliveredPackages.id}
+                  label={'Receipt No'}
+                  name="receiptNo"
+                  onChange={props.handleChange}
+                  defaultValue={deliveredPackages?.receiptNo}
+                  onWheel={(event: any) => event.target.blur()}
+                />
+              </div>
+            </div>
+
+            <hr /> */}
 
             <div className="row mt-1">
               <DialogTitle className='p-2'>Settings</DialogTitle>

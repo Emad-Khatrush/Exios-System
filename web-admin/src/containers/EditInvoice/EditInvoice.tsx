@@ -470,6 +470,8 @@ export class EditInvoice extends Component<Props, State> {
       return;
     }
 
+    this.setState({ isUpdating: true })    
+
     api.post(`sendWhatsupMessage`, { phoneNumber: `${formData.customerInfo.phone}@c.us`, message: whatsupMessage })
       .then((res) => {
         this.setState({
@@ -489,7 +491,7 @@ export class EditInvoice extends Component<Props, State> {
           isUpdating: false,
           isFinished: true,
           isError: true,
-          resMessage: err.data.message
+          resMessage: err.response.data.message === 'whatsup-auth-not-found' ? 'You need to scan QR from your whatsup !' : err.response.data.message
         })
       })
   }
