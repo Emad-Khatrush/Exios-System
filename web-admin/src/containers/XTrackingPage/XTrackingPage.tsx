@@ -51,7 +51,11 @@ const selectValues = [
   {
     label: 'Tracking Number',
     value: 'trackingNumber'
-  }
+  },
+  {
+    label: 'Receipt & Container',
+    value: 'receiptAndContainer'
+  },
 ]
 
 class XTrackingPage extends Component<Props, State> {

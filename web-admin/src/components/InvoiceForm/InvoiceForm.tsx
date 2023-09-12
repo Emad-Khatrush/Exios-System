@@ -700,13 +700,11 @@ const InvoiceForm = (props: Props) => {
                       key="deliveredPackages" 
                       name="deliveredPackages" 
                       onClick={() => { 
-                        console.log(payment, i);
-                        
                         setDeliveredPackages({
                           measureUnit: payment?.deliveredPackages?.measureUnit, 
                           packageWeight: payment?.deliveredPackages?.weight, 
                           trackingNumber: payment?.deliveredPackages?.trackingNumber,
-                          containerNumber: payment?.deliveredPackages?.container?.number,
+                          containerNumber: payment?.deliveredPackages?.containerInfo?.billOfLading,
                           receiptNo: payment?.deliveredPackages?.receiptNo,
                           originPrice: payment?.deliveredPackages?.originPrice,  
                           exiosPrice: payment?.deliveredPackages?.exiosPrice,
@@ -886,7 +884,7 @@ const InvoiceForm = (props: Props) => {
 
             <hr />
 
-            {/* <DialogTitle className='p-0 mb-3'>Package Info</DialogTitle>
+            <DialogTitle className='p-0 mb-3'>ٍShipping Info</DialogTitle>
             <div className="row mt-1">
               <div className="col-md-6 mb-4 d-flex">
                 <TextField
@@ -894,7 +892,7 @@ const InvoiceForm = (props: Props) => {
                   label={'Container Number'}
                   name="containerNumber"
                   onChange={props.handleChange}
-                  defaultValue={deliveredPackages?.container?.number}
+                  defaultValue={deliveredPackages?.containerNumber}
                   onWheel={(event: any) => event.target.blur()}
                 />
               </div>
@@ -910,7 +908,7 @@ const InvoiceForm = (props: Props) => {
               </div>
             </div>
 
-            <hr /> */}
+            <hr />
 
             <div className="row mt-1">
               <DialogTitle className='p-2'>Settings</DialogTitle>

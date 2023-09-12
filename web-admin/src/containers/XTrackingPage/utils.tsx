@@ -46,6 +46,9 @@ export const formatInvoiceFields = (name: string) => {
 
     case 'receivedShipmentUSDPackage':
       return 'receivedShipmentUSD';
+
+    case 'containerNumber':
+      return 'containerInfo'
   
     default:
       return name;

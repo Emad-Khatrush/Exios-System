@@ -124,6 +124,9 @@ export class EditInvoice extends Component<Props, State> {
         weight: {
           total: null,
           measureUnit: null
+        },
+        containerInfo: {
+          billOfLading: ''
         }
       }
     };
@@ -225,12 +228,10 @@ export class EditInvoice extends Component<Props, State> {
           netIncome
         }
       }))
-    } else if (['trackingNumber', 'packageWeight', 'measureUnit', 'originPrice', 'exiosPrice', 'receivedShipmentLYDPackage', 'receivedShipmentUSDPackage', 'arrivedAt', 'visableForClient', 'shipmentMethod'].includes(name)) {      
+    } else if (['trackingNumber', 'packageWeight', 'measureUnit', 'originPrice', 'exiosPrice', 'receiptNo', 'containerNumber', 'receivedShipmentLYDPackage', 'receivedShipmentUSDPackage', 'arrivedAt', 'visableForClient', 'shipmentMethod'].includes(name)) {      
       const fieldName = formatInvoiceFields(name);
       const fieldId = child ? Number(child.props.id) : id;      
       let paymentList: any = [...this.state.paymentList!];
-      console.log(fieldId);
-
       
       if (fieldName === 'weight') {
         paymentList[fieldId]['deliveredPackages']['weight'].total = value;
@@ -238,10 +239,11 @@ export class EditInvoice extends Component<Props, State> {
         paymentList[fieldId]['deliveredPackages']['weight'].measureUnit = value;
       } else if (fieldName === 'visableForClient') {
         paymentList[fieldId]['settings'].visableForClient = value;        
+      } else if (fieldName === 'containerInfo') {
+        paymentList[fieldId]['deliveredPackages']['containerInfo'].billOfLading = value || '';   
       } else {
         paymentList[fieldId]['deliveredPackages'][fieldName] = value;
       }
-      console.log(paymentList);
       
       this.setState((oldValues) => ({
         changedFields: {
