@@ -2,6 +2,7 @@ const { MailtrapClient } = require("mailtrap");
 const handlebars = require("handlebars");
 const fs = require("fs");
 const path = require("path");
+// const PDFDocument = require('pdfkit');
 
 const sendEmail = async (email, subject, payload, template) => {
   const TOKEN = process.env.EMAIL_PASSWORD;
@@ -84,4 +85,32 @@ sendEmail(
 );
 */
 
-module.exports = { sendEmail };
+async function generatePDF(data) {
+  // Create a new PDF document
+  // const doc = new PDFDocument();
+
+  // // Pipe the PDF document to a writable stream (file stream in this example)
+  // const outputStream = fs.createWriteStream('users_without_orders.pdf');
+  // doc.pipe(outputStream);
+
+  // // Add content to the PDF
+  // doc.font('Helvetica').fontSize(16).text('Users without Orders', { align: 'center' });
+  // doc.moveDown();
+
+  // // Iterate over the data and add it to the PDF
+  // data.forEach((user) => {
+  //   doc.font('Courier').fontSize(12).text(`Customer Id: ${user.customerId}`);
+  //   doc.font('Courier').fontSize(12).text(`Full Name: ${user.firstName} ${user.lastName}`, {features: ['rtla']});
+  //   doc.font('Courier').fontSize(12).text(`City: ${user.city}`);
+  //   doc.font('Courier').fontSize(12).text(`phone number: ${user.phone}`);
+  //   doc.font('Courier').fontSize(12).text('------------------------');
+  //   doc.moveDown();
+  // });
+
+  // // Finalize the PDF and end the stream
+  // doc.end();
+
+  // console.log('PDF generated successfully.');
+}
+
+module.exports = { sendEmail, generatePDF };

@@ -9,14 +9,16 @@ import CustomStepper from "../../components/CustomStepper/CustomStepper";
 import ImageViewer from "../../components/ImageViewer/ImageViewer";
 import InfoDetailsCard from "../../components/InfoDetailsCard/InfoDetailsCard";
 import { defaultColumns, generateDataToListType } from "./generateData";
-import { Accordion, AccordionDetails, AccordionSummary, Alert, AlertColor, Avatar, AvatarGroup, Box, CircularProgress, Snackbar, Typography } from "@mui/material";
+import { Accordion, AccordionDetails, AccordionSummary, Alert, AlertColor, Avatar, AvatarGroup, Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Snackbar, Typography } from "@mui/material";
 import Badge from "../../components/Badge/Badge";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../../api";
-import { Package } from "../../models";
+import { Package, PackageDetails } from "../../models";
 import moment from "moment-timezone";
 import { getStatusOfPackage } from "../../utils/methods";
 import AlertInfo from "../../components/AlertInfo/AlertInfo";
+import SwipeableTextMobileStepper from "../../components/SwipeableTextMobileStepper/SwipeableTextMobileStepper";
+import OrderRatingWidget from "../../components/OrderRatingWidget/OrderRatingWidget";
 
 const currencyLabels: any = {
   USD: '$',
@@ -31,7 +33,9 @@ const shipmentMethodsLabels = {
 const OrderInfoPage = () => {
   const [ activeStep, setActiveStep ] = useState(0);
   const [order, setOrder] = useState<Package>();
+  const [orderRating, setOrderRating] = useState();
   const [isLoading, setIsLoading] = useState(false);
+  const [showImages, setShowImages] = useState<any>(undefined);
   const [alert, setAlert] = useState({
     tint: 'success',
     message: ''
@@ -42,9 +46,53 @@ const OrderInfoPage = () => {
 
   const fetchOrder = async () => {
     setIsLoading(true);
-    const order = await api.getSingleOrder(orderId || '');
+
+    const orderRate = await api.getOrderRating(orderId);    
+    setOrderRating(orderRate.data);
+
+    const order = await api.getSingleOrder(orderId || '', {
+      orderId: 1,
+      createdAt: 1,
+      orderStatus: 1,
+      isPayment: 1,
+      isShipment: 1,
+      productName: 1,
+      customerInfo: 1,
+      totalInvoice: 1,
+      debt: 1,
+      images: 1,
+      activity: 1,
+      unsureOrder: 1,
+      'shipment.method': 1,
+      'shipment.fromWhere': 1,
+      'shipment.toWhere': 1,
+      'paymentList.status': 1,
+      'paymentList.images': 1,
+      'paymentList.settings': 1,
+      'paymentList.deliveredPackages.arrivedAt': 1,
+      'paymentList.deliveredPackages.trackingNumber': 1,
+      'paymentList.deliveredPackages.shipmentMethod': 1,
+    });
     setOrder(order.data);
-    setActiveStep(order.data.orderStatus);
+
+    const orderStatus = order.data.orderStatus;
+    if ((order.data.isPayment && order.data.isShipment) || (order.data.isPayment && !order.data.isShipment)) {
+      if (orderStatus === 2 || orderStatus === 3) {
+        setActiveStep(2);
+      } else if (orderStatus > 3) {
+        setActiveStep(orderStatus - 1);
+      } else {
+        setActiveStep(orderStatus);
+      }
+    } else if (!order.data.isPayment && order.data.isShipment) {
+      if (orderStatus === 1 || orderStatus === 2) {
+        setActiveStep(1);
+      } else if (orderStatus > 2) {
+        setActiveStep(orderStatus - 1);
+      } else {
+        setActiveStep(orderStatus);
+      }
+    }
     setIsLoading(false);
   }
 
@@ -71,8 +119,7 @@ const OrderInfoPage = () => {
     setIsLoading(false);
   }
 
-  const steps = generateSteps();
-
+  
   if (isLoading || !order) {
     return (
       <Box className='h-full items-center justify-center' sx={{ display: 'flex' }}>
@@ -80,7 +127,8 @@ const OrderInfoPage = () => {
       </Box>
     )
   }
-
+  
+  const steps = generateSteps(order);
   const columns = [...defaultColumns()];
   const list = generateDataToListType(order.activity).reverse();
 
@@ -137,7 +185,8 @@ const OrderInfoPage = () => {
     },
     {
       label: 'ديون',
-      value: order?.debt?.total > 0 ? `${order?.debt?.total} ${currencyLabels[order?.debt?.currency]}` : 'لا يوجد'
+      value: order?.debt?.total > 0 ? `${order?.debt?.total} ${currencyLabels[order?.debt?.currency]}` : 'لا يوجد',
+      tint: 'danger'
     }
   ]
 
@@ -145,9 +194,10 @@ const OrderInfoPage = () => {
   order.images.forEach(img => {
     relatedImages.push(img.path);
   })
-console.log(order);
 
   const packages = order.paymentList;
+  
+  const showRatingWidget = (order.orderStatus === 4 || order.orderStatus === 5) || !!(packages.find((packageDetail: PackageDetails) => packageDetail.status.received)) && !orderRating;
 
   return (
     <div className="container mx-auto py-10 h-64 w-11/12 px-6">
@@ -178,6 +228,10 @@ console.log(order);
             حذف هذه الطلبية
           </button>
         </Card>
+      }
+
+      {showRatingWidget &&
+        <OrderRatingWidget />
       }
 
       <Card
@@ -234,57 +288,68 @@ console.log(order);
           </Card>
         </div>
 
-        <div className="col-span-1 xl:col-span-3 md:col-span-2">
-          {packages.length > 0 && packages.map((packageDetails, i) => {
-            const { statusIndex, lastActivity } = getStatusOfPackage(packageDetails);
-            const step = linkSteps[statusIndex];
-            const trackingNumber = packageDetails.deliveredPackages.trackingNumber;
-            return (
-              <Card
-                leaned
-                className="mb-5"
-              >
-                <Accordion defaultExpanded={statusIndex !== 3}>
-                  <AccordionSummary
-                    expandIcon={<MdExpandMore />}
-                    aria-controls="panel1bh-content"
-                    id="panel1bh-header"
-                  >
-                    <Typography sx={{ width: '30%', flexShrink: 0, fontSize: '16px', fontWeight: 'bold' }}>
-                      Package { trackingNumber ? trackingNumber : i + 1}
-                    </Typography>
-                    <Badge class=" text-sm md:text-base" text={step.label} color={statusIndex === 3 ? 'success' : 'primary'} />
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <div className="flex items-center justify-end mb-8">
-                      <p>{lastActivity}</p>
-                      <h3 className=" font-bold ml-5">:اخر نشاط</h3>
-                    </div>
-                    <div className="flex items-center justify-end mb-8">
-                      <p>{trackingNumber || 'لا يوجد'}</p>
-                      <h3 className=" font-bold ml-5">:{trackingNumber.length === 4 ? 'اخر 4 ارقام من رقم التتبع' : 'رقم التتبع'}</h3>
-                    </div>
-                    <div className="flex items-center justify-end mb-8">
-                      <AvatarGroup max={4}>
-                        <Avatar alt="Remy Sharp" src="/static/images/avatar/1.jpg" />
-                        <Avatar alt="Travis Howard" src="/static/images/avatar/2.jpg" />
-                        <Avatar alt="Cindy Baker" src="/static/images/avatar/3.jpg" />
-                        <Avatar alt="Agnes Walker" src="/static/images/avatar/4.jpg" />
-                        <Avatar alt="Trevor Henderson" src="/static/images/avatar/5.jpg" />
-                      </AvatarGroup>
-                      <h3 className=" font-bold ml-5">:صور البضائع</h3>
-                    </div>
-                    
-                    <CustomStepper 
-                      acriveStep={statusIndex}
-                      steps={linkSteps}
-                    />
-                  </AccordionDetails>
-                </Accordion>
-              </Card>
-            )
-          })}
-        </div>
+        {packages.length > 0 &&
+          <div className="col-span-1 xl:col-span-3 md:col-span-2">
+            <h3 className="text-lg font-bold text-end mb-1">متابعة طرودي في الطلبية</h3>
+            <p className="text-slate-800 text-end mb-5"> لديك {packages.length} طرود يمكن متابعته، يمكن تتبع طرودك اين وصلت ادناه </p>
+            {packages.map((packageDetails: PackageDetails, i: number) => {
+              const { statusIndex, lastActivity } = getStatusOfPackage(packageDetails);
+              const step = linkSteps[statusIndex];
+              const trackingNumber = packageDetails.deliveredPackages.trackingNumber;
+              return (
+                <Card
+                  leaned
+                  className="mb-5"
+                >
+                  <Accordion defaultExpanded={statusIndex !== 3}>
+                    <AccordionSummary
+                      expandIcon={<MdExpandMore />}
+                      aria-controls="panel1bh-content"
+                      id="panel1bh-header"
+                    >
+                      <Typography sx={{ width: '30%', flexShrink: 0, fontSize: '16px', fontWeight: 'bold' }}>
+                        Package { trackingNumber ? trackingNumber : i + 1}
+                      </Typography>
+                      <Badge class=" text-sm md:text-base" text={step.label} color={statusIndex === 3 ? 'success' : 'primary'} />
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <div className="flex items-center justify-end mb-8">
+                        <p>{lastActivity}</p>
+                        <h3 className=" font-bold ml-5">:اخر نشاط</h3>
+                      </div>
+
+                      <div className="flex items-center justify-end mb-8">
+                        <p>{trackingNumber || 'لا يوجد'}</p>
+                        <h3 className=" font-bold ml-5">:{trackingNumber.length === 4 ? 'اخر 4 ارقام من رقم التتبع' : 'رقم التتبع'}</h3>
+                      </div>
+
+                      <div className="flex items-center justify-end mb-8">
+                        <p>{shipmentMethodsLabels[packageDetails.deliveredPackages.shipmentMethod]}</p>
+                        <h3 className=" font-bold ml-5">:طريقة الشحن</h3>
+                      </div>
+
+                      {packageDetails.images.length > 0 &&
+                        <div className="flex items-center justify-end mb-8">
+                          <AvatarGroup sx={{ cursor: 'pointer' }} onClick={() => setShowImages(packageDetails.images)} max={4}>
+                            {(packageDetails.images || []).map(image => (
+                              <Avatar alt={image.filename} src={image.path} />
+                            ))}
+                          </AvatarGroup>
+                          <h3 className=" font-bold ml-5">:صور البضائع</h3>
+                        </div>
+                      }
+                      
+                      <CustomStepper 
+                        acriveStep={statusIndex}
+                        steps={linkSteps}
+                      />
+                    </AccordionDetails>
+                  </Accordion>
+                </Card>
+              )
+            })}
+          </div>
+        }
       </div>
       <br />
       <br />
@@ -302,19 +367,34 @@ console.log(order);
           {alert.message}
         </Alert>
       </Snackbar>
+
+      <Dialog
+        open={!!showImages}
+        onClose={() => setShowImages(undefined)}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+      >
+        <DialogTitle id="alert-dialog-title" className='text-end'>
+          صور البضائع
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="alert-dialog-description" className='text-end'>
+            <SwipeableTextMobileStepper data={showImages} />
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button>تراجع</Button>
+        </DialogActions>
+      </Dialog>
     </div>
   )
 }
 
-const generateSteps = () => {
+const generateSteps = (order: Package) => {
   const steps = [
     {
       label: 'تجهيز الطلبية',
       stepIcon: FaShippingFast
-    },
-    {
-      label: 'اتمام الشراء',
-      stepIcon: RiShipLine
     },
     {
       label: 'وصلت الى المخزن',
@@ -329,6 +409,14 @@ const generateSteps = () => {
       stepIcon: BiInfoCircle
     }
   ]
+
+  if (order.isPayment) {
+    steps.splice(1, 0, {
+      label: 'اتمام الشراء',
+      stepIcon: RiShipLine
+    })
+  }
+
   return steps;
 }
 

@@ -5,11 +5,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AiOutlineUserAdd } from 'react-icons/ai';
 import { User } from '../../models';
 import api from '../../api';
-import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
+import { Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
 import TermsPdf from '../../../public/terms.pdf';
 import AlertInfo from '../../components/AlertInfo/AlertInfo';
 import { apiErrorsTypes } from '../../constants/errorTypes';
 import { libyanCities } from '../../constants/info';
+import { addAuthInterceptor } from '../../utils/AuthInterceptor';
+import { LOGIN, STATUS_SUCCESS } from '../../constants/actions';
+import { useDispatch } from 'react-redux';
 
 const Register = () => {
   const [formData, setFormData] = useState<User | any>({
@@ -21,6 +24,7 @@ const Register = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const history = useNavigate();
+  const dispatch = useDispatch()
   
   const updateFormState = (name: string, value: any) => {
     setFormData((prevState: any) => ({
@@ -40,10 +44,18 @@ const Register = () => {
     setIsLoading(true);
     try {
       await api.createClientAccount(formData);
+      const res = await api.login({ username: formData.email, password: formData.password }, 'client');
+      const data = res.data;      
+      addAuthInterceptor(data.token);
+      localStorage.setItem('authToken', data.token);
+      localStorage.setItem('user', JSON.stringify(data));
+      dispatch({
+        payload: data,
+        status: STATUS_SUCCESS,
+        type: LOGIN,
+      });
       history('/home');
     } catch (error: any) {
-      console.log(error);
-      
       setErrorMessage({
         type: 'danger',
         message: apiErrorsTypes[error?.data?.message] || 'حدث خطا اثناء انشاء الحساب'
@@ -203,10 +215,16 @@ const Register = () => {
                 className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
                 disabled={isLoading}
               >
-                <span className="absolute left-0 inset-y-0 flex items-center pl-3">
-                  <AiOutlineUserAdd className="h-5 w-5 text-green-500 group-hover:text-green-400" aria-hidden="true" />
-                </span>
-                انشاء حساب
+                {isLoading ?
+                  <CircularProgress size={25} />
+                  :
+                  <>
+                    <span className="absolute left-0 inset-y-0 flex items-center pl-3">
+                      <AiOutlineUserAdd className="h-5 w-5 text-green-500 group-hover:text-green-400" aria-hidden="true" />
+                    </span>
+                    انشاء حساب
+                  </>
+                }
               </button>
             </div>
           </form>

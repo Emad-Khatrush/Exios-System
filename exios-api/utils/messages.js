@@ -17,10 +17,6 @@ const validatePhoneNumber = (phone) => {
   if (generatePhone.startsWith('9')) {
     generatePhone = '218' + generatePhone;
   }
-  // if phone number includes - symbol
-  if (generatePhone[5] !== '-') {
-    generatePhone = generatePhone.slice(0, 5) + '-' + generatePhone.slice(5, generatePhone.length - 1);
-  }
   return generatePhone;
 };
 

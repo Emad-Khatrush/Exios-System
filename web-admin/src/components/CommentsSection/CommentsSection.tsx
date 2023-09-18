@@ -10,10 +10,11 @@ type Props = {
   comments: any[]
   onTextChange?: (event: React.ChangeEvent) => void
   onAddCommentClick?: (event: React.MouseEvent) => void
+  commentValue: string
 }
 
 const CommentsSection = (props: Props) => {
-  const { comments, account, onTextChange, onAddCommentClick } = props;
+  const { comments, account, onTextChange, onAddCommentClick, commentValue } = props;
 
   return (
     <div className='mt-2'>
@@ -30,6 +31,7 @@ const CommentsSection = (props: Props) => {
                     cols={30} 
                     rows={2}
                     onChange={onTextChange}
+                    value={commentValue}
                   />
                 </div>
 

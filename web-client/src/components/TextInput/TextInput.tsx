@@ -29,7 +29,7 @@ const SearchInput = ({ placeholder, icon, className, type, onChange, id, name, b
 
       <label className="mb-2 text-sm font-medium text-gray-900 sr-only dark:text-white">{buttonLabel}</label>
       <div className="relative">
-          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none z-40">
+          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none z-30">
             {icon}
           </div>
           <input 

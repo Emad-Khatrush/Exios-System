@@ -8,6 +8,7 @@ import { Alert, Button, Dialog, DialogActions, DialogContent, DialogContentText,
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { BiPhoneCall } from "react-icons/bi";
+import ExiosLogo from '../../../public/images/exios-logo.png';
 
 type Props = {
   data: {
@@ -27,11 +28,11 @@ const ShipmentGuide = (props: Props) => {
   const account: User = useSelector((state: any) => state.session.account);
 
   let content = fromChina(data, account, { showDialog, setShowDialog, hasCopiedText, setHasCopiedText, dialogContent, setDialogContent });
-  if (data.shipmentFrom === 'uae') {
+  if (data.shipmentFrom === 'uae' && data.shipmentMethod === 'air') {
     content = fromUAE(data, account, { showDialog, setShowDialog, hasCopiedText, setHasCopiedText });
-  } else if (!['china', 'uae'].includes(data.shipmentFrom)) {
+  } else if (!['china', 'uae'].includes(data.shipmentFrom) || (data.shipmentFrom === 'uae' && data.shipmentMethod === 'sea')) {
     content = notAllowToShip();
-  }
+  }  
 
   return (
     <div className="my-9 text-start" style={{ direction: 'rtl' }}>
@@ -68,11 +69,7 @@ const fromChina = (data: any, account: User, state: any) => {
             onClick={() => {
               navigator.clipboard.writeText(`
                 Shipment to China
-                联系人：陈小林
-                电话：19128651680
-                仓库地址：空运和海运
-                广州增槎路西州北路城市之星物流园A5仓
-                Exios39 - by ${data.shipmentMethod}(${account?.customerId})
+                空运和海运仓库地址：广东省佛山市南海区里水镇旗峰大道2号全顺祥物流基地17仓—2 联系仓库：19128651680 陈小林 19128650950 马强 Exios39 - by ${data.shipmentMethod}(${account?.customerId}-${libyanCities.find(city => city.value === data.shipmentTo)?.code})
               `);
               state.setHasCopiedText(true);
             }}
@@ -83,16 +80,7 @@ const fromChina = (data: any, account: User, state: any) => {
           <p className="my-3 flex text-end">
             Shipment to China
             <br />
-            联系人：陈小林
-            <br />
-            电话：19128651680
-            <br />
-            仓库地址：空运和海运
-            <br />
-            广州增槎路西州北路城市之星物流园A5仓
-            <br />
-            Exios39 - by {data.shipmentMethod}({account?.customerId})
-            <br />
+            空运和海运仓库地址：广东省佛山市南海区里水镇旗峰大道2号全顺祥物流基地17仓—2 联系仓库：19128651680 陈小林 19128650950 马强 Exios39 - by {data.shipmentMethod}({account?.customerId}-{libyanCities.find(city => city.value === data.shipmentTo)?.code})
           </p>
         </li>
 
@@ -104,8 +92,8 @@ const fromChina = (data: any, account: User, state: any) => {
             onClick={() => {
               const node = document.getElementById('shippingMark');
               htmlToImage.toJpeg(node as any)
-                .then(function (dataUrl) {
-                  require("downloadjs")(dataUrl, 'shipping Label.jpeg');
+                .then(async function (dataUrl) {
+                  await require("downloadjs")(dataUrl, 'shipping Label.jpeg');
                 })
                 .catch(function (error) {
                   console.error('oops, something went wrong!', error);
@@ -120,7 +108,7 @@ const fromChina = (data: any, account: User, state: any) => {
             <p 
               className="text-lg"
               onClick={() => {
-                state.setDialogContent(<img src="/images/code-example.jpg" />);
+                state.setDialogContent(<img src="https://storage.googleapis.com/exios-bucket/code-example.jpg" />);
                 state.setShowDialog(true);
               }} 
               >
@@ -128,9 +116,9 @@ const fromChina = (data: any, account: User, state: any) => {
             </p>
           </div>
           
-          <div className="mb-5" style={{ background: 'white', border: '2px solid black', width: '400px', height: '441px' }} id='shippingMark'>
+          <div className="mb-5" style={{ background: 'white', border: '2px solid black', width: '400px' }} id='shippingMark'>
             <div style={{ border: '2px solid black' }} className="p-6 flex justify-center">
-              <img src="/images/exios-logo.png" alt="Exios" width={160} height={90} />
+              <img src={ExiosLogo} alt="Exios" width={160} height={90} />
             </div>
             <div style={{ border: '2px solid black' }} className="p-6 flex justify-center">
               <QRCode value={`http://exios-admin-frontend.web.app/shouldAllowToAccessApp?id=${account?.customerId}`} />
@@ -143,14 +131,14 @@ const fromChina = (data: any, account: User, state: any) => {
 
           *في حالة عدم استطاعتك من تحميل العلامة ووضعها في صندوق، طلب منها كتابة هذه العبارة على الصندوق
           <br />
-          Exios39 - by {data.shipmentMethod}({account?.customerId})
+          Exios39 - by {data.shipmentMethod}({account?.customerId}-{libyanCities.find(city => city.value === data.shipmentTo)?.code})
           
           <div className="flex w-fit cursor-pointer text-blue-500 gap-2 items-center my-2">
             <AiOutlineEye />
             <p 
               className="text-lg"
               onClick={() => {
-                state.setDialogContent(<img src={`/images/shipping-mark-${data.shipmentMethod}.jpg`} />);
+                state.setDialogContent(<img src={`https://storage.googleapis.com/exios-bucket/shipping-mark-${data.shipmentMethod}.jpg`} />);
                 state.setShowDialog(true);
               }} 
               >
@@ -160,8 +148,13 @@ const fromChina = (data: any, account: User, state: any) => {
         </li>
 
         <li className="text-lg my-10">
-          3- عند وصول البضائع الى المخزن الخارجي، سيتم تحديث طلبيتك وادخالها في قسم <a href="/orders" target="_blank" className="cursor-pointer text-blue-500">طلبيات</a> الخاص بك
+          3- عند تجهيز البضائع وارساله الى مخزننا تواصل مع بائع او ابحث في موقع الذي اشتريته منه بضائع لكي تتحصل على ارقام التتبع لشركة الشحن الداخلي وارسلها لنا لكي نتتبعها لك من <a href="/add-tracking-numbers" target="_blank" className="cursor-pointer text-blue-500">هنا</a>
         </li>
+
+        <li className="text-lg my-10">
+          4- عند وصول البضائع الى المخزننا في الصين، سيتم تحديث طلبيتك وادخالها في قسم <a href="/orders" target="_blank" className="cursor-pointer text-blue-500">طلبيات</a> الخاص بك
+        </li>
+
 
         <Dialog
           open={state.showDialog}
@@ -204,7 +197,7 @@ const fromUAE = (data: any, account: User, state: any) => {
             phone: +971505967929
             Address: Al ghazal building Office room no : 301 (3rd floor) 
             Opposite Arabic chair Al buteen Deira,Dubai Sq336
-            ${data.shipmentMethod}(${account?.customerId})
+            ${data.shipmentMethod}(${account?.customerId})-${libyanCities.find(city => city.value === data.shipmentTo)?.code}
             `);
             state.setHasCopiedText(true);
           }}
@@ -235,12 +228,16 @@ const fromUAE = (data: any, account: User, state: any) => {
           <br />
           Opposite Arabic chair Al buteen Deira,Dubai Sq336
           <br />
-          {data.shipmentMethod}({account?.customerId})
+          {data.shipmentMethod}({account?.customerId})-{libyanCities.find(city => city.value === data.shipmentTo)?.code}
         </p>
       </div>
 
+      <div className="text-lg my-10">
+        2- عند تجهيز البضائع وارساله الى مخزننا تواصل مع بائع او ابحث في موقع الذي اشتريته منه بضائع لكي تتحصل على ارقام التتبع لشركة الشحن الداخلي وارسلها لنا لكي نتتبعها لك من <a href="/add-tracking-numbers" target="_blank" className="cursor-pointer text-blue-500">هنا</a>
+      </div>
+
       <div className="text-lg my-2 mb-10">
-        <p> 2- عند وصول البضائع الى المخزن الخارجي، سيتم تحديث طلبيتك وادخالها في قسم <a href="/orders" target="_blank" className="cursor-pointer text-blue-500">طلبيات</a> الخاص بك </p>
+        <p> 3- عند وصول البضائع الى المخزن الخارجي، سيتم تحديث طلبيتك وادخالها في قسم <a href="/orders" target="_blank" className="cursor-pointer text-blue-500">طلبيات</a> الخاص بك </p>
         <br />
       </div>
 
@@ -255,7 +252,7 @@ const fromUAE = (data: any, account: User, state: any) => {
         </DialogTitle>
         <DialogContent>
           <DialogContentText id="alert-dialog-description" className='text-end'>
-            <img src="/images/uae-address.png" alt="" />
+            <img src="https://storage.googleapis.com/exios-bucket/uae-address.png" alt="" />
           </DialogContentText>
         </DialogContent>
         <DialogActions>

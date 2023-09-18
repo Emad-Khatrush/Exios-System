@@ -9,9 +9,6 @@ const moment = require('moment-timezone');
 const Office = require('../models/office');
 const { generateString } = require('../middleware/helper');
 
-const os = require('os');
-console.log(os.cpus().length);
-
 module.exports.createUser = async (req, res, next) => {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const numbers = '0123456789';
@@ -168,13 +165,31 @@ module.exports.verifyToken = async (req, res, next) => {
   }
 }
 
+module.exports.getCustomerData = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findOne({ customerId: id });
+    if (!user) {
+      return next(new ErrorHandler(404, errorMessages.USER_NOT_FOUND));
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+    return next(new ErrorHandler(401, errorMessages.SERVER_ERROR));
+  }
+}
+
 module.exports.getEmpoyeeHomeData = async (req, res, next) => {
   try {
-    const offices = await Office.find({ office: 'tripoli' });
-    const debts = await Orders.find({ 'debt.total': { $gt: 0 }, placedAt: 'tripoli' });
+    const { office } = req.query;
+    const offices = await Office.find({ office: office || 'tripoli' });
+    const debts = await Orders.find({ 'debt.total': { $gt: 0 }, placedAt: office || 'tripoli' });
+    const credits = await Orders.find({ 'credit.total': { $gt: 0 }, placedAt: office || 'tripoli' });
+
     res.status(200).json({
       offices,
-      debts
+      debts,
+      credits
     })
   } catch (error) {
     return next(new ErrorHandler(401, errorMessages.INVALID_TOKEN));
@@ -183,43 +198,82 @@ module.exports.getEmpoyeeHomeData = async (req, res, next) => {
 
 module.exports.getHomeData = async (req, res, next) => {
   const currentMonthByNumber = moment().month() + 1; // from Jun 0 to Dec 11
+  const currentYear = new Date().getFullYear();
+
   try {
     const offices = await Office.find({ office: ['tripoli', 'benghazi'] });
 
     const activeOrdersCount = await Orders.count({ isFinished: false, unsureOrder: false, isCanceled: false });
 
-    const debts = await Orders.find({ 'debt.total': { $gt: 0 } });
+    const debts = await Orders.find({ 'debt.total': { $gt: 0 } }).populate('user');
+    const credits = await Orders.find({ 'credit.total': { $gt: 0 } }).populate('user');
+
+    const clientUsersCount = await User.count({ 'roles.isClient': true });
 
     const totalInvoices = (await Orders.aggregate([
-      { $addFields: { 'month': { $month: '$createdAt' } } },
-      { $match: { unsureOrder: false, isCanceled: false, month: currentMonthByNumber } },
-      { $group: { _id: '$month', totalInvoices: { $sum: '$totalInvoice' } } },
+      { $match: {
+          unsureOrder: false,
+          isCanceled: false,
+          $expr: {
+            $and: [
+              { $eq: [{ $month: '$createdAt' }, currentMonthByNumber] },
+              { $eq: [{ $year: '$createdAt' }, currentYear] }
+            ]
+          }
+      } },
+      { $group: { _id: null, totalInvoices: { $sum: '$totalInvoice' } } },
       { $project: { totalInvoices: 1, _id: 0 } },
     ]))[0]?.totalInvoices || 0;
 
     const thisMonthlyEarning = (await Orders.aggregate([
-      { $addFields: { 'month': { $month: '$createdAt' } } },
-      { $match: { unsureOrder: false, isCanceled: false, month: currentMonthByNumber } },
+      { $match: {
+          unsureOrder: false,
+          isCanceled: false,
+          $expr: {
+            $and: [
+              { $eq: [{ $month: '$createdAt' }, currentMonthByNumber] },
+              { $eq: [{ $year: '$createdAt' }, currentYear] }
+            ]
+          }
+      } },
       { $unwind: '$netIncome' },
-      { $group: { _id: '$month', totalNetOfMonth: { $sum: '$netIncome.total' } } },
+      { $group: { _id: null, totalNetOfMonth: { $sum: '$netIncome.total' } } },
       { $project: { _id: 0, totalNetOfMonth: 1 } },
     ]))[0]?.totalNetOfMonth || 0;
 
     const previousMonthlyEarning = (await Orders.aggregate([
-      { $addFields: { 'month': { $month: '$createdAt' } } },
-      { $match: { unsureOrder: false, isCanceled: false, month: currentMonthByNumber - 1 } },
+      { 
+        $match: {
+          unsureOrder: false,
+          isCanceled: false,
+          $expr: {
+            $and: [
+              { $eq: [{ $month: '$createdAt' }, currentMonthByNumber - 1] },
+              { $eq: [{ $year: '$createdAt' }, currentYear] }
+            ]
+          }
+      } },
       { $unwind: '$netIncome' },
-      { $group: { _id: '$month', totalNetOfMonth: { $sum: '$netIncome.total' } } },
+      { $group: { _id: null, totalNetOfMonth: { $sum: '$netIncome.total' } } },
       { $project: { _id: 0, totalNetOfMonth: 1 } },
     ]))[0]?.totalNetOfMonth || 0;
 
     const thisShipmentMonthlyEarning = (await Orders.aggregate([
       { $unwind: '$paymentList' },
-      { $addFields: { 'month': { $month: '$paymentList.deliveredPackages.arrivedAt' } } },
-      { $match: { unsureOrder: false, isCanceled: false, month: currentMonthByNumber } },
+      { 
+        $match: {
+          unsureOrder: false,
+          isCanceled: false,
+          $expr: {
+            $and: [
+              { $eq: [{ $month: '$paymentList.deliveredPackages.arrivedAt' }, currentMonthByNumber] },
+              { $eq: [{ $year: '$paymentList.deliveredPackages.arrivedAt' }, currentYear] }
+            ]
+          }
+      } },
       {
         $group: {
-          _id: '$month', totalNetOfMonth: {
+          _id: null, totalNetOfMonth: {
             $sum: {
               $multiply: ['$paymentList.deliveredPackages.weight.total', { $subtract: ['$paymentList.deliveredPackages.exiosPrice', '$paymentList.deliveredPackages.originPrice'] }]
             }
@@ -231,9 +285,17 @@ module.exports.getHomeData = async (req, res, next) => {
     
     const previousShipmentMonthlyEarning = (await Orders.aggregate([
       { $unwind: '$paymentList' },
-      { $addFields: { 'month': { $month: '$paymentList.deliveredPackages.arrivedAt' } } },
-      { $match: { unsureOrder: false, isCanceled: false, month: currentMonthByNumber - 1 } },
-      {
+      { 
+        $match: {
+          unsureOrder: false,
+          isCanceled: false,
+          $expr: {
+            $and: [
+              { $eq: [{ $month: '$paymentList.deliveredPackages.arrivedAt' }, currentMonthByNumber - 1] },
+              { $eq: [{ $year: '$paymentList.deliveredPackages.arrivedAt' }, currentYear] }
+            ]
+          }
+      } },      {
         $group: {
           _id: '$month', totalNetOfMonth: {
             $sum: {
@@ -265,7 +327,9 @@ module.exports.getHomeData = async (req, res, next) => {
       activeOrdersCount,
       totalInvoices,
       offices,
-      debts
+      debts,
+      credits,
+      clientUsersCount
     })
   } catch (error) {
     console.log(error);

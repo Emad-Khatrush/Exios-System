@@ -7,8 +7,11 @@ import ImageUploader from '../../components/ImageUploader/ImageUploader';
 import CustomButton from '../../components/CustomButton/CustomButton';
 import { arrayRemoveByValue } from '../../utils/methods';
 import TaskForm from '../TaskForm/TaskForm';
+import { Account, Session, User } from '../../models';
 
-type Props = {}
+type Props = {
+  session?: Session
+}
 
 type State = {
   employees: any
@@ -18,6 +21,12 @@ type State = {
   isLoading: boolean
   responseMessage: string
   isSuccess: boolean
+}
+
+const labels: any = {
+  urgent: 'عاجل',
+  normal: 'عادي',
+  limitedTime: 'وقت محدد'
 }
 
 export class CreateTask extends Component<Props, State> {
@@ -104,6 +113,30 @@ export class CreateTask extends Component<Props, State> {
     })))
   }
 
+  sendWhatsupMessage = (user: User) => {
+    const { session } = this.props;
+    const message = `
+      قد تم انشاء تاسك خاص بك من طرف ${session?.account.firstName} ${session?.account.lastName}
+      بعنوان '${this.state.form.title}'
+      والحالة: ${labels[this.state.form.label]}
+      يرجى الدخول الى قسم المهام للبدا في التاسك الخاص بك
+      شكرا لكم
+    `;
+
+    api.post(`sendWhatsupMessage`, { phoneNumber: `${user.phone}@c.us`, message })
+      .then((res) => {
+        this.setState({
+          responseMessage: 'Whatsup message has been send successfully',
+        })
+      })
+      .catch((err) => {
+        console.log(err);
+        this.setState({
+          responseMessage: err.response.data.message === 'whatsup-auth-not-found' ? 'You need to scan QR from your whatsup !' : err.response.data.message
+        })
+      })
+  }
+
   onSubmit = async (event: any) => {
     event.preventDefault();
 
@@ -132,8 +165,13 @@ export class CreateTask extends Component<Props, State> {
     api.fetchFormData('create/task', 'POST', formData)
       .then((res: any) => {
         if (res.status === 200) {
+          this.state.form.reviewers.forEach(async (userId) => {
+            const foundUser = this.state.employees.find((emp: Account) => emp._id === userId)
+            await this.sendWhatsupMessage(foundUser as any);
+          })
           this.setState({ isLoading: false, responseMessage: 'تم انشاء المهمه بنجاح', isSuccess: true });
-          window.location.replace('/mytasks');
+
+          // window.location.replace('/mytasks');
         } else {
           this.setState({ isLoading: false, responseMessage: res.data.message, isSuccess: false });     
         }
@@ -210,7 +248,11 @@ export class CreateTask extends Component<Props, State> {
   }
 }
 
-const mapStateToProps = (state: any) => ({})
+const mapStateToProps = (state: any) => {  
+  return {
+    session: state.session,
+  };
+}
 
 const mapDispatchToProps = {}
 

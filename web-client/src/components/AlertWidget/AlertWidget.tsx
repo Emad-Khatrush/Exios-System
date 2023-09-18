@@ -2,9 +2,7 @@ import Card from "../Card/Card";
 import { BiArrowBack } from 'react-icons/bi';
 import { Link } from "react-router-dom";
 
-type Props = {}
-
-const AlertWidget = (props: Props) => {
+const AlertWidget = () => {
   return (
     <Card
       className="h-auto rounded-lg"
@@ -21,9 +19,9 @@ const AlertWidget = (props: Props) => {
         <div className="max-w-xs ml-4">
           <h1 className="font-bold text-xl sm:text-2xl text-gray-800 mb-2 text-end">الشحن عن طريق شركة اكسيوس</h1>
           <ul className="list-disc text-gray-500 text-xl m-6 text-start" style={{ direction: 'rtl' }}>
-            <li>سهولة في استعمال</li>
-            <li>اسعار في متناول الجميع</li>
-            <li>امكنية ارجاع المال بعد الشراء</li>
+            <li>شحن الجوي السريع</li>
+            <li> شحن بحري مشترك </li>
+            <li> شحن حاويات </li>
             <li>تتبع طلبياتك باحترافية</li>
           </ul>
 

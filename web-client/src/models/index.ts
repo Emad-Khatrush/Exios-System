@@ -78,6 +78,15 @@ export type Package = {
 }
 
 export type PackageDetails = {
+  images: {
+    fileType: string
+    filename: string
+    path: string
+    _id: string
+  }[]
+  settings: {
+    visableForClient: boolean
+  }
   deliveredPackages: {
     arrivedAt: Date
     exiosPrice: number
@@ -89,6 +98,7 @@ export type PackageDetails = {
       total: number, 
       measureUnit: string
     }
+    shipmentMethod: 'air' | 'sea'
   }
   link: string
   note: string
@@ -99,5 +109,34 @@ export type PackageDetails = {
     received: boolean
   }
 }
+
+export type Announcement = {
+  description: string
+  forwardLink: string,
+  visibleToAll: boolean
+  createdAt: string
+  updatedAt: string
+  _id: string
+}
+
+export type ShippingPrice = {
+  shippingType: ShippingMethods
+  sellingPrice: number
+  country: 'china' | 'uae' | 'turkey' | 'usa' | 'uk'
+  currency: 'USD'
+  createdAt: string
+  updatedAt: string
+  _id: string
+}
+
+export type ExchangeRate = {
+  fromCurrency: 'usd' | 'lyd'
+  toCurrency: 'usd' | 'lyd'
+  rate: number
+  createdAt: string
+  _id: string
+}
+
+export type ShippingMethods = 'air' | 'sea';
 
 export type OrderStatusType = 'all' |'active' | 'arrivedWarehouse' | 'readyForPickup' | 'shipment' | 'arriving' | 'unpaid' | 'unsure' | 'canceled'

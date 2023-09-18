@@ -36,7 +36,6 @@ exports.isAdmin = async (req, res, next) => {
   if (!req.user) {
     return next(new ErrorHandler(404, errorMessages.USER_NOT_FOUND));
   }
-  console.log(req.user.roles.isAdmin);
   if (req.user.roles.isAdmin) {
     return next();
   }
@@ -58,6 +57,17 @@ exports.isEmployee = async (req, res, next) => {
     return next(new ErrorHandler(404, errorMessages.USER_NOT_FOUND));
   }
   if (req.user.roles.isEmployee) {
+    return next();
+  }
+  return next(new ErrorHandler(404, 'authorize-invalid'));
+}
+
+exports.allowAdminsAndEmployee = async (req, res, next) => {
+  if (!req.user) {
+    return next(new ErrorHandler(404, errorMessages.USER_NOT_FOUND));
+  }
+
+  if (req.user.roles.isEmployee || req.user.roles.isAdmin) {
     return next();
   }
   return next(new ErrorHandler(404, 'authorize-invalid'));

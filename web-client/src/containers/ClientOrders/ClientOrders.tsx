@@ -26,7 +26,17 @@ const ClientOrders = () => {
     setIsLoading(true);
     setActiveTab(tab);
     try {
-      const response = await api.getOrdersForUser(tab);
+      const response = await api.getOrdersForUser(tab, {
+        orderId: 1,
+        createdAt: 1,
+        orderStatus: 1,
+        isPayment: 1,
+        isShipment: 1,
+        productName: 1,
+        'shipment.method': 1,
+        'shipment.fromWhere': 1,
+        'shipment.toWhere': 1
+      });
       const orders = response.data.results.orders;
       setOrders(orders);
     } catch (error) {
@@ -38,11 +48,21 @@ const ClientOrders = () => {
   const getOrders = async () => {
     try {
       setIsLoading(true);
-      const response = await api.getOrdersForUser('all');
+      const response = await api.getOrdersForUser('active', {
+        orderId: 1,
+        createdAt: 1,
+        orderStatus: 1,
+        isPayment: 1,
+        isShipment: 1,
+        productName: 1,
+        'shipment.method': 1,
+        'shipment.fromWhere': 1,
+        'shipment.toWhere': 1
+      });
       const orders = response.data.results.orders;
-      const countList = response.data.results.countList;
+      const list = response.data.results.countList;
       setOrders(orders);
-      setCountList(countList);
+      setCountList(list || countList);
     } catch (error) {
       console.log(error);
     }
@@ -54,9 +74,29 @@ const ClientOrders = () => {
     try {
       let promise: Promise<any>;
       if (!value) {
-        promise = api.getOrdersForUser(activeTab);
+        promise = api.getOrdersForUser(activeTab, {
+          orderId: 1,
+          createdAt: 1,
+          orderStatus: 1,
+          isPayment: 1,
+          isShipment: 1,
+          productName: 1,
+          'shipment.method': 1,
+          'shipment.fromWhere': 1,
+          'shipment.toWhere': 1
+        });
       } else {
-        promise = api.getOrdersBySearch(value);
+        promise = api.getOrdersBySearch(value, {
+          orderId: 1,
+          createdAt: 1,
+          orderStatus: 1,
+          isPayment: 1,
+          isShipment: 1,
+          productName: 1,
+          'shipment.method': 1,
+          'shipment.fromWhere': 1,
+          'shipment.toWhere': 1
+        });
       }
       clearTimeout(quickSearchDelayTimer);
       setQuickSearchDelayTimer((): any => {
@@ -87,7 +127,7 @@ const ClientOrders = () => {
       count: countList.activeOrders
     },
     {
-      label: 'وصلت الى المخزن',
+      label: 'وصلت المخزن',
       value: 'arrivedWarehouse',
       count: countList.warehouseArrived
     },
@@ -109,7 +149,7 @@ const ClientOrders = () => {
   ]
 
   return (
-    <div className="container mx-auto py-10 h-64 w-11/12 px-6">
+    <div className="container mx-auto py-10 h-64 px-3">
       <div className='text-end'>
         <Link to="/add-tracking-numbers">
           <button
@@ -120,13 +160,13 @@ const ClientOrders = () => {
         </Link>
       </div>
       <Card>
-        <Tabs 
+        <Tabs
           data={data as any}
           activeTab={activeTab}
           tabOnChange={tabOnChange}
         />
 
-        <div className=' flex justify-end'>
+        <div className='flex justify-end'>
           <div className='grid w-full lg:w-1/3 my-5 mb-1'>
             <TextInput 
               type='search'
@@ -137,6 +177,16 @@ const ClientOrders = () => {
             />
           </div>
         </div>
+        
+        {activeTab === 'unsure' &&
+          <div className='flex justify-end'>
+            <div className='grid w-full my-5 mb-1 text-end'>
+              <p> في هذا القسم تستطيع متابعة ارقام التتبع التي ارسلتها الى شركة لكي يتم متابعتها </p>
+              <p> في حالة لديك شحنات قد ارسلتها الى عناوننا ارسل ارقام التتبع من <a className='text-blue-500' href="/add-tracking-numbers" target="_blank">هنا</a> </p>
+              <p> في حالة قد تراجعت عن طلب متابعه طلبك او اخطأت في كتابة رقم التتبع، يرجى الدخول الى طلبية الخاصه به وحذفها </p>
+            </div>
+          </div>
+        }
 
         {!isLoading ?
           <div className={`${hasOrders && 'grid grid-cols-1 2xl:grid-cols-3 xl:grid-cols-2 lg:grid-cols-2 md:grid-cols-2 gap-5'}`}>
@@ -145,6 +195,7 @@ const ClientOrders = () => {
                 key={order._id}
                 order={order}
                 index={i}
+                activeTab={activeTab}
               />
               ))
               :

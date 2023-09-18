@@ -1,5 +1,6 @@
 exports.orderLabels = {
   debt: 'Debt',
+  credit: 'Credit',
   orderStatus: 'Order Steps',
   paymentList: 'Payment Links',
   placedAt: 'Office',

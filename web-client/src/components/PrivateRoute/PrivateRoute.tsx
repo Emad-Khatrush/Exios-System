@@ -30,7 +30,6 @@ const PrivateRoute = () => {
     }
   }, [])
   
-  console.log(session);
   if (!token) {
     localStorage.removeItem('user');
     localStorage.removeItem('authToken');

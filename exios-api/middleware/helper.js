@@ -19,6 +19,13 @@ exports.addChangedField = (fieldName, newData, oldData, labels) => {
                 changedFrom: `${oldData?.total || '0'} ${oldData?.currency || 'empty'}`,
                 changedTo: `${newData?.total || '0'} ${newData?.currency || 'empty'}`
               }
+        case 'credit':
+        return {
+            label: labels[fieldName],
+            value: fieldName,
+            changedFrom: `${oldData?.total || '0'} ${oldData?.currency || 'empty'}`,
+            changedTo: `${newData?.total || '0'} ${newData?.currency || 'empty'}`
+            }
         case 'cost':
         return {
             label: labels[fieldName],
@@ -56,7 +63,7 @@ exports.getTapTypeQuery = (tapType) => {
             return { unsureOrder: false, isPayment: true,  orderStatus: 1, isCanceled: false }
 
         case 'arrivedWarehouse':
-            return { $or: [{isPayment: true,  orderStatus: 2, isCanceled: false }, {isPayment: false,  orderStatus: 1, isCanceled: false }] }
+            return { $or: [{isPayment: true,  orderStatus: { $or: [2, 3] }, isCanceled: false }, {isPayment: false,  orderStatus: { $or: [1, 2] }, isCanceled: false }] }
 
         case 'readyForPickup':
             return { unsureOrder: false, $or: [{isPayment: true,  orderStatus: 4, isCanceled: false }, {isPayment: false,  orderStatus: 3, isCanceled: false }] }
@@ -75,4 +82,13 @@ exports.getTapTypeQuery = (tapType) => {
         default:
             return { isFinished: false,  unsureOrder: false }
     }
+}
+
+exports.convertObjDataFromStringToNumberType = (obj) => {
+    for (let prop in obj) {
+        if (obj.hasOwnProperty(prop)) {
+            obj[prop] = Number(obj[prop]);
+        }
+    }
+    return obj;
 }

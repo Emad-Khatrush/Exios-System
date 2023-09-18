@@ -2,7 +2,7 @@ import axios, { AxiosInstance } from 'axios';
 import { User } from '../models';
 import { OrderStatusType } from '../models';
 
-const endpoint = 'http://localhost:8000/api/';
+const endpoint = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/';
 
 const defaultHeaders = {
   'Accept': 'application/json',
@@ -145,14 +145,25 @@ export default {
   // Orders Endpoints
   getHomeData: () => base.get(`client/home`),
 
-  getOrdersForUser: (orderType: OrderStatusType) => base.get(`client/orders/${orderType}`),
+  getOrdersForUser: (orderType: OrderStatusType, query: any = {}) => base.get(`client/orders/${orderType}`, query),
 
-  getOrdersBySearch: (value: string) => base.get(`client/orders/search/${value}`),
+  getOrdersBySearch: (value: string, query: any = {}) => base.get(`client/orders/search/${value}`, query),
 
-  getSingleOrder: (orderId: string) => base.get(`client/order/${orderId}`),
+  getSingleOrder: (orderId: string, query: any = {}) => base.get(`client/order/${orderId}`, query),
 
   createTrackingNumbers: (trackingNumbers: any[]) => base.post(`client/create/trackingNumber`, trackingNumbers),
 
   deleteUnsureOrder: (id: string) => base.delete(`client/unsureOrder/${id}/delete`, {}),
+
+  createRatingForOrder: (orderId: any, query: any = {}) => base.post(`client/order/${orderId}/rating`, query),
+
+  getOrderRating: (orderId: any) => base.get(`client/order/${orderId}/rating`, {}),
+
+  // Settings Endpoints
+  getAnnouncements: () => base.get(`announcements`),
+
+  getShippingPrices: () => base.get(`shipmentPrices`),
+
+  getExchangeRate: () => base.get(`exchangeRate`),
 
 }

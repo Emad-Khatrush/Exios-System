@@ -1,4 +1,4 @@
-import { Alert, AlertColor, Snackbar } from "@mui/material";
+import { Alert, AlertColor, CircularProgress, Snackbar } from "@mui/material";
 import { useState } from "react";
 import api from "../../api";
 import Card from "../../components/Card/Card";
@@ -128,7 +128,15 @@ const AddTrackingNumbers = () => {
 
             </div>
             <div className="bg-gray-50 px-4 py-3 text-right sm:px-6">
-              <button disabled={isLoading} type="submit" className="inline-flex justify-center rounded-md border border-transparent bg-green-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">ارسل</button>
+              <button disabled={isLoading} type="submit" className="inline-flex justify-center rounded-md border border-transparent bg-green-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
+                {isLoading ?
+                  <CircularProgress size={25} />
+                  :
+                  <>
+                    ارسل
+                  </>
+                }
+              </button>
             </div>
           </div>
         </form>
@@ -136,7 +144,7 @@ const AddTrackingNumbers = () => {
 
       <Snackbar 
         open={!!alert.message} 
-        autoHideDuration={1500}
+        autoHideDuration={5000}
         onClose={() => setAlert({ tint: 'success', message: ''})}
       >
         <Alert 

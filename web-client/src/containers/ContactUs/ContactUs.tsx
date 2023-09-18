@@ -15,8 +15,10 @@ const ContactUs = (props: Props) => {
               <HiOfficeBuilding size={35} color="#fff" />
             </div>
             <h1 className=" text-xl font-bold mb-2">مكتب طرابلس</h1>
-            <p className=" text-slate-600 mb-1">راس حسن بالقرب من حلويات بوذن سابقا</p>
+            <p className=" text-slate-600 mb-1">باب بن غشير زنقه ميدان مدرسه اقرأ خلي محلات مواد الزينه للجملة</p>
+            <p className=" text-slate-600 mb-1">علي يسارك أول زنقه بعدهم على اليسار بعدها أول زنقه على اليمين</p>
             <p className=" text-slate-600 mb-1">رقم الهاتف: 0915643265</p>
+            <p className=" text-slate-600 mb-1">رقم الهاتف: 0912068211</p>
             <p className=" text-slate-600">البريد الاكتروني: emad.khatrush@exioslibya.com</p>
           </div>
 
@@ -26,7 +28,8 @@ const ContactUs = (props: Props) => {
             </div>
             <h1 className=" text-xl font-bold mb-2">مكتب بنغازي</h1>
             <p className=" text-slate-600 mb-1">مكتب بنغازي سيدي حسين بالقرب من مول حياة شارع بوذن</p>
-            <p className=" text-slate-600 mb-1">رقم الهاتف: 09263630905</p>
+            <p className=" text-slate-600 mb-1">رقم الهاتف: 0919078031</p>
+            <p className=" text-slate-600 mb-1">رقم الهاتف: 0919734019</p>
             <p className=" text-slate-600">البريد الاكتروني: emad.khatrush@exioslibya.com</p>
           </div>
         </div>

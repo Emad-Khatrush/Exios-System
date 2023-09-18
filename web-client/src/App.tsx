@@ -15,11 +15,27 @@ import SettingsPage from './containers/SettingsPage/SettingsPage';
 import { useSelector } from 'react-redux';
 import ResetPasswordPage from './containers/ResetPasswordPage/ResetPasswordPage';
 import AddTrackingNumbers from './containers/AddTrackingNumbers/AddTrackingNumbers';
+import SuggestionsPage from './containers/SuggestionsPage/SuggestionsPage';
 
-type Props = {}
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
 
-const App = (props: Props) => {
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_ANALYTICS_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: "exios-client",
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGE_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
+  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
+};
+
+const App = () => {
   const isLoggedIn = useSelector((state: any) => state.session.isLoggedIn);
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  getAnalytics(app);
 
   return (
       <Router>
@@ -43,7 +59,8 @@ const App = (props: Props) => {
             <Route path='/terms-privacy' element={<TermsAndPrivacy />} />
             <Route path='/orders' element={<ClientOrders />} />
             <Route path='/order/:id' element={<OrderInfoPage />} />
-            <Route path='*' element={<Navigate to='/home' />} />;
+            <Route path='/suggestions' element={<SuggestionsPage />} />
+            <Route path='*' element={<Navigate to='/home' />} />
           </Route>
         </Routes>
       </Router>

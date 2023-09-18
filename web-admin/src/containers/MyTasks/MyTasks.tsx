@@ -5,9 +5,9 @@ import Badge from '../../components/Badge/Badge'
 import { ImAttachment } from "react-icons/im";
 import Task from '../../components/Task/Task'
 import { FaRegComment } from 'react-icons/fa';
-import { Avatar, AvatarGroup, Box, CircularProgress, Dialog } from '@mui/material';
+import { Alert, Avatar, AvatarGroup, Backdrop, Box, CircularProgress, Dialog, Snackbar } from '@mui/material';
 import CustomButton from '../../components/CustomButton/CustomButton';
-import { AiOutlineEdit, AiOutlinePlus } from 'react-icons/ai';
+import { AiFillAlert, AiOutlineEdit, AiOutlinePlus } from 'react-icons/ai';
 import api from '../../api';
 import ModalClose from '@mui/joy/ModalClose';
 import Typography from '@mui/joy/Typography';
@@ -16,6 +16,7 @@ import FilesPreviewers from '../../components/FilesPreviewers/FilesPreviewers';
 import { Link } from 'react-router-dom';
 import CommentsSection from '../../components/CommentsSection/CommentsSection';
 import { User } from '../../models';
+
 
 type MyProps = {
   account: User
@@ -48,6 +49,8 @@ type State = {
   isCommentsFetching: boolean
   commentInput: string
   comments: any
+  responseMessage: string
+  isSuccess: boolean
 }
 
 export class MyTasks extends Component<MyProps, State> {
@@ -71,6 +74,8 @@ export class MyTasks extends Component<MyProps, State> {
     isCommentsFetching: false,
     commentInput: '',
     comments: [],
+    responseMessage: '',
+    isSuccess: false
   }
 
   async componentDidMount() {
@@ -118,14 +123,63 @@ export class MyTasks extends Component<MyProps, State> {
   addNewComment = async (event: any) => {
     const { clickedTask, commentInput }: any = this.state;
     if (!commentInput) return;
+
     
     try {
       await api.post(`task/${clickedTask._id}/comments`, { message: commentInput });
       const comments = (await api.get(`task/${clickedTask._id}/comments`))?.data;
-      this.setState({ comments });
+      
+      const { account } = this.props;
+      const task: any = this.state.clickedTask;
+
+      const message = `
+        ارسل لك ${account.firstName} ${account.lastName} 
+        تعليق جديد بالتاسك التالي:
+        عنوان التاسك '${task.title}'
+        والحالة: ${labels[task.label]}
+        التعليق الجديد: '${commentInput}'
+        يرجى دخول على التاسك لعرض التعليق واكتمال التاسك في اسرع وقت
+        شكرا لكم
+      `
+      await this.sendWhatsupMessage(message);
+      this.setState({ comments, commentInput: '' });
     } catch (error) {
       console.log(error);
     }
+  }
+
+  sendWhatsupMessage = (customMessage?: string) => {
+    const { account } = this.props;
+    const task: any = this.state.clickedTask;
+
+    const message = customMessage || `
+      ارسل لك ${account.firstName} ${account.lastName} 
+      تذكير خاص بالتاسك لكي تقوم بالحل المشكلة او تحديث التاسك على ان تم انتهاء التاسك او الرد على التعليقات الخاصه بالتاسك، حيث معلوماته التاسك كالاتي
+      عنوان التاسك '${task.title}'
+      والحالة: ${labels[task.label]}
+      يرجى دخول للتاسك وبدا في حل المشكلة
+      شكرا لكم
+    `;
+
+    this.setState({ isLoading: true });
+    task.reviewers.forEach((user: User) => {
+      api.post(`sendWhatsupMessage`, { phoneNumber: `${user.phone}@c.us`, message })
+        .then((res) => {
+          this.setState({
+            responseMessage: 'Whatsup message has been send successfully',
+            isSuccess: true,
+            isLoading: false
+          })
+        })
+        .catch((err) => {
+          console.log(err);
+          this.setState({
+            responseMessage: err.response.data.message === 'whatsup-auth-not-found' ? 'You need to scan QR from your whatsup !' : err.response.data.message,
+            isSuccess: false,
+            isLoading: false
+          })
+      })
+    })
   }
 
   render() {
@@ -249,11 +303,23 @@ export class MyTasks extends Component<MyProps, State> {
                   border: '1px solid #e6e6e6',
                 }}
               />
+
+              <CustomButton 
+                background='rgb(0, 171, 85)' 
+                size="small"
+                onClick={() => this.sendWhatsupMessage()}
+                icon={<AiFillAlert />}
+              >
+                Alert Reviewrs
+              </CustomButton>
               
               <div className='d-flex justify-content-between align-items-center mb-5 mt-4'>
-                <Link to={`/task/${clickedTask._id}/edit`}>
-                  <AiOutlineEdit size="25" style={{ cursor: 'pointer' }} />
-                </Link>
+                <div>
+                  <Link to={`/task/${clickedTask._id}/edit`}>
+                    <AiOutlineEdit size="25" style={{ cursor: 'pointer' }} />
+                  </Link>
+
+                </div>
 
                 <Typography
                   component="h2"
@@ -341,12 +407,34 @@ export class MyTasks extends Component<MyProps, State> {
                       account={this.props.account}
                       onTextChange={(event: any) => this.setState({ commentInput: event.target.value })}
                       onAddCommentClick={this.addNewComment}
+                      commentValue={this.state.commentInput}
                     />
                   }
                 </Typography>
             </Box>
           </Dialog>
         }
+        
+        <Backdrop
+          sx={{ color: '#fff', zIndex: (theme: any) => theme.zIndex.drawer + 2000 }}
+          open={isLoading}
+        >
+          <CircularProgress color="inherit" />
+        </Backdrop>
+
+        <Snackbar 
+          open={!!this.state.responseMessage} 
+          autoHideDuration={6000}
+          onClose={() => this.setState({ responseMessage: '' })}
+        >
+          <Alert 
+            severity={this.state.isSuccess ? 'success' : 'error'}
+            sx={{ width: '100%' }}
+            onClose={() => this.setState({ responseMessage: '' })}
+          >
+            {this.state.responseMessage}
+          </Alert>
+        </Snackbar>
       </div>
     )
   }

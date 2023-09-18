@@ -18,7 +18,6 @@ const ShipFromTo = (props: Props) => {
   useEffect(() => {
     props.shipFromChange(shipmentFromWhere || '');
   }, [shipmentFromWhere]);
-  console.log(shipmentFromWhere);
   
   return (
     <div className={`flex justify-center items-center my-10 ${isMobile ? 'flex-col' : ''}`}>

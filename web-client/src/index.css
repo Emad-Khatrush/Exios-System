@@ -24,6 +24,10 @@
   select {
     @apply px-8 py-3;
   }
+
+  button {
+    @apply disabled:bg-slate-400 disabled:hover:bg-slate-400;
+  }
 }
 
 html, body, #root {

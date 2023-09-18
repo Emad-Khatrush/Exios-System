@@ -1,5 +1,4 @@
 import React from 'react'
-import Logo from '../Logo/Logo';
 import { AiOutlineClose } from 'react-icons/ai';
 import image from '../../../public/images/exios-logo.png';
 import { routes } from '../PrivateRoute/routes';
@@ -39,7 +38,11 @@ const ResponsiveSidebar = (props: Props) => {
 
               <ul aria-orientation="vertical" className=" py-1">
                 {routes.map(route => (
-                  <li key={route.value} className="w-10/12 mr-4 pl-6 cursor-pointer text-gray-600 text-sm leading-3 tracking-normal mt-4 mb-4 py-2 hover:text-green-700 focus:green-indigo-700 focus:outline-none">
+                  <li 
+                    key={route.value} 
+                    className="w-10/12 mr-4 pl-6 cursor-pointer text-gray-600 text-sm leading-3 tracking-normal mt-4 mb-4 py-2 hover:text-green-700 focus:green-indigo-700 focus:outline-none"
+                    onClick={() => setShow(!show)}
+                  >
                     <div className="flex items-center text-2xl justify-end">
                       <Link to={route.path} className="ml-2 mr-3 flex-none">{route.label}</Link>
                       <div>
@@ -51,7 +54,7 @@ const ResponsiveSidebar = (props: Props) => {
               </ul>
             </div>
             {/* Footer */}
-            <ResponsiveFooterSidbar account={account} />
+            <ResponsiveFooterSidbar account={account} toggleSidebar={() => setShow((prevState => !prevState))} />
         </div>
       </div>
     </div>

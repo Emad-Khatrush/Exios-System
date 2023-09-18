@@ -1,11 +1,13 @@
-import { FormControl, InputLabel, MenuItem, Select } from "@mui/material";
-import { useState } from "react";
+import { CircularProgress, FormControl, InputLabel, MenuItem, Select } from "@mui/material";
+import { useEffect, useState } from "react";
 import { BiPhoneCall } from "react-icons/bi";
 import { BsArrowLeft } from "react-icons/bs";
 import { Link } from "react-router-dom";
+import api from "../../api";
 import Badge from "../../components/Badge/Badge";
 import Card from "../../components/Card/Card";
 import CurrencyInput from "../../components/CurrencyInput/CurrencyInput";
+import { ExchangeRate } from "../../models";
 import ShipmentPricesText from "./ShipmentPricesText";
 
 const websites = [
@@ -21,10 +23,27 @@ const websites = [
 
 const PricesPage = () => {
   const [ totalInvoice, setTotalInvoice ] = useState<number | string | undefined>(undefined);
+  const [ isLoading, setIsLoading ] = useState<boolean>(false);
+  const [ exchangeRate, setExchangeRate ] = useState<ExchangeRate | undefined>();
   const [ websiteName, setWebsiteName ] = useState<any>({
     value: 'alibaba',
     label: 'علي بابا',
   },);
+
+  useEffect(() => {
+    getExchangeRate();
+  }, [])
+
+  const getExchangeRate = async () => {
+    try {
+      setIsLoading(true);
+      const res = await api.getExchangeRate();
+      setExchangeRate(res.data);
+    } catch (error) {
+      console.log(error);
+    }
+    setIsLoading(false);
+  }
 
   const invoiceCommission = Math.ceil(calculateCommission(totalInvoice)); 
   
@@ -32,21 +51,27 @@ const PricesPage = () => {
     <div className="container mx-auto py-10 h-64 w-11/12 px-6">
       <div className="lg:flex justify-end">
         <Card className="mb-10 lg:w-5/12">
-          <h2 className=" text-end text-2xl mb-3 font-bold">سعر التصريف مقابل الدولار</h2>
-          <div className="flex p-2 justify-between flex-row-reverse">
-            <div className="flex flex-row-reverse">
-              <img className="w-16 h-16 ml-5" src="https://static.thenounproject.com/png/2857854-200.png" alt="" />
-              <div>
-                <h3 className="mb-3 font-bold">دينار الليبي</h3>
-                <h3 className="text-gray-400 font-bold text-end">د.ل</h3>
+          {isLoading ?
+            <CircularProgress />
+            :
+            <div>
+              <h2 className=" text-end text-2xl mb-3 font-bold">سعر التصريف مقابل الدولار</h2>
+              <div className="flex p-2 justify-between flex-row-reverse">
+                <div className="flex flex-row-reverse">
+                  <img className="w-16 h-16 ml-5" src="https://static.thenounproject.com/png/2857854-200.png" alt="" />
+                  <div>
+                    <h3 className="mb-3 font-bold">دينار الليبي</h3>
+                    <h3 className="text-gray-400 font-bold text-end">د.ل</h3>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-3  font-bold">{exchangeRate?.rate}</p>
+                  <p className="text-green-500 font-bold ">0%</p>
+                </div>
               </div>
             </div>
-
-            <div>
-              <p className="mb-3  font-bold">5.30</p>
-              <p className="text-green-500 font-bold ">5%</p>
-            </div>
-          </div>
+          }
         </Card>
       </div>
 
@@ -55,12 +80,12 @@ const PricesPage = () => {
           <h1 className="text-2xl mb-10 font-bold">عمولات الشراء</h1>
           
           <div className="flex justify-end items-center mb-4">
-            <p className="text-sm lg:text-lg">من قيمة الفاتورة</p>
-            <p className="text-sm lg:text-lg ml-1">6%</p>
+            <p className="text-sm lg:text-lg">عمولة ثابته</p>
+            <p className="text-sm lg:text-lg ml-1">10$</p>
             <BsArrowLeft className="ml-3 text-md lg:text-4xl" />
             <Badge 
               class="text-sm ml-5 lg:text-2xl"
-              text={'499 $'}
+              text={'200 $'}
               color='primary' 
             />
             <p className="text-sm ml-3 lg:text-lg">الى</p>
@@ -72,14 +97,50 @@ const PricesPage = () => {
             <p className="text-sm ml-3 lg:text-lg">من</p>
           </div>
 
-          <div className="flex justify-end items-center">
+          <div className="flex justify-end items-center mb-4">
             <p className="text-sm lg:text-lg">من قيمة الفاتورة</p>
             <p className="text-sm lg:text-lg ml-1">5%</p>
+            <BsArrowLeft className="ml-3 text-md lg:text-4xl" />
+            <Badge 
+              class="text-sm ml-5 lg:text-2xl"
+              text={'500 $'}
+              color='primary' 
+            />
+            <p className="text-sm ml-3 lg:text-lg">الى</p>
+            <Badge 
+              class="text-sm ml-3 lg:text-2xl"
+              text={'201 $'}
+              color='primary' 
+            />
+            <p className="text-sm ml-3 lg:text-lg">من</p>
+          </div>
+
+          <div className="flex justify-end items-center mb-4">
+            <p className="text-sm lg:text-lg">من قيمة الفاتورة</p>
+            <p className="text-sm lg:text-lg ml-1">4%</p>
+            <BsArrowLeft className="ml-3 text-md lg:text-4xl" />
+            <Badge 
+              class="text-sm ml-5 lg:text-2xl"
+              text={'3000 $'}
+              color='primary' 
+            />
+            <p className="text-sm ml-3 lg:text-lg">الى</p>
+            <Badge 
+              class="text-sm ml-3 lg:text-2xl"
+              text={'501 $'}
+              color='primary' 
+            />
+            <p className="text-sm ml-3 lg:text-lg">من</p>
+          </div>
+
+          <div className="flex justify-end items-center">
+            <p className="text-sm lg:text-lg">من قيمة الفاتورة</p>
+            <p className="text-sm lg:text-lg ml-1">3%</p>
             <BsArrowLeft className="ml-3 text-md lg:text-4xl" />
             <p className="text-sm lg:text-lg ml-8">فما فوق</p>
             <Badge
               class="text-sm lg:text-2xl ml-3"
-              text={'500 $'}
+              text={'3001 $'}
               color='primary' 
             />
             <p className="text-sm lg:text-lg ml-3">من</p>
@@ -125,6 +186,8 @@ const PricesPage = () => {
               {websiteName.value === 'alibaba' && <p className="my-2">عمولة موقع علي بابا 3%: ${Math.ceil(Number(totalInvoice) * 0.03)} </p>}
               <p className="my-2">عمولة الشركة: ${invoiceCommission} </p>
               <p className="my-2">مجموع فاتورتك: ${Number(invoiceCommission) + Number(totalInvoice) + (websiteName.value === 'alibaba' ? Math.ceil(Number(totalInvoice) * 0.03) : 0)} </p>
+              <p className="my-2"> ملاحظة: اجمالي الفاتورة قيمة تقريبيا من الممكن تواجد فرق شحن داخلي لذلك يرجى مراسلة مندوب الشركة للتفاصيل</p>
+
               <Link to={'/contact-us'} className="flex justify-end my-5">
                 <button
                   type="submit"
@@ -154,16 +217,15 @@ const calculatePercentage = (number: any, percentage: number) => {
 }
 
 const calculateCommission = (totalInvoice: any) => {
-  if (totalInvoice >= 500) {
-    return calculatePercentage(totalInvoice, 5); // 5% commission
-  } else if (totalInvoice < 500) {
-    const totalCommission = calculatePercentage(totalInvoice, 6);
-    if (totalCommission > 10) {
-      return totalCommission;
-    }
+  if (totalInvoice > 3000) {
+    return calculatePercentage(totalInvoice, 3); // 3% commission 
+  } else if (totalInvoice >= 501 && totalInvoice <= 3000) {
+    return calculatePercentage(totalInvoice, 4); // 4% commission 
+  } else if (totalInvoice >= 201 && totalInvoice <= 500) {
+    return calculatePercentage(totalInvoice, 5); // 5% commission 
+  } else {
     return 10; // min commission 10$
   }
-  return 0;
 }
 
 export default PricesPage;

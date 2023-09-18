@@ -2,7 +2,7 @@
 const LandingPage = () => {
   return (
     <iframe 
-      src="https://www.exioslibya.com"
+      src="https://exioslibya.herokuapp.com"
       height="100%"
       width="100%"
     />

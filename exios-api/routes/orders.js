@@ -1,7 +1,7 @@
 const express = require('express');
 
 const orders = require('../controllers/orders');
-const { protect, isAdmin, isClient, isEmployee } = require('../middleware/check-auth');
+const { protect, isAdmin, isClient, isEmployee, allowAdminsAndEmployee } = require('../middleware/check-auth');
 const multer = require('multer');
 // cloudinary settings
 const { storage } = require('../utils/cloudinary');
@@ -19,36 +19,46 @@ router.route('/invoices')
       .get(protect, isAdmin, orders.getInvoices);
 
 router.route('/orders')
-      .get(protect, isAdmin, isEmployee, orders.getOrders)
-      .post(protect, isAdmin, isEmployee, upload.array('files'), orders.createOrder);
+      .get(protect, allowAdminsAndEmployee, orders.getOrders)
+      .post(protect, allowAdminsAndEmployee, upload.array('files'), orders.createOrder);
 
 router.route('/packages/orders')
       .get(protect, isAdmin, orders.getPackagesOfOrders)
 
 router.route('/currentOrdersTab')
-      .get(protect, isAdmin, isEmployee, orders.getOrdersTab)
+      .get(protect, allowAdminsAndEmployee, orders.getOrdersTab)
 
 router.route('/orders/:searchValue/:searchType')
-      .get(protect, isAdmin, isEmployee, orders.getOrdersBySearch)
+      .get(protect, allowAdminsAndEmployee, orders.getOrdersBySearch)
 
 router.route('/unsureOrder/add')
-      .post(protect, isAdmin, isEmployee, orders.createUnsureOrder);
+      .post(protect, allowAdminsAndEmployee, orders.createUnsureOrder);
 
 router.route('/order/uploadFiles')
-      .post(protect, isAdmin, isEmployee, upload.array('files'), orders.uploadFiles);
+      .post(protect, allowAdminsAndEmployee, upload.array('files'), orders.uploadFiles);
+
+router.route('/order/upload/fileLink')
+      .post(protect, allowAdminsAndEmployee, upload.array('files'), orders.uploadFilesToLinks)
+      .delete(protect, allowAdminsAndEmployee, orders.deleteLinkFiles);
       
 router.route('/order/deleteFiles')
-      .delete(protect, isAdmin, isEmployee, orders.deleteFiles);
+      .delete(protect, allowAdminsAndEmployee, orders.deleteFiles);
 
 router.route('/order/:id')
-      .get(protect, isAdmin, isEmployee, orders.getOrder)
-      .put(protect, orders.updateOrder);
+      .get(protect, allowAdminsAndEmployee, orders.getOrder)
+      .put(protect, allowAdminsAndEmployee, orders.updateOrder);
+
+router.route('/order/:id/view')
+      .get(orders.getPublicOrder)
 
 router.route('/order/:id/cancel')
-      .post(protect, isAdmin, isEmployee, orders.cancelOrder);
+      .post(protect, allowAdminsAndEmployee, orders.cancelOrder);
 
 router.route('/order/:id/addActivity')
-      .post(protect, isAdmin, isEmployee, orders.createOrderActivity)
+      .post(protect, allowAdminsAndEmployee, orders.createOrderActivity)
+
+router.route('/orders/rating')
+      .get(protect, isAdmin, orders.getRatings)
 
 // Client Routes
 
@@ -69,5 +79,9 @@ router.route('/client/create/trackingNumber')
 
 router.route('/client/unsureOrder/:id/delete')
       .delete(protect, isClient, orders.deleteUnsureOrder)
+      
+router.route('/client/order/:id/rating')
+      .get(protect, isClient, orders.getOrderRating)
+      .post(protect, isClient, orders.createRatingForOrder)
 
 module.exports = router;

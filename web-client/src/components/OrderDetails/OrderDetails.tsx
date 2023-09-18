@@ -3,7 +3,7 @@ import { ImLocation2 } from 'react-icons/im';
 import { FaFlag } from "react-icons/fa";
 import { AiFillEye } from "react-icons/ai";
 import { Link } from "react-router-dom";
-import { Package } from "../../models";
+import { OrderStatusType, Package, PackageDetails } from "../../models";
 import moment from "moment-timezone";
 import Badge from "../Badge/Badge";
 import { getOrderStatusLabels } from "../../utils/methods";
@@ -16,6 +16,7 @@ const shipmentMethodsLabels = {
 type Props = {
   order: Package
   index: number
+  activeTab: OrderStatusType
 }
 
 const airShipmentImage = 'https://st2.depositphotos.com/1154952/9707/i/600/depositphotos_97075074-stock-photo-ship-loading-container-in-import.jpg';
@@ -56,6 +57,18 @@ const OrderDetails = (props: Props) => {
               <p className=" text-gray-400"> <Badge color="success" text={statusLabel} /> </p>
               <h5 className=" font-bold text-zinc-800">:الحالة</h5>
             </div>
+            {props.activeTab === 'unsure' &&
+              <div className="flex justify-between mb-2">
+                <div>
+                  {order.paymentList?.length > 0 && order.paymentList.map((packageDetails: PackageDetails) => (
+                    <>
+                      {packageDetails.deliveredPackages.trackingNumber && <p className=" text-gray-400 my-2"> <Badge color="warning" text={packageDetails.deliveredPackages.trackingNumber} /> </p>}
+                    </>
+                  ))}
+                </div>
+                <h5 className=" font-bold text-zinc-800">:ارقام التتبع</h5>
+              </div>
+            }
           </div>
         </div>
 

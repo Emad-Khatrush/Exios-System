@@ -10,6 +10,12 @@ import { RouteMatch } from 'react-router-dom';
 import withRouter from '../../utils/WithRouter/WithRouter';
 import { User } from '../../models';
 
+const labels: any = {
+  urgent: 'عاجل',
+  normal: 'عادي',
+  limitedTime: 'وقت محدد'
+}
+
 type Props = {
   router: RouteMatch
   account: User
@@ -135,6 +141,33 @@ export class EditTask extends Component<Props, State> {
     })))
   }
 
+  sendWhatsupMessage = () => {
+    const { account } = this.props;
+    const task: any = this.state.form;
+
+    const message = `
+      قد قام ${account.firstName} ${account.lastName}
+      باكتمال التاسك الخاص به الذي
+      بعنوان '${task.title}'
+      والحالة: ${labels[task.label]}
+      يرجى دخول على التاسك وتحقق من ان تم اكتمال العمل كما يجب وموافقه عليه
+      شكرا لكم
+    `;
+
+    api.post(`sendWhatsupMessage`, { phoneNumber: `${task.createdBy.phone}@c.us`, message })
+      .then((res) => {
+        this.setState({
+          responseMessage: 'Whatsup message has been send successfully',
+        })
+      })
+      .catch((err) => {
+        console.log(err);
+        this.setState({
+          responseMessage: err.response.data.message === 'whatsup-auth-not-found' ? 'You need to scan QR from your whatsup !' : err.response.data.message
+        })
+      })
+  }
+
   onSubmit = async (event: any) => {
     event.preventDefault();
 
@@ -162,7 +195,8 @@ export class EditTask extends Component<Props, State> {
         status
       }
       await api.update(`task/${this.props.router.params.id}/status`, body);
-      this.setState({ isUpdating: false, responseMessage: 'تم ارسال طلب التحقق من انتهاء المهمه', isSuccess: true });
+      const form = (await api.get(`task/${this.props.router.params.id}`)).data;
+      this.setState({ form, isUpdating: false, responseMessage: 'تم ارسال طلب التحقق من انتهاء المهمه', isSuccess: true });
     } catch (error: any) {
       this.setState({ isUpdating: false, responseMessage: error.data.message, isSuccess: false });   
     }
@@ -189,7 +223,10 @@ export class EditTask extends Component<Props, State> {
                   className='mb-3'
                   background='rgb(61, 139, 230)' 
                   size="small"
-                  onClick={() => this.changeStatusOfTask('needsApproval')}
+                  onClick={() => {
+                    this.changeStatusOfTask('needsApproval');
+                    this.sendWhatsupMessage();
+                  }}
                 >
                   Finish My Task
                 </CustomButton>

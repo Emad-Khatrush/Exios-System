@@ -6,6 +6,7 @@ type Props = {
     {
       label: string
       value: string
+      tint: 'danger'
     }
   ]
 }
@@ -20,7 +21,7 @@ const InfoDetailsCard = (props: Props) => {
 
       {data.map( (info, i) => (
         <div key={i} className=" flex justify-between items-center mb-4">
-          <p className='text-stone-700 text-md font-semibold'>{info.value}</p>
+          <p className={`text-${info.tint === 'danger' ? 'red' : 'stone'}-500 text-md font-semibold`}>{info.value}</p>
           <h4 className='  text-gray-400 text-md'>{info.label}</h4>
         </div>
       ))}

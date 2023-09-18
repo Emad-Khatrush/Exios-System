@@ -135,6 +135,11 @@ const orderSchema = new Schema({
     total: Number,
     default: 0
   },
+  credit: {
+    currency: String,
+    total: Number,
+    default: 0
+  },
   paymentList: [{
     link: {
       type: String,
@@ -158,10 +163,22 @@ const orderSchema = new Schema({
         default: false
       }
     },
+    settings: {
+      visableForClient: {
+        type: Boolean,
+        default: true
+      }
+    },
     note: {
       type: String,
       default: ''
     },
+    images: [{
+      filename: String,
+      path: String,
+      fileType: String,
+      description: String
+    }],
     deliveredPackages: {
       arrivedAt: {
         type: Date,
@@ -197,6 +214,14 @@ const orderSchema = new Schema({
         type: Number,
         default: 0
       },
+      shipmentMethod: String,
+      containerInfo: {
+        billOfLading: {
+          type: String,
+          default: ''
+        }
+      },
+      receiptNo: String
     }
   }]
 }, { timestamps: true })

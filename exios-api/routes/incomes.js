@@ -1,6 +1,6 @@
 const express = require('express');
 const incomes = require('../controllers/incomes');
-const { protect, isAdmin } = require('../middleware/check-auth');
+const { protect, allowAdminsAndEmployee, isAdmin } = require('../middleware/check-auth');
 const multer = require('multer');
 
 const upload = multer();
@@ -8,15 +8,15 @@ const upload = multer();
 const router  = express.Router();
 
 router.route('/incomes')
-      .get(protect, isAdmin, incomes.getIncomes)
-      .post(protect, isAdmin, upload.array('files'), incomes.createIncome);
+      .get(protect, allowAdminsAndEmployee, incomes.getIncomes)
+      .post(protect, allowAdminsAndEmployee, upload.array('files'), incomes.createIncome);
       
 router.route('/income/:id')
-      .get(protect, isAdmin, incomes.getIncome)
-      .put(protect, isAdmin, incomes.updateIncome);
+      .get(protect, allowAdminsAndEmployee, incomes.getIncome)
+      .put(protect, allowAdminsAndEmployee, incomes.updateIncome);
 
 router.route('/income/uploadFiles')
-      .post(protect, isAdmin, upload.array('files'), incomes.uploadFiles);
+      .post(protect, allowAdminsAndEmployee, upload.array('files'), incomes.uploadFiles);
 
 router.route('/income/deleteFiles')
       .delete(protect, isAdmin, incomes.deleteFiles);

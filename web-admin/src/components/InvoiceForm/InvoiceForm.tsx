@@ -683,6 +683,17 @@ const InvoiceForm = (props: Props) => {
                   />
                 }
 
+                {payment?.deliveredPackages?.trackingNumber &&
+                  <Badge
+                    style={{
+                      fontFamily: 'system-ui',
+                      marginLeft: '6px'
+                    }}
+                    text={payment?.deliveredPackages?.trackingNumber} 
+                    color='warning'
+                  />
+                }
+
                 <div className="d-flex">
                   <TextField
                     id={String(i)}

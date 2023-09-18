@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useSelector } from "react-redux";
 import InfoCard from "../../components/InfoCard/InfoCard";
 
-type Props = {}
-
-const AddressPage = (props: Props) => {
+const AddressPage = () => {
+  const account = useSelector((state: any) => state.session.account);
 
   return (
     <div className="container mx-auto py-10 h-64 w-11/12 px-6">
@@ -16,15 +15,14 @@ const AddressPage = (props: Props) => {
           description={
             `
             Shipment to China </br>
-            联系人：陈小林 </br>
-            电话：19128651680 </br>
-            仓库地址：空运和海运 </br>
-            广州增槎路西州北路城市之星物流园A5仓 Exios39
+            空运和海运仓库地址：广东省佛山市南海区里水镇旗峰大道2号全顺祥物流基地17仓—2 联系仓库：19128651680 陈小林 19128650950 马强 Exios39 - ${account?.customerId}
             `
           }
           buttonLabel={'ابدا الشحن'}
           disableHoverEffect={true}
           buttonPath={'/start-shipment?shipmentFromWhere=china'}
+          textDirection={'ltr'}
+          copyTextButton={true}
         />
 
         <InfoCard 
@@ -38,12 +36,14 @@ const AddressPage = (props: Props) => {
             Address: Al ghazal building 
             Office room no : 301 (3rd floor)
             Opposite Arabic chair
-            Al buteen Deira,Dubai Sq336 Code:7162-8896
+            Al buteen Deira,Dubai Sq336 Exios39 - ${account?.customerId}
             `
           }
           buttonLabel={'ابدا الشحن'}
           disableHoverEffect={true}
           buttonPath={'/start-shipment?shipmentFromWhere=uae'}
+          textDirection={'ltr'}
+          copyTextButton={true}
         />
 
         <InfoCard 
