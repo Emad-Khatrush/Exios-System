@@ -139,7 +139,6 @@ app.use(async (req, res) => {
   //   console.error(error);
   // });
   // res.send(newClients);
-  console.log('test');
   res.status(404).send("Page Not Found");
 });
 
