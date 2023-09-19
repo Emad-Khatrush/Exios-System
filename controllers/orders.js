@@ -933,7 +933,7 @@ module.exports.createRatingForOrder = async (req, res, next) => {
       user: req.user,
       order: orderId,
       questions
-    })
+    });
     
     res.status(200).json(createdRating);
   } catch (error) {
