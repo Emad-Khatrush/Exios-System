@@ -1,3 +1,2 @@
-2023/09/17-21:06:10.871 fa03 Reusing MANIFEST /Users/emadkhatrush/Desktop/Exios Staff/exios-system/exios-api/.wwebjs_auth/session/Default/Service Worker/Database/MANIFEST-000001
-2023/09/17-21:06:10.871 fa03 Recovering log #3
-2023/09/17-21:06:10.872 fa03 Reusing old log /Users/emadkhatrush/Desktop/Exios Staff/exios-system/exios-api/.wwebjs_auth/session/Default/Service Worker/Database/000003.log 
+2023/09/19-18:21:06.092 4080 Creating DB C:\Users\Emad\Desktop\Exios\Exios-System\exios-api\.wwebjs_auth\session\Default\Service Worker\Database since it was missing.
+2023/09/19-18:21:06.098 4080 Reusing MANIFEST C:\Users\Emad\Desktop\Exios\Exios-System\exios-api\.wwebjs_auth\session\Default\Service Worker\Database/MANIFEST-000001
