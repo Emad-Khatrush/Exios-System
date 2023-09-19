@@ -197,7 +197,7 @@ const OrderInfoPage = () => {
 
   const packages = order.paymentList;
   
-  const showRatingWidget = (order.orderStatus === 4 || order.orderStatus === 5) || !!(packages.find((packageDetail: PackageDetails) => packageDetail.status.received)) && !orderRating;
+  const showRatingWidget = ((order.orderStatus === 4 || order.orderStatus === 5) || !!(packages.find((packageDetail: PackageDetails) => packageDetail.status.received))) && !orderRating;
 
   return (
     <div className="container mx-auto py-10 h-64 w-11/12 px-6">

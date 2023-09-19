@@ -7,17 +7,17 @@ import AlertInfo from "../AlertInfo/AlertInfo";
 
 const defaultFields = [
   {
-    id: 'employeeQuestion',
+    name: 'employeeQuestion',
     label: 'كيف كانت تعامل الموظفين معك؟',
     type: 'rating'
   },
   {
-    id: 'generalQuestion',
+    name: 'generalQuestion',
     label: 'ماهو رايك بالخدمات التي تحصلت عليها بشكل عام؟',
     type: 'rating'
   },
   {
-    id: 'reviewQuestion',
+    name: 'reviewQuestion',
     label: 'اعطنى رايك على الخدمات التي تحصلت عليها',
     type: 'text'
   }
@@ -77,11 +77,11 @@ const OrderRatingWidget = () => {
           {field.type === 'text' ?
             <textarea
               className="mt-2"
-              name={field.id}
+              name={field.name}
               cols={20} 
               rows={2}
               onChange={(event) => {
-                const foundField = fields.find(question => question.id === event.target.name) as any;
+                const foundField = fields.find(question => question.name === event.target.name) as any;
                 foundField.value = event.target.value;
                 setFields(fields);
               }}
@@ -89,9 +89,9 @@ const OrderRatingWidget = () => {
             />
             :
             <RatingStars
-              name={field.id}
+              name={field.name}
               onChange={(value, event) => {
-                const foundField = fields.find(question => question.id === event.target.name) as any;
+                const foundField = fields.find(question => question.name === event.target.name) as any;
                 foundField.value = value;
                 setFields(fields);
               }}
