@@ -5,9 +5,9 @@ const OrderRatingSchema = new Schema({
   user: { type: Schema.Types.ObjectId, ref: 'User'},
   order: { type: Schema.Types.ObjectId, ref: 'Order'},
   questions: [{
-    id: {
+    name: {
       type: String,
-      unique: true
+      required: true,
     },
     type: {
       type: String,
