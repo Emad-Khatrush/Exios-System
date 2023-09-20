@@ -7,6 +7,7 @@ const bodyParser = require('body-parser');
 const errorHandler = require('./middleware/error');
 const { validatePhoneNumber } = require('./utils/messages');
 const cors = require('cors');
+const morgan = require('morgan');
 
 // import routes
 const orders = require('./routes/orders');
@@ -54,6 +55,7 @@ mongoose.connect(connectionUrl, {
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(morgan('tiny'));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader(
