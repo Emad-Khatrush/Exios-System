@@ -3,11 +3,12 @@ if (process.env.NODE_ENV !== "production") {
 }
 const express = require('express');
 const mongoose = require('mongoose');
+const morgan = require('morgan');
+const cors = require('cors');
 const bodyParser = require('body-parser');
 const errorHandler = require('./middleware/error');
+const { generatePDF } = require("./utils/sender");
 const { validatePhoneNumber } = require('./utils/messages');
-const cors = require('cors');
-const morgan = require('morgan');
 
 // import routes
 const orders = require('./routes/orders');
@@ -39,6 +40,7 @@ const app = express();
 client.on('qr', (qr) => {
   console.log(qr);
   qrCodeData = qr;
+  qrcode.generate(qr, { small: true });
 });
 
 client.on('ready', () => {
@@ -96,7 +98,6 @@ app.get('/api/get-qr-code', (req, res) => {
 
 app.post('/api/sendWhatsupMessage', async (req, res) => {
   const { phoneNumber, message } = req.body
-
   try {
     const target = await client.getContactById(validatePhoneNumber(phoneNumber));
     if (target) {
