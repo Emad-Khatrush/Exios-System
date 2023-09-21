@@ -153,8 +153,9 @@ export class EditTask extends Component<Props, State> {
       يرجى دخول على التاسك وتحقق من ان تم اكتمال العمل كما يجب وموافقه عليه
       شكرا لكم
     `;
+    const phoneNumber = (task.createdBy.phone as any) === '5535728209' ? '00905535728209@c.us' : `${task.createdBy.phone}@c.us`
 
-    api.post(`sendWhatsupMessage`, { phoneNumber: `${task.createdBy.phone}@c.us`, message })
+    api.post(`sendWhatsupMessage`, { phoneNumber, message })
       .then((res) => {
         this.setState({
           responseMessage: 'Whatsup message has been send successfully',

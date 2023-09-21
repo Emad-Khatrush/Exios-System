@@ -163,7 +163,9 @@ export class MyTasks extends Component<MyProps, State> {
 
     this.setState({ isLoading: true });
     task.reviewers.forEach((user: User) => {
-      api.post(`sendWhatsupMessage`, { phoneNumber: `${user.phone}@c.us`, message })
+      const phoneNumber = (user.phone as any) === '5535728209' ? '00905535728209@c.us' : `${user.phone}@c.us`
+      
+      api.post(`sendWhatsupMessage`, { phoneNumber, message })
         .then((res) => {
           this.setState({
             responseMessage: 'Whatsup message has been send successfully',
