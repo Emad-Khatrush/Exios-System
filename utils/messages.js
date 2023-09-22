@@ -1,6 +1,6 @@
 const validatePhoneNumber = (phone) => {
   let generatePhone = phone.trim();
-  if (generatePhone === 905535728209) {
+  if (generatePhone === '5535728209@c.us') {
     return generatePhone;
   }
   // if phone number is starts with +
