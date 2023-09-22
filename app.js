@@ -22,32 +22,14 @@ const resetToken = require('./routes/resetToken');
 const tasks = require('./routes/tasks');
 const settings = require('./routes/settings');
 const User = require('./models/user');
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, RemoteAuth, LocalAuth } = require('whatsapp-web.js');
 const order = require('./models/order');
+const { MongoStore } = require('wwebjs-mongo');
 
 let qrCodeData = null;
-
-const client = new Client({
-  authStrategy: new LocalAuth({ clientId: "admin" }),
-  puppeteer: {
-    headless: true,
-    args: ['--no-sandbox']
-  },
-});
+let client;
 
 const app = express();
-
-client.on('qr', (qr) => {
-  console.log(qr);
-  qrCodeData = qr;
-  qrcode.generate(qr, { small: true });
-});
-
-client.on('ready', () => {
-  console.log('WhatsApp client is ready!');
-});
-
-client.initialize();
 
 const connectionUrl = process.env.MONGO_URL || 'mongodb://localhost:27017/exios-admin'
 mongoose.connect(connectionUrl, {
@@ -74,6 +56,39 @@ const db = mongoose.connection;
 db.on("error", console.error.bind(console, "connection error:"));
 db.once("open", () => {
   console.log('MongoDB connected');
+  const store = new MongoStore({ mongoose: mongoose });
+  client = new Client({
+    authStrategy: new RemoteAuth({
+      clientId: 'admin-client',
+      store,
+      backupSyncIntervalMs: 300000
+    }),
+    puppeteer: {
+      headless: true,
+      args: ['--no-sandbox']
+    },
+  });
+  client.initialize();
+
+  client.on('qr', (qr) => {
+    console.log(qr);
+    qrCodeData = qr;
+    qrcode.generate(qr, { small: true });
+  })
+
+  client.on('ready', () => {
+    console.log('WhatsApp client is ready!');
+  });
+  
+  client.on('authenticated', (session) => {    
+    // Save the session object however you prefer.
+    // Convert it to json, save it to a file, store it in a database...
+    console.log("authenticated");
+  });
+  
+  client.on('remote_session_saved', () => {
+    console.log('Remote Session Saved');
+  });
 })
 
 // render routes
