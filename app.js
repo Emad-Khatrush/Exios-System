@@ -28,7 +28,7 @@ const order = require('./models/order');
 let qrCodeData = null;
 
 const client = new Client({
-  authStrategy: new LocalAuth(),
+  authStrategy: new LocalAuth({ clientId: "client" }),
   puppeteer: {
     headless: true,
     args: ['--no-sandbox']
