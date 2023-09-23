@@ -123,7 +123,7 @@ export class CreateTask extends Component<Props, State> {
       شكرا لكم
     `;
 
-    const phoneNumber = (user.phone as any) === 5535728209 ? '00905535728209@c.us' : `${user.phone}@c.us`
+    const phoneNumber = (user.phone as any) === "5535728209" ? '5535728209@c.us' : `${user.phone}@c.us`
 
     api.post(`sendWhatsupMessage`, { phoneNumber, message })
       .then((res) => {

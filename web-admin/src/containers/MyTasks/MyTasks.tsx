@@ -124,8 +124,8 @@ export class MyTasks extends Component<MyProps, State> {
     const { clickedTask, commentInput }: any = this.state;
     if (!commentInput) return;
 
-    
     try {
+      this.setState({ isLoading: true });
       await api.post(`task/${clickedTask._id}/comments`, { message: commentInput });
       const comments = (await api.get(`task/${clickedTask._id}/comments`))?.data;
       
@@ -141,14 +141,14 @@ export class MyTasks extends Component<MyProps, State> {
         يرجى دخول على التاسك لعرض التعليق واكتمال التاسك في اسرع وقت
         شكرا لكم
       `
-      await this.sendWhatsupMessage(message);
+      await this.sendWhatsupMessage(message, 'add-comment');
       this.setState({ comments, commentInput: '' });
     } catch (error) {
       console.log(error);
     }
   }
 
-  sendWhatsupMessage = (customMessage?: string) => {
+  sendWhatsupMessage = (customMessage?: string, action?: any) => {
     const { account } = this.props;
     const task: any = this.state.clickedTask;
 
@@ -162,25 +162,31 @@ export class MyTasks extends Component<MyProps, State> {
     `;
 
     this.setState({ isLoading: true });
+
+    if (action === 'add-comment' && account._id !== task.createdBy._id) {
+      task.reviewers.push(task.createdBy)
+    }
+
     task.reviewers.forEach((user: User) => {
-      const phoneNumber = (user.phone as any) === 5535728209 ? '00905535728209@c.us' : `${user.phone}@c.us`
-      
-      api.post(`sendWhatsupMessage`, { phoneNumber, message })
-        .then((res) => {
-          this.setState({
-            responseMessage: 'Whatsup message has been send successfully',
-            isSuccess: true,
-            isLoading: false
+      const phoneNumber = (user.phone as any) === "5535728209" ? '5535728209@c.us' : `${user.phone}@c.us`
+      if (user._id !== account._id) {
+        api.post(`sendWhatsupMessage`, { phoneNumber, message })
+          .then((res) => {
+            this.setState({
+              responseMessage: 'Whatsup message has been send successfully',
+              isSuccess: true,
+              isLoading: false
+            })
           })
+          .catch((err) => {
+            console.log(err);
+            this.setState({
+              responseMessage: err.response.data.message === 'whatsup-auth-not-found' ? 'You need to scan QR from your whatsup !' : err.response.data.message,
+              isSuccess: false,
+              isLoading: false
+            })
         })
-        .catch((err) => {
-          console.log(err);
-          this.setState({
-            responseMessage: err.response.data.message === 'whatsup-auth-not-found' ? 'You need to scan QR from your whatsup !' : err.response.data.message,
-            isSuccess: false,
-            isLoading: false
-          })
-      })
+      }
     })
   }
 
@@ -382,7 +388,7 @@ export class MyTasks extends Component<MyProps, State> {
 
               <Typography id="modal-desc" textColor="text.tertiary" style={{ direction: 'rtl', textAlign: 'start' }}>
                 <h6> شرح العمل </h6>
-                <p style={{ color: '#686868', fontSize: '0.9rem' }}>{clickedTask.description}</p>
+                <p style={{ color: '#686868', fontSize: '0.9rem' }} dangerouslySetInnerHTML={{ __html: clickedTask.description.replace(/\n/g, '<br />')}} />
               </Typography>
 
               
@@ -410,6 +416,7 @@ export class MyTasks extends Component<MyProps, State> {
                       onTextChange={(event: any) => this.setState({ commentInput: event.target.value })}
                       onAddCommentClick={this.addNewComment}
                       commentValue={this.state.commentInput}
+                      isPending={this.state.isLoading}
                     />
                   }
                 </Typography>

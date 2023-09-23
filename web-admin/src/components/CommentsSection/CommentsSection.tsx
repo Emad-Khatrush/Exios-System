@@ -11,10 +11,11 @@ type Props = {
   onTextChange?: (event: React.ChangeEvent) => void
   onAddCommentClick?: (event: React.MouseEvent) => void
   commentValue: string
+  isPending: boolean
 }
 
 const CommentsSection = (props: Props) => {
-  const { comments, account, onTextChange, onAddCommentClick, commentValue } = props;
+  const { comments, account, isPending, onTextChange, onAddCommentClick, commentValue } = props;
 
   return (
     <div className='mt-2'>
@@ -36,7 +37,7 @@ const CommentsSection = (props: Props) => {
                 </div>
 
                 <div className='text-start'>
-                  <button onClick={onAddCommentClick} className="btn btn-sm btn-primary" type="button">Comment</button>
+                  <button disabled={isPending} onClick={onAddCommentClick} className="btn btn-sm btn-primary" type="button">Comment</button>
                 </div>
 
           {comments && comments.length > 0 && comments.map(comment => (
@@ -47,7 +48,7 @@ const CommentsSection = (props: Props) => {
                 <h5 className="mr-2 comment-text-md mb-1">{`${comment.createdBy.firstName} ${comment.createdBy.lastName}`}</h5>
               </div>
               <div className={`${comment.createdBy?._id !== account._id ? 'text-start' : ''}`}>
-                <span className={`comment-text-sm`}>{comment.message}</span>
+                <span className={`comment-text-sm`} dangerouslySetInnerHTML={{ __html: comment.message.replace(/\n/g, '<br />')}} />
               </div>
               <hr />
             </div>
