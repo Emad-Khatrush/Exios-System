@@ -13,7 +13,13 @@ const OrderRating = require('../models/orderRating');
 
 module.exports.getInvoices = async (req, res, next) => {
   try {
-    const orders = await Orders.find({}).populate(['user', 'madeBy']);
+    let orders = await Orders.aggregate([
+      {
+        $match: {}
+      }
+    ]);
+    orders = await Orders.populate(orders, [{ path: "madeBy" }, { path: "user" }]);
+
     res.status(200).json({
       orders
     });
@@ -25,33 +31,110 @@ module.exports.getInvoices = async (req, res, next) => {
 module.exports.getOrders = async (req, res, next) => {
   try {
     const { limit, skip, tabType } = req.query;
-    // await Orders.deleteMany({})
+
     const tabTypeQuery = getTapTypeQuery(tabType);
     tabTypeQuery.isCanceled = false;
     const orders = await Orders.find(tabTypeQuery).populate('user').sort({ createdAt: -1 }).skip(skip).limit(limit);
-    const allOrders = await Orders.find({ isCanceled: false });
-    const totalOrders = allOrders.length;
+    
+    let ordersCountList = (await Orders.aggregate([
+      { $match: { isCanceled: false } },
+      {
+        $group: {
+          _id: null,
+          finishedOrders: {
+            $sum: {
+              $cond: [
+                { $eq: ["$isFinished", true] },
+                1,
+                0
+              ]
+            }
+          },
+          activeOrders: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$isFinished", false] }, { $eq: ["$unsureOrder", false] }] },
+                1,
+                0
+              ]
+            }
+          },
+          unsureOrders: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$unsureOrder", true] }] },
+                1,
+                0
+              ]
+            }
+          },
+          arrivingOrders: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$isPayment", true] }, { $eq: ["$orderStatus", 1] }] },
+                1,
+                0
+              ]
+            }
+          },
+          shipmentOrders: {
+            $sum: {
+              $cond: [
+                { $and: [
+                  { $eq: ["$isPayment", false] }, 
+                  { $eq: ["$unsureOrder", false] }, 
+                  { $eq: ["$isShipment", true] },
+                  { $eq: ["$isFinished", false] },
+                ] },
+                1,
+                0
+              ]
+            }
+          },
+          unpaidOrders: {
+            $sum: {
+              $cond: [
+                { $and: [
+                  { $eq: ["$orderStatus", 0] }, 
+                  { $eq: ["$unsureOrder", false] }, 
+                  { $eq: ["$isPayment", true] },
+                  { $eq: ["$isFinished", false] },
+                ] },
+                1,
+                0
+              ]
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 0
+        }
+      }
+    ]))[0];
 
-    let activeOrders = 0, arrivingOrders = 0, shipmentOrders = 0, unpaidOrders = 0, finishedOrders = 0, unsureOrders = 0;
-    allOrders.forEach((order => {
-      if (!order.isFinished &&  !order.unsureOrder) activeOrders++;
-      if (order.isShipment &&  !order.unsureOrder && !order.isPayment &&  !order.isFinished) shipmentOrders++;
-      if (order.isPayment &&  order.orderStatus === 1) arrivingOrders++;
-      if (order.isPayment &&  !order.unsureOrder && order.orderStatus === 0) unpaidOrders++;
-      if (order.isFinished) finishedOrders++;
-      if (order.unsureOrder) unsureOrders++;
-    }))
+    if (!ordersCountList) {
+      ordersCountList = {
+        finishedOrders: 0,
+        activeOrders: 0,
+        unsureOrders: 0,
+        arrivingOrders: 0,
+        shipmentOrders: 0,
+        unpaidOrders: 0
+      }
+    }
     
     res.status(200).json({
       orders,
-      activeOrdersCount: activeOrders,
-      shipmentOrdersCount: shipmentOrders,
-      finishedOrdersCount: finishedOrders,
-      unpaidOrdersCount: unpaidOrders,
-      unsureOrdersCount: unsureOrders,
-      arrivingOrdersCount: arrivingOrders,
+      activeOrdersCount: ordersCountList.activeOrders,
+      shipmentOrdersCount: ordersCountList.shipmentOrders,
+      finishedOrdersCount: ordersCountList.finishedOrders,
+      unpaidOrdersCount: ordersCountList.unpaidOrders,
+      unsureOrdersCount: ordersCountList.unsureOrders,
+      arrivingOrdersCount: ordersCountList.arrivingOrders,
       tabType: tabType ? tabType : 'active',
-      total: totalOrders,
+      total: 0,
       query: {
         limit: Number(limit),
         skip: Number(skip)
@@ -114,6 +197,11 @@ module.exports.getOrdersBySearch = async (req, res, next) => {
   },
   {
     $unwind: '$user'
+  },
+  {
+    $sort: {
+      createdAt: -1
+    }
   })
   
   try {
