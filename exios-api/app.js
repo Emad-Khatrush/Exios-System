@@ -3,10 +3,12 @@ if (process.env.NODE_ENV !== "production") {
 }
 const express = require('express');
 const mongoose = require('mongoose');
+const morgan = require('morgan');
+const cors = require('cors');
 const bodyParser = require('body-parser');
 const errorHandler = require('./middleware/error');
+const { generatePDF } = require("./utils/sender");
 const { validatePhoneNumber } = require('./utils/messages');
-const cors = require('cors');
 
 // import routes
 const orders = require('./routes/orders');
@@ -20,31 +22,14 @@ const resetToken = require('./routes/resetToken');
 const tasks = require('./routes/tasks');
 const settings = require('./routes/settings');
 const User = require('./models/user');
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, RemoteAuth, LocalAuth } = require('whatsapp-web.js');
 const order = require('./models/order');
+const { MongoStore } = require('wwebjs-mongo');
 
 let qrCodeData = null;
-
-const client = new Client({
-  authStrategy: new LocalAuth(),
-  puppeteer: {
-    headless: true,
-    args: ['--no-sandbox']
-  },
-});
+let client;
 
 const app = express();
-
-client.on('qr', (qr) => {
-  console.log(qr);
-  qrCodeData = qr;
-});
-
-client.on('ready', () => {
-  console.log('WhatsApp client is ready!');
-});
-
-client.initialize();
 
 const connectionUrl = process.env.MONGO_URL || 'mongodb://localhost:27017/exios-admin'
 mongoose.connect(connectionUrl, {
@@ -54,6 +39,7 @@ mongoose.connect(connectionUrl, {
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(morgan('tiny'));
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader(
@@ -70,6 +56,39 @@ const db = mongoose.connection;
 db.on("error", console.error.bind(console, "connection error:"));
 db.once("open", () => {
   console.log('MongoDB connected');
+  const store = new MongoStore({ mongoose: mongoose });
+  client = new Client({
+    authStrategy: new RemoteAuth({
+      clientId: 'admin-client',
+      store,
+      backupSyncIntervalMs: 300000
+    }),
+    puppeteer: {
+      headless: true,
+      args: ['--no-sandbox']
+    },
+  });
+  client.initialize();
+
+  client.on('qr', (qr) => {
+    console.log(qr);
+    qrCodeData = qr;
+    qrcode.generate(qr, { small: true });
+  })
+
+  client.on('ready', () => {
+    console.log('WhatsApp client is ready!');
+  });
+  
+  client.on('authenticated', (session) => {    
+    // Save the session object however you prefer.
+    // Convert it to json, save it to a file, store it in a database...
+    console.log("authenticated");
+  });
+  
+  client.on('remote_session_saved', () => {
+    console.log('Remote Session Saved');
+  });
 })
 
 // render routes
@@ -94,7 +113,6 @@ app.get('/api/get-qr-code', (req, res) => {
 
 app.post('/api/sendWhatsupMessage', async (req, res) => {
   const { phoneNumber, message } = req.body
-
   try {
     const target = await client.getContactById(validatePhoneNumber(phoneNumber));
     if (target) {

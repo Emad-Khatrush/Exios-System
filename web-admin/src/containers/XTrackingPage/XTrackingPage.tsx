@@ -121,9 +121,7 @@ class XTrackingPage extends Component<Props, State> {
         skip: 0,
         limit: 10,
       });
-    } else {
-      console.log("test");
-      
+    } else {      
       clearTimeout(this.state.quickSearchDelayTimer);
       this.setState(() => {
         return {
