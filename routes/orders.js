@@ -28,7 +28,7 @@ router.route('/packages/orders')
 router.route('/currentOrdersTab')
       .get(protect, allowAdminsAndEmployee, orders.getOrdersTab)
 
-router.route('/orders/:searchValue/:searchType')
+router.route('/orders/search')
       .get(protect, allowAdminsAndEmployee, orders.getOrdersBySearch)
 
 router.route('/unsureOrder/add')
