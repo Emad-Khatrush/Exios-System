@@ -10,9 +10,11 @@ type Props = {
   onChange?: any
   icon: any
   name?: string
+  defaultValue?: string
+  value?: string
 }
 
-const SearchInput = ({ placeholder, icon, className, type, onChange, id, name }: Props) => {
+const SearchInput = ({ placeholder, icon, className, type, onChange, id, name, defaultValue, value }: Props) => {
   return (
     <div className={`d-flex`}>
       <div className={`search-icon`}>
@@ -24,7 +26,9 @@ const SearchInput = ({ placeholder, icon, className, type, onChange, id, name }:
         onChange={onChange} 
         className={`search-input ${className}`} 
         placeholder={placeholder} 
-        type={type} 
+        type={type}
+        defaultValue={defaultValue}
+        value={value}
       />
     </div>
   )

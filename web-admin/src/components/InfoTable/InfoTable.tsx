@@ -8,9 +8,14 @@ type Props = {
   columns: any[]
   data: any[]
   fileName?: string
+  isLoading?: boolean
+  fetchList?: () => void
 }
 
-type State = {}
+type State = {
+  pageSize: number
+  pageCount: number
+}
 
 function customCheckbox(theme: Theme) {
   return {
@@ -133,17 +138,20 @@ function CustomPagination() {
 }
 
 class InfoTable extends Component<Props, State> {
-  state = {}
+  state = {
+    pageSize: 0,
+    pageCount: 0
+  }
 
   render() {
-    const { columns, data, fileName } = this.props;
+    const { columns, data, fileName, isLoading, fetchList } = this.props;
 
     return (
-      <div style={{ height: 600, width: '100%' }}>
+      <div style={{ height: 550, width: '100%' }}>
         <StyledDataGrid
           rows={data}
           columns={columns}
-          pageSize={6}
+          pageSize={5}
           rowsPerPageOptions={[5]}
           components={{
             Pagination: CustomPagination,
@@ -158,6 +166,19 @@ class InfoTable extends Component<Props, State> {
           }}
           checkboxSelection
           disableSelectionOnClick
+          loading={isLoading}
+          onPageChange={(pageCount) => {
+            const isClickedPageBigger = pageCount > this.state.pageCount;
+            if (isClickedPageBigger) {
+              this.setState({ pageCount });
+            }
+            if (fetchList) {
+              fetchList();
+            }
+          }}
+          onPageSizeChange={(pageSize) => this.setState({ pageSize })}
+          onStateChange={({ pagination }) => this.setState({ pageCount: pagination.pageCount, pageSize: pagination.rowCount })}
+          autoPageSize
         />
       </div>
     )

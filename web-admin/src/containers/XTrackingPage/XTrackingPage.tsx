@@ -192,7 +192,7 @@ class XTrackingPage extends Component<Props, State> {
               tabsOnChange={(value: string) => this.onTabChange(value)}
               onScroll={this.onScroll}
             >
-              {this.props.listData.listStatus.isSwitchingTab ?
+              {(listData.listStatus.isSwitchingTab) ?
                 <div className="text-center">
                   <CircularProgress />
                 </div>

@@ -11,6 +11,7 @@ export const CHECK_AUTH = 'CHECK_AUTH';
 
 // region invoices
 export const RESET_INVOICE = 'RESET_INVOICE';
+export const CLEAR_LIST = 'CLEAR_LIST';
 export const CREATE_INVOICE = 'CREATE_INVOICE';
 export const GET_INVOICES = 'GET_INVOICES';
 

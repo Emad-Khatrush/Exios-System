@@ -101,7 +101,6 @@ const Announcements = () => {
       <CircularProgress />
     )
   }
-console.log(announcements);
 
   return (
     <div>

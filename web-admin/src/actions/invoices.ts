@@ -1,9 +1,9 @@
 import { Action, Dispatch } from "redux"
 import api from "../api";
-import { CREATE_INVOICE, GET_INVOICES, RESET_INVOICE, STATUS_ERROR, STATUS_LOADING, STATUS_START, STATUS_SUCCESS, SWITCH_TAB } from "../constants/actions";
+import { CLEAR_LIST, CREATE_INVOICE, GET_INVOICES, RESET_INVOICE, STATUS_ERROR, STATUS_LOADING, STATUS_START, STATUS_SUCCESS, SWITCH_TAB } from "../constants/actions";
 
 export const resetInvoice = () => {
-  return (dispatch: Dispatch<Action>): void => {    
+  return (dispatch: Dispatch<Action>): void => {
     dispatch({
       type: RESET_INVOICE
     });
@@ -49,14 +49,40 @@ export const getAllInvoices = (config?: { skip?: number, limit?: number, tabType
   
   return (dispatch: Dispatch<Action>): void => {
     dispatch({
-      status: STATUS_START,
+      status: CLEAR_LIST,
       type: GET_INVOICES,
     });
 
+    dispatch({
+      status: STATUS_LOADING,
+      type: GET_INVOICES,
+    });
+    
     api.get('invoices', config)
       .then(({ data }) => {
         dispatch({
-          payload: { data },
+          payload: { data: { ...data, query: config }, pushNewDataToList: true },
+          status: STATUS_SUCCESS,
+          type: GET_INVOICES,
+        });
+      })
+      .catch(error => {
+        dispatch({
+          payload: { error },
+          status: STATUS_ERROR,
+          type: GET_INVOICES,
+        });
+      })
+  }
+}
+
+export const fetchMoreInvoices = (config?: { skip?: number, limit?: number, tabType?: string, cancelToken: any }) => {
+  
+  return (dispatch: Dispatch<Action>): void => {
+    api.get('invoices', { ...config, cancelToken: config?.cancelToken?.token})
+      .then(({ data }) => {
+        dispatch({
+          payload: { data: { ...data, query: config }, pushNewDataToList: true },
           status: STATUS_SUCCESS,
           type: GET_INVOICES,
         });
@@ -149,15 +175,21 @@ export const getInvoices = (config?: { skip?: number, limit?: number, tabType?: 
   }
 }
 
-export const getInvoicesBySearch = (query?: { searchValue: string, selectorValue: string, tabType: string, cancelToken: any }) => {
+export const getInvoicesBySearch = (query?: { searchValue: string, dateValue?: any[], selectorValue: string, tabType: string, cancelToken: any }) => {
   return (dispatch: Dispatch<Action>): void => {
 
     dispatch({
       status: SWITCH_TAB,
       type: GET_INVOICES,
     });
-            
-    api.get(`orders/${query?.searchValue}/${query?.selectorValue}?tabType=${query?.tabType}`, { cancelToken: query?.cancelToken?.token })
+    
+    let startDate: any, endDate: any;
+    if (query?.selectorValue === 'createdAtDate' && query.dateValue) {
+      startDate = query?.dateValue[0];
+      endDate = query?.dateValue[1];
+    }
+
+    api.get(`orders/search?tabType=${query?.tabType}`, { cancelToken: query?.cancelToken?.token, startDate, endDate, searchValue: query?.searchValue, searchType: query?.selectorValue })
       .then(({ data }) => {
         dispatch({
           payload: { data, dontUpdateOrdersCount: true },
@@ -166,8 +198,6 @@ export const getInvoicesBySearch = (query?: { searchValue: string, selectorValue
         });
       })
       .catch(error => {
-        console.log(error);
-        
         dispatch({
           payload: { error },
           status: STATUS_ERROR,

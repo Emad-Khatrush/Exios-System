@@ -1,5 +1,5 @@
 import React, { Component } from 'react'
-import { Box, Breadcrumbs, Button, CircularProgress, Dialog, DialogActions, DialogContent, IconButton, Link, TextField, Typography } from '@mui/material';
+import { Box, Breadcrumbs, Button, Dialog, DialogActions, DialogContent, IconButton, Link, TextField, Typography } from '@mui/material';
 import Card from '../../components/Card/Card'
 import TextInput from '../../components/TextInput/TextInput'
 import CustomButton from '../../components/CustomButton/CustomButton';
@@ -9,7 +9,7 @@ import StatusDataWidget from '../../components/StatusDataWidget/StatusDataWidget
 import InfoTable from '../../components/InfoTable/InfoTable';
 import { defaultColumns, generateDataToListType } from './generateData';
 import { connect } from 'react-redux';
-import { getAllInvoices } from '../../actions/invoices';
+import { getAllInvoices, getInvoicesBySearch, fetchMoreInvoices } from '../../actions/invoices';
 import { IInvoice } from '../../reducers/invoices';
 
 import { FaFileInvoiceDollar } from 'react-icons/fa';
@@ -19,12 +19,12 @@ import { GiShipBow } from 'react-icons/gi';
 import LocalizationProvider from '@mui/lab/LocalizationProvider';
 import AdapterDateFns from '@mui/lab/AdapterDateFns';
 import DateRangePicker from '@mui/lab/DateRangePicker';
-import moment from 'moment-timezone';
 import SwipeableTextMobileStepper from '../../components/SwipeableTextMobileStepper/SwipeableTextMobileStepper';
 import withRouter from '../../utils/WithRouter/WithRouter';
 import Badge from '../../components/Badge/Badge';
 import { Invoice, LocalTabs } from '../../models';
 import { GridColDef } from '@mui/x-data-grid';
+import { base } from '../../api';
 
 interface InvoiceDetails {
   title: string,
@@ -36,7 +36,9 @@ interface InvoiceDetails {
 }
 
 type Props = {
-  getAllInvoices: () => void,
+  getAllInvoices: (config?: { skip?: number, limit?: number, tabType?: string }) => void
+  getInvoicesBySearch: (query: { searchValue: string, dateValue: any, selectorValue: string, tabType: string, cancelToken: any }) => void
+  fetchMoreInvoices: (config?: { skip?: number, limit?: number, tabType?: string, cancelToken?: any }) => void
   listData: IInvoice
   router: any
 }
@@ -47,6 +49,8 @@ type State = {
   selectedRowImages: any
   openImagesModal: boolean
   activeTabValue: string
+  cancelToken: any
+  quickSearchDelayTimer: any
 }
 
 const breadcrumbs = [
@@ -64,13 +68,32 @@ class Invoices extends Component<Props, State> {
     activeTabValue: 'all',
     dateFilterValue: null,
     selectedRowImages: null,
-    openImagesModal: false
+    openImagesModal: false,
+    quickSearchDelayTimer: null,
+    cancelToken: null
   }
 
   componentDidMount() {
-    this.props.getAllInvoices();
     const id = new URLSearchParams(this.props.router.location?.search).get('id') || '';
-    this.setState({ searchValue: id });
+    if (id) {
+      const cancelTokenSource: any = base.cancelRequests(); // Call this before making a request
+      this.setState({ searchValue: id, cancelToken: cancelTokenSource });
+      this.filterList({
+        target: {
+          name: 'searchInput',
+          value: id
+        }
+      });
+    } else {
+      this.props.getAllInvoices({ skip: 0, limit: 15 });
+    }
+  }
+
+  componentWillUnmount() {
+    const { cancelToken } = this.state;
+    if (cancelToken) {
+      this.state.cancelToken?.cancel('Request canceled by user');
+    }
   }
 
   findOrdersForSelectedTab = (order: Invoice) => {
@@ -103,50 +126,37 @@ class Invoices extends Component<Props, State> {
     }
   }
 
-  filterList = (list: any[]) => {
-    const { dateFilterValue }: any = this.state;
-    let filteredList = list;
+  filterList = (event: any) => {
+    const eventName = event?.target?.name;
+    const searchValue = eventName === 'searchInput' ? event.target.value : this.state.searchValue;
+    const dateValue = eventName !== 'searchInput' ? event : this.state.dateFilterValue;
+    
+    if (eventName !== 'searchInput' && (!dateValue || !!!dateValue[0] || !!!dateValue[1])) return;
 
-    let allOrderCount = 0;
-    let shipmentOrderCount = 0;
-    let finishedOrderCount = 0;
-    let paidOrderCount = 0;
-    let unsureOrderCount = 0;
-
-    if (dateFilterValue && dateFilterValue[0] && dateFilterValue[1]) {
-      filteredList = list.filter(a => {
-        const dataDate = moment(a.createdAt)
-        const startDate = moment(dateFilterValue[0])
-        const endDate = moment(dateFilterValue[1])
-        return startDate <= dataDate && dataDate <= endDate;
-      })
+    if (eventName === 'searchInput' && searchValue === '' && (!dateValue || !!!dateValue[0] || !!!dateValue[1])) {
+      return this.props.getAllInvoices({ skip: 0, limit: 15 });
     }
 
-    filteredList = filteredList.filter(order => {      
-      const displayOrdersTab = this.findOrdersForSelectedTab(order);      
+    clearTimeout(this.state.quickSearchDelayTimer);
+    this.setState(() => {
+      return {
+        quickSearchDelayTimer: setTimeout(() => {
+          this.props.getInvoicesBySearch({
+            searchValue: searchValue,
+            dateValue: dateValue,
+            selectorValue: 'createdAtDate',
+            tabType: 'active',
+            cancelToken: this.state.cancelToken
+          })
+        }, 1)
+      }
+    })
+  }
 
-      // count every tab
-      if (!order.unsureOrder) allOrderCount++;
-      if (order.isFinished) finishedOrderCount++;
-      if (!order.isShipment && order.isPayment && !order.unsureOrder && !order.isFinished) paidOrderCount++;
-      if (order.unsureOrder && !order.isFinished) unsureOrderCount++;
-      if (order.isShipment && !order.isPayment && !order.unsureOrder && !order.isFinished) shipmentOrderCount++;
-
-      return (
-      ((order.customerInfo.fullName || "").toLocaleLowerCase().indexOf(this.state.searchValue.toLocaleLowerCase()) > -1 ||
-      (order.orderId || "").toLocaleLowerCase().indexOf(this.state.searchValue.toLocaleLowerCase()) > -1 ||
-      (order?._id || "").toLocaleLowerCase().indexOf(this.state.searchValue.toLocaleLowerCase()) > -1) &&
-      displayOrdersTab
-    )})
-
-    return {
-      filteredList,
-      allOrderCount,
-      shipmentOrderCount,
-      finishedOrderCount,
-      paidOrderCount,
-      unsureOrderCount
-    };
+  fetchList = async () => {
+    const cancelTokenSource: any = base.cancelRequests(); // Call this before making a request
+    const { skip } = this.props.listData.query;
+    this.props.fetchMoreInvoices({ skip: skip + 15, limit: 15, cancelToken: cancelTokenSource });
   }
 
   getIvoicesDetails = (list: any[]) => {
@@ -189,14 +199,8 @@ class Invoices extends Component<Props, State> {
 
   render() {
     const { listData } = this.props;
-    
-    if (listData.listStatus.isLoading) {
-      return <CircularProgress />;
-    }
 
-    let { filteredList, allOrderCount, shipmentOrderCount, finishedOrderCount, paidOrderCount, unsureOrderCount} = this.filterList(listData.list);
-    
-    filteredList = generateDataToListType(filteredList);
+    const filteredList = generateDataToListType(listData.list);
     const invoicesDetails = this.getIvoicesDetails(listData.list);
 
     const columns: GridColDef[] = [...defaultColumns(this.setState.bind(this))] as any;
@@ -205,28 +209,28 @@ class Invoices extends Component<Props, State> {
       {
         label: 'All',
         value: 'all',
-        icon: <Badge style={{ marginLeft: '8px'}} text={String(allOrderCount)} color="sky" />
+        icon: <Badge style={{ marginLeft: '8px'}} text={String(listData.total)} color="sky" />
       },
-      {
-        label: 'Shipment',
-        value: 'shipment',
-        icon: <Badge style={{ marginLeft: '8px'}} text={String(shipmentOrderCount)} color="primary" />
-      },
-      {
-        label: 'Paid',
-        value: 'paid',
-        icon: <Badge style={{ marginLeft: '8px'}} text={String(paidOrderCount)} color="warning" />
-      },
-      {
-        label: 'Finished',
-        value: 'finished',
-        icon: <Badge style={{ marginLeft: '8px'}} text={String(finishedOrderCount)} color="success" />
-      },
-      {
-        label: 'Unsure Orders',
-        value: 'unsure',
-        icon: <Badge style={{ marginLeft: '8px'}} text={String(unsureOrderCount)} color="danger" />
-      }
+      // {
+      //   label: 'Shipment',
+      //   value: 'shipment',
+      //   icon: <Badge style={{ marginLeft: '8px'}} text={String(shipmentOrderCount)} color="primary" />
+      // },
+      // {
+      //   label: 'Paid',
+      //   value: 'paid',
+      //   icon: <Badge style={{ marginLeft: '8px'}} text={String(paidOrderCount)} color="warning" />
+      // },
+      // {
+      //   label: 'Finished',
+      //   value: 'finished',
+      //   icon: <Badge style={{ marginLeft: '8px'}} text={String(finishedOrderCount)} color="success" />
+      // },
+      // {
+      //   label: 'Unsure Orders',
+      //   value: 'unsure',
+      //   icon: <Badge style={{ marginLeft: '8px'}} text={String(unsureOrderCount)} color="danger" />
+      // }
     ]
     
     return (
@@ -262,7 +266,7 @@ class Invoices extends Component<Props, State> {
 
             <StatusDataWidget 
               invoicesDetails={invoicesDetails}
-              isLoading={listData.listStatus.isLoading}
+              isLoading={listData.listStatus.isLoading || listData.listStatus.isSwitchingTab}
             />
 
             <Card
@@ -271,9 +275,15 @@ class Invoices extends Component<Props, State> {
             >
               <div className="d-flex flex-wrap justify-content-between align-items-center mb-3">
                 <TextInput
+                  name='searchInput'
                   placeholder="Search User..." 
                   icon={<AiOutlineSearch />} 
-                  onChange={(event: any) => this.setState({ searchValue: event.target.value })}
+                  value={this.state.searchValue}
+                  onChange={(event: any) => {
+                    const cancelTokenSource: any = base.cancelRequests(); // Call this before making a request
+                    this.setState({ searchValue: event.target.value, cancelToken: cancelTokenSource });
+                    this.filterList(event);
+                  }}
                 />
                 <div className='d-flex mt-2'>
                   <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -281,7 +291,11 @@ class Invoices extends Component<Props, State> {
                       startText="Start Date"
                       endText="End Date"
                       value={this.state.dateFilterValue || [null, null]}
-                      onChange={(newValue) => this.setState({ dateFilterValue: newValue }) }
+                      onChange={(newValue) => {
+                        const cancelTokenSource: any = base.cancelRequests(); // Call this before making a request
+                        this.setState({ dateFilterValue: newValue, cancelToken: cancelTokenSource });
+                        this.filterList(newValue);
+                      }}
                       renderInput={(startProps, endProps) => (
                         <React.Fragment>
                           <TextField size='small' {...startProps} />
@@ -291,7 +305,14 @@ class Invoices extends Component<Props, State> {
                       )}
                     />
                     </LocalizationProvider>
-                    <IconButton color="primary" aria-label="Filter" onClick={() => this.setState({ dateFilterValue: null })}>
+                    <IconButton 
+                      color="primary" 
+                      aria-label="Filter" 
+                      onClick={async () => {
+                        this.setState({ dateFilterValue: null, searchValue: '' });
+                        this.props.getAllInvoices({ skip: 0, limit: 15 });
+                      }}
+                    >
                       <AiOutlineClear
                         size={30} 
                         color={'rgb(99, 115, 129)'} 
@@ -302,15 +323,11 @@ class Invoices extends Component<Props, State> {
                 </div>
               </div>
 
-              {listData && listData.listStatus.isLoading &&
-                <div style={{ textAlign: 'center' }}>
-                    <CircularProgress />
-                </div>
-              }
-
               <InfoTable 
                 columns={columns} 
-                data={filteredList.reverse()}
+                data={filteredList}
+                isLoading={listData && (listData.listStatus.isLoading || listData.listStatus.isSwitchingTab)}
+                fetchList={this.fetchList}
               />
               
             </Card>
@@ -340,6 +357,8 @@ const mapStateToProps = (state: any) => {
 
 const mapDispatchToProps = {
   getAllInvoices,
+  getInvoicesBySearch,
+  fetchMoreInvoices
 };
 
 export default connect(mapStateToProps, mapDispatchToProps)(withRouter(Invoices));

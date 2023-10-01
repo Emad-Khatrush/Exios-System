@@ -1,4 +1,4 @@
-import { CREATE_INVOICE, GET_INVOICES, RESET_INVOICE, STATUS_ERROR, STATUS_LOADING, STATUS_START, STATUS_SUCCESS, SWITCH_TAB } from "../constants/actions";
+import { CLEAR_LIST, CREATE_INVOICE, GET_INVOICES, RESET_INVOICE, STATUS_ERROR, STATUS_LOADING, STATUS_START, STATUS_SUCCESS, SWITCH_TAB } from "../constants/actions";
 import { Invoice } from "../models";
 
 export interface IStatus {
@@ -96,7 +96,7 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
             return {
               ...initialState,
               listStatus: {
-                isLoading: true
+                isSwitchingTab: true
               }
             };
           }
@@ -113,6 +113,13 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
             };
           }
 
+          case CLEAR_LIST: {
+            return {
+              ...initialState,
+              list: [],
+            };
+          }
+
           case STATUS_LOADING: {
             return {
               ...state,
@@ -125,7 +132,13 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
             };
           }
           
-          case STATUS_SUCCESS: {       
+          case STATUS_SUCCESS: {
+            let orders = action.payload.data.orders;
+            if (action.payload.pushNewDataToList) {
+              orders = state.list || [];
+              orders.push(...action.payload.data.orders)
+            }
+            
             if (action.payload?.dontUpdateOrdersCount) {
               return {
                 ...state,
@@ -135,12 +148,12 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
                   isLoading: false,
                   isSwitchingTab: false
                 },
-                list: action.payload.data.orders,
+                list: orders,
                 tabType: action.payload?.data?.tabType,
                 total: action.payload?.data?.total,
                 query: action.payload?.data?.query
               }
-            }             
+            }
             return {
               ...state,
               listStatus: {
@@ -149,7 +162,7 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
                 isLoading: false,
                 isSwitchingTab: false
               },
-              list: action.payload.data.orders,
+              list: orders,
               activeOrdersCount: action.payload?.data?.activeOrdersCount,
               shipmentOrdersCount: action.payload?.data?.shipmentOrdersCount,
               finishedOrdersCount: action.payload?.data?.finishedOrdersCount,

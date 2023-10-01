@@ -53,7 +53,7 @@ export const session = (state: ISession = initialState, action: any) => {
             isError: true,
             isLoggedIn: false,
             isLoading: false,
-            error: action.payload.error?.data
+            error: action.payload.error?.response?.data
           }
         }
       }
@@ -77,7 +77,7 @@ export const session = (state: ISession = initialState, action: any) => {
             isError: true,
             isLoggedIn: false,
             isLoading: false,
-            error: action.payload.error?.data
+            error: action.payload.error?.response?.data
           }
         }
       }
