@@ -2,6 +2,8 @@ import { Avatar, AvatarGroup } from '@mui/material';
 import moment from 'moment';
 import Badge from '../Badge/Badge';
 import Card from '../Card/Card';
+import { HiOutlineBell } from 'react-icons/hi';
+
 import './Task.scss';
 
 const labels: any = {
@@ -20,11 +22,12 @@ type Props = {
     count: number
   }[]
   scheduledTime?: string
+  hasNotification?: boolean
   onTitleClick?: (event: React.MouseEvent) => void
 }
 
 const Task = (props: Props) => {
-  const { title, description, actions, scheduledTime, labelOfStatus, avatars, onTitleClick } = props;
+  const { title, description, actions, scheduledTime, labelOfStatus, avatars, hasNotification, onTitleClick } = props;
 
   return (
     <Card
@@ -50,6 +53,9 @@ const Task = (props: Props) => {
               {action.icon}
             </div>
           ))}
+          {hasNotification &&
+            <Badge text={<HiOutlineBell color='#d83c3c' />} color='danger' />
+          }
         </div>
         {scheduledTime && labelOfStatus === 'limitedTime' &&
           <Badge text={`تسليم قبل ${moment(scheduledTime).format('DD-MM-YYYY')}`} color='warning' />

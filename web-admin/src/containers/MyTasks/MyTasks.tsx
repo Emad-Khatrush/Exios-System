@@ -16,10 +16,12 @@ import FilesPreviewers from '../../components/FilesPreviewers/FilesPreviewers';
 import { Link } from 'react-router-dom';
 import CommentsSection from '../../components/CommentsSection/CommentsSection';
 import { User } from '../../models';
+import withRouter from '../../utils/WithRouter/WithRouter';
 
 
 type MyProps = {
   account: User
+  router?: any
 }
 
 const labels: any = {
@@ -39,10 +41,11 @@ type State = {
   tasks: any[]
   searchValue: string
   countList: {
-    newCount: number
+    notificationsCount: number
     myTasksCount: number
     urgentCount: number
     finishedCount: number
+    waitingApproval: number
   }
   clickedTask: any
   isLoading: boolean
@@ -60,14 +63,15 @@ export class MyTasks extends Component<MyProps, State> {
       title: '',
       description: ''
     }],
-    searchValue: 'new',
+    searchValue: 'notifications',
     countList: {
-      newCount: 0,
+      notificationsCount: 0,
       myTasksCount: 0,
       urgentCount: 0,
       finishedCount: 0,
       requestedTasksCount: 0,
-      needsApproval: 0
+      needsApproval: 0,
+      waitingApproval: 0
     },
     clickedTask: null,
     isLoading: false,
@@ -79,13 +83,25 @@ export class MyTasks extends Component<MyProps, State> {
   }
 
   async componentDidMount() {
+    const taskId = new URLSearchParams(this.props.router.location?.search).get('id') || '';
+    
     this.setState({ isLoading: true })
     try {
-      const res = await api.get(`mytasks?taskType=new`);
+      const res = await api.get(`mytasks?taskType=notifications`);
       const tasks = res.data.results;
       const countList = res.data.countList;
+      let clickedTask;
 
-      this.setState({ tasks, countList });
+      if (taskId) {
+        try {
+          clickedTask = (await api.get(`task/${taskId}`))?.data;
+        } catch (error) {
+          clickedTask = undefined;
+        }
+      }
+      const isDialogOpen = !!clickedTask;
+
+      this.setState({ tasks, countList, clickedTask, isDialogOpen });
     } catch (error) {
       console.log(error);
     } finally {
@@ -97,7 +113,16 @@ export class MyTasks extends Component<MyProps, State> {
     this.setState({ isDialogOpen: true, clickedTask: task, isCommentsFetching: true });
     try {
       const comments = (await api.get(`task/${task._id}/comments`))?.data;
-      this.setState({  clickedTask: task, comments });
+
+      if (task.hasNotification) {
+        await api.post(`task/${task._id}/readed`, {});
+        const res = await api.get(`mytasks?taskType=${this.state.searchValue}`);
+        const tasks = res.data.results;
+        const countList = res.data.countList;
+        return this.setState({ tasks, countList, clickedTask: task, comments });
+      }
+      
+      this.setState({ clickedTask: task, comments });
     } catch (error) {
       console.log(error);
     } finally {
@@ -112,7 +137,7 @@ export class MyTasks extends Component<MyProps, State> {
       const tasks = res.data.results;
       const countList = res.data.countList;
 
-      this.setState({ tasks, countList });
+      this.setState({ tasks, countList, searchValue: value });
     } catch (error) {
       console.log(error);
     } finally {
@@ -139,6 +164,7 @@ export class MyTasks extends Component<MyProps, State> {
         والحالة: ${labels[task.label]}
         التعليق الجديد: '${commentInput}'
         يرجى دخول على التاسك لعرض التعليق واكتمال التاسك في اسرع وقت
+        https://exios-admin-frontend.web.app/mytasks?id=${task._id}
         شكرا لكم
       `
       await this.sendWhatsupMessage(message, 'add-comment');
@@ -158,6 +184,7 @@ export class MyTasks extends Component<MyProps, State> {
       عنوان التاسك '${task.title}'
       والحالة: ${labels[task.label]}
       يرجى دخول للتاسك وبدا في حل المشكلة
+      https://exios-admin-frontend.web.app/mytasks?id=${task._id}
       شكرا لكم
     `;
 
@@ -167,7 +194,7 @@ export class MyTasks extends Component<MyProps, State> {
       task.reviewers.push(task.createdBy)
     }
 
-    task.reviewers.forEach((user: User) => {
+    (task.reviewers || []).forEach((user: User) => {
       const phoneNumber = (user.phone as any) === "5535728209" ? '5535728209@c.us' : `${user.phone}@c.us`
       if (user._id !== account._id) {
         api.post(`sendWhatsupMessage`, { phoneNumber, message })
@@ -195,9 +222,9 @@ export class MyTasks extends Component<MyProps, State> {
 
     const tabs = [
       {
-        label: 'New',
-        value: 'new',
-        icon: <Badge style={{ marginLeft: '8px'}} text={String(countList.newCount)} color="warning" />
+        label: 'Notifications',
+        value: 'notifications',
+        icon: <Badge style={{ marginLeft: '8px'}} text={String(countList.notificationsCount)} color="warning" />
       },
       {
         label: 'My Tasks',
@@ -218,6 +245,11 @@ export class MyTasks extends Component<MyProps, State> {
         label: 'Needs Approval',
         value: 'needsApproval',
         icon: <Badge style={{ marginLeft: '8px'}} text={String(countList.needsApproval)} color="primary" />
+      },
+      {
+        label: 'Waiting Approval',
+        value: 'waitingApproval',
+        icon: <Badge style={{ marginLeft: '8px'}} text={String(countList.waitingApproval)} color="primary" />
       },
       {
         label: 'Finished Tasks',
@@ -275,6 +307,7 @@ export class MyTasks extends Component<MyProps, State> {
                 ]}
                 scheduledTime={task.limitedTime}
                 onTitleClick={() => this.getTask(task)}
+                hasNotification={task.hasNotification}
               />
              ))
              :
@@ -310,6 +343,7 @@ export class MyTasks extends Component<MyProps, State> {
                   bgcolor: '#fff',
                   border: '1px solid #e6e6e6',
                 }}
+                onClick={() => this.setState({ isDialogOpen: false })}
               />
 
               <CustomButton 
@@ -455,4 +489,4 @@ const mapStateToProps = (state: any) => ({
 
 const mapDispatchToProps = {}
 
-export default connect(mapStateToProps, mapDispatchToProps)(MyTasks)
+export default connect(mapStateToProps, mapDispatchToProps)(withRouter(MyTasks))

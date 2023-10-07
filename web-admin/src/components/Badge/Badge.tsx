@@ -1,7 +1,7 @@
 import './Badge.scss';
 
 type Props = {
-  text: string,
+  text: any,
   color?: 'primary' | 'success' | 'warning' | 'danger' | 'sky'
   style?: React.CSSProperties
 }
