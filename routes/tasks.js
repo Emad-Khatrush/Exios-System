@@ -18,6 +18,9 @@ router.route('/task/:id')
       .get(protect, allowAdminsAndEmployee, tasks.getTask)
       .put(protect, allowAdminsAndEmployee, tasks.updateTask)
 
+router.route('/task/:id/readed')
+      .post(protect, allowAdminsAndEmployee, tasks.markAsReaded)
+
 router.route('/task/:id/status')
       .put(protect, allowAdminsAndEmployee, tasks.changeTaskStatus)
 

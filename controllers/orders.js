@@ -168,7 +168,7 @@ module.exports.getOrders = async (req, res, next) => {
 module.exports.getOrdersTab = async (req, res, next) => {
   try {
     const { limit, skip, tabType } = req.query;
-    // await Orders.deleteMany({})
+
     const tabTypeQuery = getTapTypeQuery(tabType);
     tabTypeQuery.isCanceled = false;
     const orders = await Orders.find(tabTypeQuery).populate('user').sort({ createdAt: -1 }).skip(skip).limit(limit);
@@ -826,7 +826,7 @@ module.exports.createOrderActivity = async (req, res, next) => {
 module.exports.getClientHomeData = async (req, res, next) => {
   try {
     const receivedOrders = await Orders.count({ user: req.user._id, isFinished: true, unsureOrder: false });
-    const readyForReceivement = await Orders.count({ user: req.user._id, $or: [ { isPayment: true, orderStatus: 4 }, { isPayment: false, orderStatus: 3 } ] });
+    const readyForReceivement = await Orders.count({ user: req.user._id, unsureOrder: false, $or: [ { isPayment: true, orderStatus: 4 }, { isPayment: false, orderStatus: 3 } ] });
     const activeOrders = await Orders.count({ user: req.user._id, isCanceled: false, unsureOrder: false, isFinished: false });
     const totalPaidInvoices = (await Orders.aggregate([
       { $match: { user: req.user._id, isCanceled: false, unsureOrder: false } },
