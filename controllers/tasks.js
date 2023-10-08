@@ -15,7 +15,7 @@ module.exports.getMyTasks = async (req, res, next) => {
     const nowDate = new Date();
     nowDate.setDate(nowDate.getDate() - 2);
     let mongoQuery = {
-      notifications: { reviewers: { $in: [req.user._id] }, hasNotification: true },
+      notifications: { $or: [ { reviewers: { $in: [req.user._id] } }, { createdBy: req.user._id } ], hasNotification: true },
       urgent: { $or: [ { reviewers: { $in: [req.user._id] } } ], status: 'processing', label: 'urgent' },
       myTasks: { $or: [ { reviewers: { $in: [req.user._id] } } ], status: 'processing' },
       requestedTasks: { createdBy: req.user._id, status: 'processing' },
@@ -34,7 +34,18 @@ module.exports.getMyTasks = async (req, res, next) => {
       },
       {
         $addFields: {
-          hasNotification: { $gt: [{ $size: "$hasNotification" }, 0] }
+          hasNotificationFiltered: {
+            $filter: {
+              input: "$hasNotification",
+              as: "notification",
+              cond: { $eq: ["$$notification.user", ObjectId(req.user._id)] }
+            }
+          }
+        }
+      },
+      {
+        $addFields: {
+          hasNotification: { $gt: [{ $size: "$hasNotificationFiltered" }, 0] }
         }
       },
       { $match: mongoQuery[taskType] },
@@ -53,7 +64,18 @@ module.exports.getMyTasks = async (req, res, next) => {
       },
       {
         $addFields: {
-          hasNotification: { $gt: [{ $size: "$hasNotification" }, 0] }
+          hasNotificationFiltered: {
+            $filter: {
+              input: "$hasNotification",
+              as: "notification",
+              cond: { $eq: ["$$notification.user", req.user._id] }
+            }
+          }
+        }
+      },
+      {
+        $addFields: {
+          hasNotification: { $gt: [{ $size: "$hasNotificationFiltered" }, 0] }
         }
       },
       {
@@ -64,7 +86,12 @@ module.exports.getMyTasks = async (req, res, next) => {
               $cond: [
                 { $and: [
                   { $eq: ["$hasNotification", true] },
-                  { $in: [req.user._id, "$reviewers"] } // Check if req.user._id is in the "reviewers" array
+                  {
+                    $or: [
+                      { $in: [req.user._id, "$reviewers"] }, // Check if req.user._id is in the "reviewers" array
+                      { $eq: ["$createdBy", req.user._id] }, 
+                    ]
+                  }
                 ]
               } ,
                 1,
@@ -219,10 +246,12 @@ module.exports.createTask = async (req, res, next) => {
       limitedTime
     })
 
-    await Notifications.create({
-      notificationType: TaskCollection,
-      entityId: task._id,
-      user: req.user
+    reviewers.forEach(async (user) => {
+      await Notifications.create({
+        notificationType: TaskCollection,
+        entityId: task._id,
+        user: user
+      })
     })
 
     res.status(200).json(task);
@@ -252,34 +281,43 @@ module.exports.uploadFiles= async (req, res, next) => {
   const images = [];
   const changedFields = [];
 
-    if (req.files) {
-      for (let i = 0; i < req.files.length; i++) {
-        const uploadedImg = await uploadToGoogleCloud(req.files[i], "exios-admin-tasks");
-        images.push({
-          path: uploadedImg.publicUrl,
-          filename: uploadedImg.filename,
-          folder: uploadedImg.folder,
-          bytes: uploadedImg.bytes,
-          category: req.body.type,
-          fileType: req.files[i].mimetype
-        });
-        changedFields.push({
-          label: 'image',
-          value: 'image',
-          changedFrom: '',
-          changedTo: uploadedImg.publicUrl
-        })
-      }
+  if (req.files) {
+    for (let i = 0; i < req.files.length; i++) {
+      const uploadedImg = await uploadToGoogleCloud(req.files[i], "exios-admin-tasks");
+      images.push({
+        path: uploadedImg.publicUrl,
+        filename: uploadedImg.filename,
+        folder: uploadedImg.folder,
+        bytes: uploadedImg.bytes,
+        category: req.body.type,
+        fileType: req.files[i].mimetype
+      });
+      changedFields.push({
+        label: 'image',
+        value: 'image',
+        changedFrom: '',
+        changedTo: uploadedImg.publicUrl
+      })
     }
+  }
 
   const task = await Task.findByIdAndUpdate(id, {
     $push: { "files": images },
   }, { safe: true, upsert: true, new: true });
+  
+  const reviewers = [ ...task.reviewers ];
+  if (req.user._id !== task.createdBy) {
+    reviewers.push(task.createdBy);
+  }
 
-  await Notifications.create({
-    notificationType: TaskCollection,
-    entityId: id,
-    user: req.user
+  reviewers.forEach(async (user) => {
+    if (!req.user._id.equals(user)) {
+      await Notifications.create({
+        notificationType: TaskCollection,
+        entityId: id,
+        user: user
+      })
+    }
   })
 
   res.status(200).json(task)
@@ -303,10 +341,19 @@ module.exports.updateTask = async (req, res, next) => {
     const task = await Task.findByIdAndUpdate(String(id), updateQuery, { safe: true, upsert: true, new: true }).populate(['order', 'createdBy', 'reviewers', 'comments']);
     if (!task) return next(new ErrorHandler(404, errorMessages.TASK_NOT_FOUND));
 
-    await Notifications.create({
-      notificationType: TaskCollection,
-      entityId: id,
-      user: req.user
+    const reviewers = [ ...task.reviewers ];
+    if (req.user._id !== task.createdBy._id) {
+      reviewers.push(task.createdBy);
+    }
+
+    reviewers.forEach(async (user) => {
+      if (!req.user._id.equals(user._id)) {
+        await Notifications.create({
+          notificationType: TaskCollection,
+          entityId: id,
+          user: user._id
+        })
+      }
     })
 
     res.status(200).json(task);
@@ -325,12 +372,21 @@ module.exports.deleteFile = async (req, res, next) => {
       }
     }, { safe: true, upsert: true, new: true });
 
-    await Notifications.create({
-      notificationType: TaskCollection,
-      entityId: req.body.id,
-      user: req.user
-    })
+    const reviewers = [ ...task.reviewers ];
+    if (req.user._id !== task.createdBy) {
+      reviewers.push(task.createdBy);
+    }
     
+    reviewers.forEach(async (user) => {
+      if (!req.user._id.equals(user)) {
+        await Notifications.create({
+          notificationType: TaskCollection,
+          entityId: req.body.id,
+          user: user
+        })
+      }
+    })
+
     res.status(200).json(task);
   } catch (error) {
     console.log(error);
@@ -344,10 +400,19 @@ module.exports.changeTaskStatus = async (req, res, next) => {
       status: req.body.status
     }, { safe: true, upsert: true, new: true });
 
-    await Notifications.create({
-      notificationType: TaskCollection,
-      entityId: req.params.id,
-      user: req.user
+    const reviewers = [ ...task.reviewers ];
+    if (req.user._id !== task.createdBy) {
+      reviewers.push(task.createdBy);
+    }
+    
+    reviewers.forEach(async (user) => {
+      if (!req.user._id.equals(user)) {
+        await Notifications.create({
+          notificationType: TaskCollection,
+          entityId: req.params.id,
+          user: user
+        })
+      }
     })
 
     res.status(200).json(task);
@@ -392,10 +457,19 @@ module.exports.createComment = async (req, res, next) => {
     
     task = await Task.findByIdAndUpdate(String(req.params.id), updateQuery, { safe: true, upsert: true, new: true }).populate(['order', 'createdBy', 'reviewers']);
 
-    await Notifications.create({
-      notificationType: TaskCollection,
-      entityId: String(req.params.id),
-      user: req.user
+    const reviewers = [ ...task.reviewers ];
+    if (req.user._id !== task.createdBy._id) {
+      reviewers.push(task.createdBy);
+    }
+    
+    reviewers.forEach(async (user) => {
+      if (!req.user._id.equals(user._id)) {
+        await Notifications.create({
+          notificationType: TaskCollection,
+          entityId: String(req.params.id),
+          user: user._id
+        })
+      }
     })
 
     res.status(200).json(task);
@@ -412,7 +486,7 @@ module.exports.markAsReaded = async (req, res, next) => {
       return next(new ErrorHandler(400, errorMessages.TASK_NOT_FOUND));
     }
 
-    await Notifications.deleteOne({ entityId: ObjectId(task._id) });
+    await Notifications.deleteMany({ entityId: ObjectId(task._id), user: ObjectId(req.user._id) });
 
     res.status(200).json({ isSuccess: true });
   } catch (error) {
