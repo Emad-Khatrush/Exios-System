@@ -90,18 +90,19 @@ export class MyTasks extends Component<MyProps, State> {
       const res = await api.get(`mytasks?taskType=notifications`);
       const tasks = res.data.results;
       const countList = res.data.countList;
-      let clickedTask;
+      let clickedTask, comments;
 
       if (taskId) {
         try {
           clickedTask = (await api.get(`task/${taskId}`))?.data;
+          comments = (await api.get(`task/${clickedTask._id}/comments`))?.data;
         } catch (error) {
           clickedTask = undefined;
         }
       }
       const isDialogOpen = !!clickedTask;
 
-      this.setState({ tasks, countList, clickedTask, isDialogOpen });
+      this.setState({ tasks, countList, clickedTask, isDialogOpen, comments });
     } catch (error) {
       console.log(error);
     } finally {
