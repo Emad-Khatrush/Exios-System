@@ -10,6 +10,10 @@ const errorHandler = require('./middleware/error');
 const { generatePDF } = require("./utils/sender");
 const { validatePhoneNumber } = require('./utils/messages');
 
+// DB Collections
+const User = require('./models/user');
+const order = require('./models/order');
+
 // import routes
 const orders = require('./routes/orders');
 const users = require('./routes/users');
@@ -21,9 +25,10 @@ const sendMessages = require('./routes/sendMessages');
 const resetToken = require('./routes/resetToken');
 const tasks = require('./routes/tasks');
 const settings = require('./routes/settings');
-const User = require('./models/user');
+const notifications = require('./routes/notifications');
+
+// Whatsup packages
 const { Client, RemoteAuth, LocalAuth } = require('whatsapp-web.js');
-const order = require('./models/order');
 const { MongoStore } = require('wwebjs-mongo');
 
 let qrCodeData = null;
@@ -57,8 +62,9 @@ db.on("error", console.error.bind(console, "connection error:"));
 db.once("open", () => {
   console.log('MongoDB connected');
   const store = new MongoStore({ mongoose: mongoose });
+  const WhatsAppConfig = process.env.NODE_ENV !== "production" ? LocalAuth : RemoteAuth;
   client = new Client({
-    authStrategy: new RemoteAuth({
+    authStrategy: new WhatsAppConfig({
       clientId: 'admin-client',
       store,
       backupSyncIntervalMs: 300000
@@ -102,6 +108,7 @@ app.use('/api', sendMessages);
 app.use('/api', resetToken);
 app.use('/api', tasks);
 app.use('/api', settings);
+app.use('/api', notifications);
 
 app.get('/api/get-qr-code', (req, res) => {
   if (qrCodeData) {
@@ -152,7 +159,7 @@ app.use(async (req, res) => {
   //       createdAt: -1
   //     }
   //   }
-  // ])/
+  // ])
   // generatePDF(newClients).catch((error) => {
   //   console.error(error);
   // });
@@ -163,6 +170,8 @@ app.use(async (req, res) => {
 // Error Handler
 app.use(errorHandler);
 
-app.listen(process.env.PORT || 8000, () => {
+const server = app.listen(process.env.PORT || 8000, () => {
   console.log(`Server working on http://localhost:${process.env.PORT || 8000}/`);
-})  
+})
+server.timeout = 150000;
+

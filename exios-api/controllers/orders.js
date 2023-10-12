@@ -8,20 +8,40 @@ const Offices = require('../models/office');
 const { addChangedField, getTapTypeQuery, convertObjDataFromStringToNumberType } = require('../middleware/helper');
 const { orderLabels } = require('../constants/orderLabels');
 const mongoose = require('mongoose');
+const mongodb = require('mongodb');
 const Users = require('../models/user');
 const OrderRating = require('../models/orderRating');
 
+const { ObjectId } = mongodb;
+
 module.exports.getInvoices = async (req, res, next) => {
   try {
+    const { limit, skip } = req.query;
+
     let orders = await Orders.aggregate([
       {
-        $match: {}
+        $match: { unsureOrder: false }
+      },
+      {
+        $sort: {
+          createdAt: -1
+        }
+      },
+      {
+        $skip: Number(skip) || 0
+      },
+      {
+        $limit: Number(limit)
       }
     ]);
     orders = await Orders.populate(orders, [{ path: "madeBy" }, { path: "user" }]);
+    const ordersCount = await Orders.count({ isCanceled: false, unsureOrder: false });
 
     res.status(200).json({
-      orders
+      orders,
+      total: ordersCount,
+      limit,
+      skip
     });
   } catch (error) {
     return next(new ErrorHandler(404, error.message));
@@ -148,7 +168,7 @@ module.exports.getOrders = async (req, res, next) => {
 module.exports.getOrdersTab = async (req, res, next) => {
   try {
     const { limit, skip, tabType } = req.query;
-    // await Orders.deleteMany({})
+
     const tabTypeQuery = getTapTypeQuery(tabType);
     tabTypeQuery.isCanceled = false;
     const orders = await Orders.find(tabTypeQuery).populate('user').sort({ createdAt: -1 }).skip(skip).limit(limit);
@@ -169,8 +189,9 @@ module.exports.getOrdersTab = async (req, res, next) => {
 }
 
 module.exports.getOrdersBySearch = async (req, res, next) => {
-  const { searchValue, searchType } = req.params;
-  const { tabType } = req.query;
+  let { tabType, startDate, endDate, searchValue, searchType } = req.query;
+  startDate = startDate && new Date(startDate) || null;
+  endDate = endDate && new Date(endDate) || null;
 
   let query = [{ $match: { $or: [{orderId: { $regex: new RegExp(searchValue.toLowerCase(), 'i') }}, { 'customerInfo.fullName': { $regex: new RegExp(searchValue.toLowerCase(), 'i') } }, { 'user.customerId': { $regex: new RegExp(searchValue.toLowerCase(), 'i') } }] } }];
   const totalOrders = await Orders.count();
@@ -184,6 +205,40 @@ module.exports.getOrdersBySearch = async (req, res, next) => {
       { $unwind: '$paymentList' },
       { $match: { $or: [ { 'paymentList.deliveredPackages.receiptNo': { $regex: new RegExp(searchValue.trim().toLowerCase(), 'i') } }, { 'paymentList.deliveredPackages.containerInfo.billOfLading': { $regex: new RegExp(searchValue.trim().toLowerCase(), 'i') } } ] } }
     ]
+  } else if (searchType === 'createdAtDate') {
+    const objectIdRegex = /^[0-9a-fA-F]{24}$/;
+    // Check if the value is _id
+    if (objectIdRegex.test(searchValue.toLowerCase())) {
+      query = [{
+        $match: {
+          _id: ObjectId(searchValue.toLowerCase())
+        }
+      }];
+    } else {
+      query = [{
+        $match: {
+          $or: [
+            {
+              orderId: { $regex: new RegExp(searchValue.toLowerCase(), 'i') }
+            },
+            {
+              'customerInfo.fullName': { $regex: new RegExp(searchValue.toLowerCase(), 'i') }
+            },
+            {
+              'user.customerId': { $regex: new RegExp(searchValue.toLowerCase(), 'i') }
+            }
+          ]
+        }
+      }];
+    }
+    if (startDate && endDate) {
+      query.push({
+        $match: {
+          createdAt: { $gte: startDate, $lte: endDate },
+          unsureOrder: false
+        }
+      })
+    }
   }
 
   // populate user data
@@ -209,7 +264,7 @@ module.exports.getOrdersBySearch = async (req, res, next) => {
     res.status(200).json({
       orders,
       tabType: tabType ? tabType : 'active',
-      total: totalOrders
+      total: searchType === 'createdAtDate' ? orders.length : totalOrders
     })
   } catch (error) {
     return next(new ErrorHandler(404, error.message));
@@ -771,7 +826,7 @@ module.exports.createOrderActivity = async (req, res, next) => {
 module.exports.getClientHomeData = async (req, res, next) => {
   try {
     const receivedOrders = await Orders.count({ user: req.user._id, isFinished: true, unsureOrder: false });
-    const readyForReceivement = await Orders.count({ user: req.user._id, $or: [ { isPayment: true, orderStatus: 4 }, { isPayment: false, orderStatus: 3 } ] });
+    const readyForReceivement = await Orders.count({ user: req.user._id, unsureOrder: false, $or: [ { isPayment: true, orderStatus: 4 }, { isPayment: false, orderStatus: 3 } ] });
     const activeOrders = await Orders.count({ user: req.user._id, isCanceled: false, unsureOrder: false, isFinished: false });
     const totalPaidInvoices = (await Orders.aggregate([
       { $match: { user: req.user._id, isCanceled: false, unsureOrder: false } },
