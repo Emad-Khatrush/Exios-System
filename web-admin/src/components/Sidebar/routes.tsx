@@ -1,4 +1,4 @@
-import { MdLineStyle, MdOutlineInput, MdOutlineStarRate } from 'react-icons/md';
+import { MdLineStyle, MdOutlineAccountBalanceWallet, MdOutlineInput, MdOutlineStarRate } from 'react-icons/md';
 import { FaFileInvoice, FaArchive, FaTasks } from 'react-icons/fa';
 import { FiPackage, FiSettings } from 'react-icons/fi';
 import { HiDocumentReport } from 'react-icons/hi';
@@ -49,6 +49,11 @@ const adminRoutes = [
       title: 'Ratings',
       path: '/ratings',
       icon: <MdOutlineStarRate className="sidebar-icon" />,
+     },
+     {
+      title: 'Balances',
+      path: '/balances',
+      icon: <MdOutlineAccountBalanceWallet className="sidebar-icon" />,
      },
      {
       title: 'Settings',

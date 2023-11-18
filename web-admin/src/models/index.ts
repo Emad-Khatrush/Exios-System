@@ -77,7 +77,7 @@ export type User = {
   createdAt: Date
   firstName: string
   lastName: string
-  phone: number
+  phone: number | string
   city: string
   isCanceled: boolean
   isAgreeToTermsOfCompany: boolean
@@ -88,6 +88,7 @@ export type User = {
     isAdmin: boolean
     isEmployee: boolean
     isClient: boolean
+    accountant: boolean
   }
   updatedAt: Date
   username: string
@@ -219,7 +220,7 @@ export type OrderActivity = {
 
 export type ApiErrorMessages = 'user-not-found' | 'user-subscription-canceled' | 'invalid-credentials' | 'authorize-invalid'
   | 'token-not-found' | 'invalid-token' | 'order-id-taken' | 'order-not-found' | 'expense-id-taken' | 'user-role-invalid'
-  | 'expense-not-found' | 'image-not-found' | 'fields-empty' | 'server-error';
+  | 'expense-not-found' | 'image-not-found' | 'fields-empty' | 'server-error' | 'balance-currency-not-accepted' | 'balance-already-paid';
 
 export type Session = {
   account: Account
@@ -235,11 +236,97 @@ export type Account = {
   firstName: string,
   lastName: string,
   imgUrl: string,
+  phone: string,
   orders: any[],
   roles: {
     isAdmin: boolean,
     isEmployee: boolean,
     isClient: boolean,
+    accountant: boolean
   },
   city: string
+}
+
+export type Debt = {
+  _id: string
+  order: Invoice,
+  owner: User,
+  createdBy: User,
+  balanceType: 'debt' | 'credit',
+  amount: number,
+  initialAmount: number,
+  currency: 'LYD' | 'USD',
+  status: 'open' | 'closed' | 'overdue' | 'lost'
+  notes: string,
+  paymentHistory: [
+    {
+      _id: string
+      createdAt: Date,
+      rate: number,
+      amount: number,
+      currency: 'LYD' | 'USD',
+      companyBalance: {
+        isExist: boolean,
+        reference: string
+      },
+      attachments: [{
+        filename: string,
+        path: string,
+        fileType: string,
+        description: string
+      }],
+      notes: string
+    }
+  ],
+  attachments: [{
+    filename: string,
+    path: string,
+    fileType: string,
+    description: string
+  }],
+  debtPriority: string
+  createdAt: Date,
+  updatedAt: Date
+}
+
+export type Credit = {
+  _id: string
+  order: Invoice,
+  owner: Account,
+  createdBy: Account,
+  balanceType: 'debt' | 'credit',
+  amount: number,
+  initialAmount: number,
+  currency: 'LYD' | 'USD',
+  status: 'open' | 'closed' | 'overdue' | 'lost'
+  notes: string,
+  paymentHistory: [
+    {
+      _id: string
+      createdAt: Date,
+      rate: number,
+      amount: number,
+      currency: 'LYD' | 'USD',
+      companyBalance: {
+        isExist: boolean,
+        reference: string
+      },
+      attachments: [{
+        filename: string,
+        path: string,
+        fileType: string,
+        description: string
+      }],
+      notes: string
+    }
+  ],
+  attachments: [{
+    filename: string,
+    path: string,
+    fileType: string,
+    description: string
+  }],
+  debtPriority: string
+  createdAt: Date,
+  updatedAt: Date
 }

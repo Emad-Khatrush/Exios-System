@@ -8,6 +8,10 @@ export const Token_EXPIRED = 'authorize-invalid';
 export const USER_SUBSCRIPTION_CANCLED = 'user-subscription-canceled';
 export const USER_ROLE_INVALID = 'user-role-invalid';
 
+// Balance errors
+export const BALANCE_CURRENCY_NOT_ACCEPTED = 'balance-currency-not-accepted';
+export const BALANCE_ALREADY_PAID = 'balance-already-paid';
+
 // order errors
 export const ORDER_ID_TAKEN = 'order-id-taken';
 export const ORDER_NOT_FOUND = 'order-not-found';

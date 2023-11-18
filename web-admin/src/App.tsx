@@ -15,6 +15,7 @@ import Settings from './containers/Settings/Settings';
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import RatingsPage from './containers/RatingsPage/RatingsPage';
+import Balances from './containers/Balances/Balances';
 
 const Home = React.lazy(() => import('./containers/Home/Home'));
 const EmployeeHomePage = React.lazy(() => import('./containers/EmployeeHomePage/EmployeeHomePage'));
@@ -63,6 +64,7 @@ const getRoutesByRole = (roles: any) => {
       <Route path='/task/add' element={<CreateTask />} />
       <Route path='/task/:id/edit' element={<EditTask />} />
       <Route path='/settings' element={<Settings />} />
+      <Route path='/balances' element={<Balances />} />
     </>
   } else if (roles?.isAdmin) {
     return <>
@@ -85,6 +87,7 @@ const getRoutesByRole = (roles: any) => {
       <Route path='/task/:id/edit' element={<EditTask />} />
       <Route path='/settings' element={<Settings />} />
       <Route path='/ratings' element={<RatingsPage />} />
+      <Route path='/balances' element={<Balances />} />
     </>
   }
 }

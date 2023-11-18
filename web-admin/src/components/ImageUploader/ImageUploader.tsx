@@ -11,6 +11,7 @@ type Props = {
   deleteImage?: any
   previewFiles?: any
   files?: any
+  required?: boolean
 }
 
 type State = {}
@@ -18,13 +19,13 @@ type State = {}
 class ImageUploader extends Component<Props, State> {
 
   render() {
-    const { inputFileRef, fileUploaderHandler, previewFiles, id, files } = this.props;
+    const { inputFileRef, fileUploaderHandler, previewFiles, id, files, required } = this.props;
 
     const uploadedFiles = !!files ? files : previewFiles;
     
     return (
       <div>
-        <input id={id} multiple className='d-none' onChange={fileUploaderHandler} ref={inputFileRef} type="file" />
+        <input id={id} multiple className='d-none' onChange={fileUploaderHandler} ref={inputFileRef} type="file" required={required || false} />
         <div className='circle-border' onClick={() => inputFileRef.current.click()}>
           <div className='upload-section'>
             <BiImageAdd className='icon' />

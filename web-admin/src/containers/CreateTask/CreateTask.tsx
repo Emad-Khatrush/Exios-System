@@ -52,7 +52,6 @@ export class CreateTask extends Component<Props, State> {
       .then((res) => this.setState({ employees: res.data.results }))
       .catch((err) => {
         console.log(err);
-        console.log("error");
       })
       .finally(() => {
         this.setState({ isLoading: false });
@@ -166,7 +165,7 @@ export class CreateTask extends Component<Props, State> {
     this.setState({ isLoading: true });
     api.fetchFormData('create/task', 'POST', formData)
       .then((res: any) => {
-        if (res.status === 200) {
+        if (!(res?.success !== undefined && !res?.success)) {
           this.state.form.reviewers.forEach(async (userId) => {
             const foundUser = this.state.employees.find((emp: Account) => emp._id === userId)
             await this.sendWhatsupMessage(foundUser as any);

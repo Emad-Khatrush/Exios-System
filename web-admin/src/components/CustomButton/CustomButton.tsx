@@ -7,7 +7,7 @@ import './CustomButton.scss';
 
 type Props = {
   size?: 'small' | 'medium' | 'large'
-  color?: 'secondary' | 'success' | 'error'
+  color?: 'secondary' | 'success' | 'error' | 'primary'
   background?: string
   icon?: any
   style?: object
@@ -17,10 +17,11 @@ type Props = {
   href?: string
   target?: string
   className?: string
+  onDoubleClick?: any
 }
 
 const CustomButton = (props: Props) => {
-  const { size, color, icon, background, href, style, onClick, disabled, target, className } = props;
+  const { size, color, icon, background, href, style, onClick, disabled, target, className, onDoubleClick } = props;
 
   const customStyle: any = {
     textTransform: 'none',
@@ -44,6 +45,7 @@ const CustomButton = (props: Props) => {
         size={size} 
         startIcon={icon}
         onClick={onClick}
+        onDoubleClick={onDoubleClick}
         disabled={disabled}
         className={`custom-button ${className}`}
       >

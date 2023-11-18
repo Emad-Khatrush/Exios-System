@@ -127,11 +127,10 @@ class APIBase {
           ...this.headers,
           authorization: "Bearer " + localStorage.getItem('authToken')
         },
-      });
+      })
+      response = await response.json();
       
     } catch (error) {
-      console.log(error);
-      
       response = error;
     }
     return response;

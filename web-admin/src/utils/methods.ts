@@ -75,3 +75,11 @@ export const getTabOrdersCount = (tabType: string, data: IInvoice) => {
     }
 
 }
+
+export const checkIfDataArray = (data: any) => {
+  if (Array.isArray(data)) {
+    // It's an array
+    return true;
+  }
+  return false;
+}

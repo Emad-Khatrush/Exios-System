@@ -3,6 +3,7 @@ import React from 'react'
 import { CircularProgress } from '@mui/material';
 import Card from '../Card/Card';
 import './StatusDataWidget.scss';
+import RoundedIcon from '../RoundedIcon/RoundedIcon';
 
 type Props = {
   invoicesDetails: any[]
@@ -26,9 +27,11 @@ const StatusDataWidget = (props: Props) => {
           const Icon = invoice.icon;
           return (
             <div className='status-wrapper'>
-              <div className='icon-design' style={{ borderColor: invoice.borderColor }}>
-                <Icon className='custom-icon' style={{color: invoice.color }} />
-              </div>
+              <RoundedIcon
+                icon={Icon}
+                borderColor={invoice.borderColor}
+                color={invoice.color}
+              />
 
               <div className='info'>
                 <h6> {invoice.title} </h6>

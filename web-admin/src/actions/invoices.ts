@@ -19,7 +19,7 @@ export const createInvoice = (data: any) => {
 
     api.fetchFormData('orders', 'POST', data)
       .then((res: any) => {        
-        if (res.status === 200) {
+        if (!(res?.success !== undefined && !res?.success)) {
           dispatch({
             status: STATUS_SUCCESS,
             type: CREATE_INVOICE,

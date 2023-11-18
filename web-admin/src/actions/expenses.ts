@@ -19,7 +19,7 @@ export const createExpense = (data: any) => {
 
     api.fetchFormData('expenses', 'POST', data)
       .then((res: any) => {
-        if (res.status === 200) {
+        if (!(res?.success !== undefined && !res?.success)) {
           dispatch({
             status: STATUS_SUCCESS,
             type: CREATE_EXPENSE,

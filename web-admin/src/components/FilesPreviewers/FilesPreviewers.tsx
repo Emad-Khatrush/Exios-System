@@ -23,7 +23,7 @@ const FilesPreviewers = (props: Props) => {
         {previewFiles.map((file: any, index: number) => {
           const type = file.type || file.fileType;
 
-          return (<div key={index} className="col-lg-4 col-md-6 col-sm-6 col-12 mb-2">
+          return (<div key={index} className="col-lg-4 col-md-6 col-sm-6 col-12 mb-2 mx-1">
             {!!props.deleteImage && <AiFillCloseCircle onClick={() => props.deleteImage(files[index]) } className='close-icon' />}
             {( !!type && (type !== 'image/jpeg' && type !== 'image/png')) ?
               <FilePreviewer 
