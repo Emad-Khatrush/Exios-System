@@ -16,6 +16,11 @@ exports.errorMessages = {
   // tasks errors
   TASK_ID_TAKEN: 'order-id-taken',
   TASK_NOT_FOUND: 'order-not-found',
+  // Balances errors
+  BALANCE_ID_TAKEN: 'balance-id-taken',
+  BALANCE_NOT_FOUND: 'balance-not-found',
+  BALANCE_CURRENCY_NOT_ACCEPTED: 'balance-currency-not-accepted',
+  BALANCE_ALREADY_PAID: 'balance-already-paid',
   // expense errors
   EXPENSE_ID_TAKEN: 'expense-id-taken',
   EXPENSE_NOT_FOUND: 'expense-not-found',
