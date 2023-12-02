@@ -10,6 +10,7 @@ type Props = {
 
 const CreateDebtDialog = (props: Props) => {
   const [currency, setCurrency] = useState();
+  const [office] = useState();
   const [form, setForm] = useState<any>();
   const [error, setError] = useState<string>();
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -20,7 +21,7 @@ const CreateDebtDialog = (props: Props) => {
 
   const onSubmit = async (event: any) => {
     event.preventDefault();
-
+    
     try {
       setIsLoading(true);
       await api.post('balances', { ...form, balanceType: 'debt' });
@@ -91,6 +92,30 @@ const CreateDebtDialog = (props: Props) => {
                   </MenuItem>
                   <MenuItem value={'LYD'}>
                     <em> LYD </em>
+                  </MenuItem>
+                </Select>
+              </FormControl>
+            </div>
+
+            <div className="d-flex col-md-6 mb-4">
+              <FormControl style={{ width: '100%' }} required>
+                <InputLabel id="demo-select-small">Select Office</InputLabel>
+                <Select
+                  labelId={'Select Office'}
+                  id={'Select Office'}
+                  defaultValue={office}
+                  label={'Select Office'}
+                  name="createdOffice"
+                  onChange={(event: any) => {
+                    setCurrency(event.target.value);
+                    return onChangeHandler(event);
+                  }}
+                >
+                  <MenuItem value={'tripoli'}>
+                    <em> Tripoli Office </em>
+                  </MenuItem>
+                  <MenuItem value={'benghazi'}>
+                    <em> Benghazi Office </em>
                   </MenuItem>
                 </Select>
               </FormControl>

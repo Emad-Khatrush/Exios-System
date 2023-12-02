@@ -9,9 +9,7 @@ const Balances = (props: Props) => {
   return (
     <div className="container mt-4">
       <div className="row">
-        <DebtsPage 
-
-        />
+        <DebtsPage />
       </div>
     </div>
   )

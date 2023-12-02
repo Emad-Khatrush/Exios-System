@@ -252,6 +252,7 @@ export type Debt = {
   order: Invoice,
   owner: User,
   createdBy: User,
+  createdOffice: 'tripoli' | 'benghazi',
   balanceType: 'debt' | 'credit',
   amount: number,
   initialAmount: number,

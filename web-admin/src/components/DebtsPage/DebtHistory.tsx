@@ -7,6 +7,7 @@ import { Alert, Avatar, AvatarGroup, Button, CircularProgress, Dialog, DialogAct
 import SwipeableTextMobileStepper from '../SwipeableTextMobileStepper/SwipeableTextMobileStepper';
 import { useSelector } from 'react-redux';
 import api from '../../api';
+import Badge from '../Badge/Badge';
 
 type Props = {
   debt: Debt
@@ -48,7 +49,11 @@ const DebtHistory = (props: Props) => {
 
   return (
     <div className='row debt-details mb-2'>
-      <div className='d-flex justify-content-between'>
+      <Badge 
+        text={`${debt?.createdOffice.toLocaleUpperCase()}`}
+        color="warning"
+      />
+      <div className='d-flex justify-content-between mt-2'>
         <p className='m-0 created-date debt-info'>Debt {'=>'} {moment(debt.createdAt).format('DD/MM/YYYY')}</p>
         {debt.status === 'open' &&
           <CustomButton 

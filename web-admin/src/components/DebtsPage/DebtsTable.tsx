@@ -5,7 +5,7 @@ import { getTabsOfDebts } from './wrapper-util';
 import { Account, Credit, Debt } from '../../models';
 import DebtDetails from './DebtDetails';
 import api from '../../api';
-import { CircularProgress } from '@mui/material';
+import { CircularProgress, ToggleButton, ToggleButtonGroup } from '@mui/material';
 
 type Props = {
   setDialog: (state: any) => void
@@ -16,6 +16,7 @@ const DebtsTable = (props: Props) => {
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentTab, setCurrentTab] = useState('open');
+  const [currentOffice, setCurrentOffice] = useState('tripoli');
   const [debts, setDebts] = useState<Debt[]>();
   const [credits, setCredits] = useState<Credit[]>();
   const [countList, setCountList] = useState({
@@ -30,12 +31,13 @@ const DebtsTable = (props: Props) => {
     fetchBalanceOfUsers('open');
   }, [])
 
-  const fetchBalanceOfUsers = async (value?: string) => {
+  const fetchBalanceOfUsers = async (value?: string, office?: string) => {
     const generatedValue = !!value ? value : currentTab;
+    const generatedOffice = !!office ? office : currentOffice;
 
     try {
       setIsLoading(true);
-      const response = await api.get(`balances?tabType=${generatedValue}`);
+      const response = await api.get(`balances?tabType=${generatedValue}&&officeType=${generatedOffice}`);
       const { debts, credits, countList } = response.data;
       setDebts(debts);
       setCredits(credits);
@@ -56,6 +58,21 @@ const DebtsTable = (props: Props) => {
   
   return (
     <div className='col-12'>
+      <ToggleButtonGroup
+        color="success"
+        value={currentOffice}
+        exclusive
+        onChange={(event: any, value: string) => {
+          setCurrentOffice(value);
+          fetchBalanceOfUsers(undefined, value);
+        }}
+        size="small"
+        className='mb-3'
+      >
+        <ToggleButton value="tripoli">Tripoli</ToggleButton>
+        <ToggleButton value="benghazi">Benghazi</ToggleButton>
+      </ToggleButtonGroup>
+      
       <Card
         leand
         tabs={debtTabs}

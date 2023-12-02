@@ -94,6 +94,11 @@ const adminRoutes = [
       icon: <FaTasks className="sidebar-icon" />,
      },
      {
+      title: 'Balances',
+      path: '/balances',
+      icon: <MdOutlineAccountBalanceWallet className="sidebar-icon" />,
+     },
+     {
       title: 'Settings',
       path: '/settings',
       icon: <FiSettings className="sidebar-icon" />,
