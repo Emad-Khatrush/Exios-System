@@ -15,6 +15,11 @@ const balanceSchema = new mongoose.Schema({
     ref: 'User', // Reference to the 'User' collection
     required: true
   },
+  createdOffice: {
+    type: String,
+    required: true,
+    enum: ['benghazi', 'tripoli']
+  },
   balanceType: {
     type: String,
     required: true,

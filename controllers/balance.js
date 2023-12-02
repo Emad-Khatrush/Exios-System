@@ -8,9 +8,12 @@ const { uploadToGoogleCloud } = require('../utils/googleClould');
 
 module.exports.getBalances = async (req, res, next) => {
   try {
-    const { tabType } = req.query;
+    const { tabType, officeType } = req.query;
+
+    const matchQuery = { $match: { balanceType: 'debt', status: tabType, createdOffice: officeType || 'tripoli' } }
+
     let debts = (await Balance.aggregate([
-      { $match: { balanceType: 'debt', status: tabType }},
+      { ...matchQuery },
       {
         $group: {
           _id: '$owner',
@@ -53,7 +56,7 @@ module.exports.getBalances = async (req, res, next) => {
           openedDebtsCount: {
             $sum: {
               $cond: [
-                { $eq: ["$status", 'open'] },
+                { $and: [{ $eq: ["$status", 'open'] }, { $eq: ["$createdOffice", officeType] }] },
                 1,
                 0
               ]
@@ -62,7 +65,7 @@ module.exports.getBalances = async (req, res, next) => {
           closedDebtsCount: {
             $sum: {
               $cond: [
-                { $eq: ["$status", 'closed'] },
+                { $and: [{ $eq: ["$status", 'closed'] }, { $eq: ["$createdOffice", officeType] }] },
                 1,
                 0
               ]
@@ -71,7 +74,7 @@ module.exports.getBalances = async (req, res, next) => {
           overdueDebtsCount: {
             $sum: {
               $cond: [
-                { $eq: ["$status", 'overdue'] },
+                { $and: [{ $eq: ["$status", 'overdue'] }, { $eq: ["$createdOffice", officeType] }] },
                 1,
                 0
               ]
@@ -80,7 +83,7 @@ module.exports.getBalances = async (req, res, next) => {
           lostDebtsCount: {
             $sum: {
               $cond: [
-                { $eq: ["$status", 'lost'] },
+                { $and: [{ $eq: ["$status", 'lost'] }, { $eq: ["$createdOffice", officeType] }] },
                 1,
                 0
               ]
@@ -113,8 +116,8 @@ module.exports.getBalances = async (req, res, next) => {
 
 module.exports.createBalance = async (req, res, next) => {
   try {
-    const { balanceType, amount, currency, orderId, customerId, notes } = req.body;
-    if (!balanceType || !amount || !currency || !customerId || !notes) {
+    const { balanceType, amount, currency, orderId, customerId, notes, createdOffice } = req.body;
+    if (!balanceType || !amount || !currency || !customerId || !notes || !createdOffice) {
       return next(new ErrorHandler(400, errorMessages.FIELDS_EMPTY));
     }
 
@@ -131,6 +134,7 @@ module.exports.createBalance = async (req, res, next) => {
       amount,
       currency,
       notes,
+      createdOffice,
       order: order ? order : undefined,
       owner: user,
       createdBy: req.user,
