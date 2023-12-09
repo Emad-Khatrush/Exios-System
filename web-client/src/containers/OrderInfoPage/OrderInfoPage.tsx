@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { DataGrid } from "@mui/x-data-grid";
-import { BiInfoCircle } from "react-icons/bi";
 import { FaShippingFast, FaWarehouse } from "react-icons/fa";
 import { GrStakeholder } from "react-icons/gr";
 import { MdExpandMore } from "react-icons/md";
@@ -157,12 +156,12 @@ const OrderInfoPage = () => {
       value: order.productName
     },
     {
-      label: 'وزن الشحنة',
-      value: '-'
+      label: 'الشحنه من',
+      value: order.shipment.fromWhere
     },
     {
-      label: 'CBM',
-      value: '-'
+      label: 'عنوان الاستلام',
+      value: order.shipment.toWhere
     },
     {
       label: 'نوع الشحن',
@@ -172,19 +171,19 @@ const OrderInfoPage = () => {
 
   const otherInfo = [
     {
-      label: 'تاريخ الانشاء',
+      label: 'تاريخ انشاء الفاتورة',
       value: moment(order.createdAt).format('DD/MM/YYYY')
     },
     {
-      label: 'مكان التسليم',
-      value: order.shipment.toWhere
+      label: 'حجم/وزن',
+      value: '-'
     },
     {
       label: 'قيمة الفاتورة',
       value: `${order?.totalInvoice} $`
     },
     {
-      label: 'ديون',
+      label: 'الدين المتبقي',
       value: order?.debt?.total > 0 ? `${order?.debt?.total} ${currencyLabels[order?.debt?.currency]}` : 'لا يوجد',
       tint: 'danger'
     }
