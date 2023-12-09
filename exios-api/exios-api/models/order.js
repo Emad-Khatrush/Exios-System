@@ -25,7 +25,7 @@ const orderSchema = new Schema({
     type: Number,
     default: 0
   },
-  receivedShipmentLYD: {
+  receivedShipmentLYD: { 
     type: Number,
     default: 0
   },
@@ -33,7 +33,6 @@ const orderSchema = new Schema({
     type: Number,
     default: 0
   },
-  paymentExistNote: String,
   placedAt: {
     type: String,
     required: true,
