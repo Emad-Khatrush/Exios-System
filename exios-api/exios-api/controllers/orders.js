@@ -260,7 +260,9 @@ module.exports.getOrdersBySearch = async (req, res, next) => {
   })
   
   try {
-    const orders = await Orders.aggregate(query);
+    let orders = await Orders.aggregate(query);
+    orders = await Orders.populate(orders, [{ path: "madeBy" }]);
+
     res.status(200).json({
       orders,
       tabType: tabType ? tabType : 'active',
