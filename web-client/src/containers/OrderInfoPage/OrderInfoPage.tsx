@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { DataGrid } from "@mui/x-data-grid";
 import { BiInfoCircle } from "react-icons/bi";
-import { FaShippingFast } from "react-icons/fa";
-import { RiShipLine } from "react-icons/ri";
+import { FaShippingFast, FaWarehouse } from "react-icons/fa";
+import { GrStakeholder } from "react-icons/gr";
 import { MdExpandMore } from "react-icons/md";
 import Card from "../../components/Card/Card";
 import CustomStepper from "../../components/CustomStepper/CustomStepper";
@@ -398,22 +398,22 @@ const generateSteps = (order: Package) => {
     },
     {
       label: 'وصلت الى المخزن',
-      stepIcon: BiInfoCircle
+      stepIcon: FaWarehouse
     },
     {
       label: 'وصلت الى ليبيا',
-      stepIcon: RiShipLine
+      stepIcon: FaWarehouse
     },
     {
       label: 'تم التسليم',
-      stepIcon: BiInfoCircle
+      stepIcon: GrStakeholder
     }
   ]
 
   if (order.isPayment) {
     steps.splice(1, 0, {
       label: 'اتمام الشراء',
-      stepIcon: RiShipLine
+      stepIcon: FaWarehouse
     })
   }
 
@@ -427,15 +427,15 @@ const linkSteps = [
   },
   {
     label: 'وصلت الى المخزن',
-    stepIcon: BiInfoCircle
+    stepIcon: FaWarehouse
   },
   {
     label: 'وصلت الى ليبيا',
-    stepIcon: RiShipLine
+    stepIcon: FaWarehouse
   },
   {
     label: 'تم التسليم',
-    stepIcon: BiInfoCircle
+    stepIcon: GrStakeholder
   }
 ]
 
