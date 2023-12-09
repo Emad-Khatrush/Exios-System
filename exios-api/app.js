@@ -26,6 +26,7 @@ const resetToken = require('./routes/resetToken');
 const tasks = require('./routes/tasks');
 const settings = require('./routes/settings');
 const notifications = require('./routes/notifications');
+const balances = require('./routes/balance');
 
 // Whatsup packages
 const { Client, RemoteAuth, LocalAuth } = require('whatsapp-web.js');
@@ -109,6 +110,7 @@ app.use('/api', resetToken);
 app.use('/api', tasks);
 app.use('/api', settings);
 app.use('/api', notifications);
+app.use('/api', balances);
 
 app.get('/api/get-qr-code', (req, res) => {
   if (qrCodeData) {
