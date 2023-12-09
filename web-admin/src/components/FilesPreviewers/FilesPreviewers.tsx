@@ -16,6 +16,14 @@ const FilesPreviewers = (props: Props) => {
   
   const [openModal, setOpenModal] = useState(false);
   const [selectedImg, setSelectedImg] = useState<any>(null);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+  
+  let Tag: any = null;
+  if (selectedImg) {
+    Tag = PreviewImage;
+  } else if (selectedItem) {
+    Tag = DeletingItemMessage
+  }
 
   return (
     <div>
@@ -24,7 +32,17 @@ const FilesPreviewers = (props: Props) => {
           const type = file.type || file.fileType;
 
           return (<div key={index} className="col-lg-4 col-md-6 col-sm-6 col-12 mb-2 mx-1">
-            {!!props.deleteImage && <AiFillCloseCircle onClick={() => props.deleteImage(files[index]) } className='close-icon' />}
+            {!!props.deleteImage && 
+              <AiFillCloseCircle 
+                onClick={() => {
+                  console.log(files[index]);
+                  
+                  setSelectedItem(files[index]);
+                  setOpenModal(true);
+                }} 
+                className='close-icon'
+              />
+            }
             {( !!type && (type !== 'image/jpeg' && type !== 'image/png')) ?
               <FilePreviewer 
                 uploadedFile={{
@@ -54,7 +72,11 @@ const FilesPreviewers = (props: Props) => {
         aria-labelledby="transition-modal-title"
         aria-describedby="transition-modal-description"
         open={openModal}
-        onClose={ () => setOpenModal(false)}
+        onClose={ () => {
+          setOpenModal(false);
+          setSelectedImg(null);
+          setSelectedItem(null);
+        }}
         closeAfterTransition
         BackdropComponent={Backdrop}
         BackdropProps={{
@@ -62,14 +84,40 @@ const FilesPreviewers = (props: Props) => {
         }}
         style={{ zIndex: 10000 }}
       >
-        <Box sx={{ maxWidth: 600, flexGrow: 1 }}>
-          <Box className='image-previewer' style={{ height: '80%' }}>
-              <img src={selectedImg?.src} width={'100%'} height={'100%'} alt="" />
-          </Box>
-        </Box>
+        <Tag 
+          selectedImg={selectedImg}
+          selectedItem={selectedItem} 
+          deleteItem={() => props.deleteImage(selectedItem)}
+          cancelModel={() => {
+            setOpenModal(false);
+            setSelectedImg(null);
+            setSelectedItem(null);
+          }}
+        />
       </Modal>
     </div>
   )
+}
+
+const PreviewImage = ({ selectedImg }: any): any => {
+  return <Box sx={{ maxWidth: 600, flexGrow: 1 }}>
+  <Box className='image-previewer' style={{ height: '80%' }}>
+      <img src={selectedImg?.src} width={'100%'} height={'100%'} alt="" />
+  </Box>
+</Box>
+}
+
+const DeletingItemMessage = ({ selectedItem, deleteItem, cancelModel }: any): any => {
+  return <Box sx={{ maxWidth: 600, flexGrow: 1 }}>
+  <Box className='image-previewer' style={{ height: '70%' }}>
+      <h5 style={{ color: '#c70d0d' }}>Are you sure you want to delete this photo ?</h5>
+      <img src={selectedItem?.path} width={'80%'} height={'80%'} alt="" />
+      <div className='flex text-end mt-2'>
+        <button onClick={() => cancelModel()}>Cancel</button>
+        <button onClick={() => { deleteItem(); cancelModel(); }} style={{ marginLeft: '10px' }}>Yes Delete</button>
+      </div>
+  </Box>
+</Box>
 }
 
 export default FilesPreviewers;
