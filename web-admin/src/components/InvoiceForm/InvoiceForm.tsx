@@ -507,7 +507,20 @@ const InvoiceForm = (props: Props) => {
           />
         </div>
 
-        <div className="col-md-6 mb-4">
+        {!props.isEmployee &&
+          <div className="col-md-12 mb-4">
+            <TextField
+              id={'outlined-helperText'}
+              label={'هل قيمة مدخوله في حسبه وفي اي تاريخ؟'}
+              name="paymentExistNote"
+              onChange={props.handleChange}
+              defaultValue={invoice?.paymentExistNote}
+              disabled={invoice?.isCanceled || !!invoice?.paymentExistNote}
+            />
+          </div>
+        }
+
+        {/* <div className="col-md-6 mb-4">
           <TextField
             label="Received Shipment USD"
             name='receivedShipmentUSD'
@@ -539,7 +552,7 @@ const InvoiceForm = (props: Props) => {
             onWheel={(event: any) => event.target.blur()}
             disabled={invoice?.isCanceled}
           />
-        </div>
+        </div> */}
 
         {/* Packages Info Section  */}
         <div className="col-md-12">

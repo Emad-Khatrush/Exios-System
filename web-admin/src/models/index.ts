@@ -15,6 +15,7 @@ export type Invoice = {
   receivedLYD: number,
   receivedShipmentLYD: number,
   receivedShipmentUSD: number,
+  paymentExistNote: string,
   shipment: {
     fromWhere: string,
     toWhere: string,
