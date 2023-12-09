@@ -1,2 +1,0 @@
-[0922/151123.281:INFO:CONSOLE(7)] "Another connection wants to delete database 'wawc'. Closing db now to resume the delete request.", source: https://web.whatsapp.com/vendor1~app.7f14216f970118f62a35.js (7)
-[0922/151134.596:INFO:CONSOLE(2)] "Uncaught (in promise) Error: qrcode is not defined", source:  (2)
