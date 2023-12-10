@@ -269,7 +269,7 @@ const OrderInfoPage = () => {
           </Card>
         </div>
 
-        <div className=" col-span-1 xl:col-span-2 md:col-span-2">
+        <div className="col-span-1 xl:col-span-2 md:col-span-2">
           <Card
             className="rounded-2xl mb-5"
           >
@@ -322,10 +322,19 @@ const OrderInfoPage = () => {
                         <h3 className=" font-bold ml-5">:{trackingNumber.length === 4 ? 'اخر 4 ارقام من رقم التتبع' : 'رقم التتبع'}</h3>
                       </div>
 
-                      <div className="flex items-center justify-end mb-8">
-                        <p>{shipmentMethodsLabels[packageDetails.deliveredPackages.shipmentMethod]}</p>
-                        <h3 className=" font-bold ml-5">:طريقة الشحن</h3>
-                      </div>
+                      {packageDetails.status.arrived &&
+                        <div className="flex items-center justify-end mb-8">
+                          <p>{moment(packageDetails.deliveredPackages.arrivedAt).format('DD/MM/YYYY')}</p>
+                          <h3 className=" font-bold ml-5">:تاريخ وصولها في مخازن الخارجية</h3>
+                        </div>
+                      }
+
+                      {packageDetails.deliveredPackages.shipmentMethod &&
+                        <div className="flex items-center justify-end mb-8">
+                          <p>{shipmentMethodsLabels[packageDetails.deliveredPackages.shipmentMethod]}</p>
+                          <h3 className=" font-bold ml-5">:طريقة الشحن</h3>
+                        </div>
+                      }
 
                       {packageDetails.images.length > 0 &&
                         <div className="flex items-center justify-end mb-8">

@@ -1,4 +1,5 @@
 import { Package, PackageDetails } from "../models";
+import { generateMessageForAirShipping, generateMessageForSeaShipping } from "./aiMethods";
 
 export const getOrderStatusLabels = (order: Package) => {
   const orderStatusIndex = order.orderStatus;
@@ -63,11 +64,31 @@ export const getStatusOfPackage = (packageDetails: PackageDetails) => {
   if (status.arrived) {
     return {
       statusIndex: 1,
-      lastActivity: 'وصلت البضائع الى مخزننا الخارجية، والان في طريقها الى ليبيا'
+      lastActivity: generateMessageOfDeliveredPackage(packageDetails)
     }
   }
   return {
     statusIndex: 0,
     lastActivity: 'في مرحلة انتظار البضائع لارساله الى مخزننا الخارجية'
   }
+}
+
+const generateMessageOfDeliveredPackage = (packageDetails: PackageDetails) => {
+  const { deliveredPackages } = packageDetails;
+  const shippingMethod = deliveredPackages.shipmentMethod;
+  if (shippingMethod) {
+    const arrivedDate = new Date(deliveredPackages.arrivedAt);
+    const todayDate = new Date();
+    // Calculate the time difference in milliseconds
+    const timeDifference = todayDate.getTime() - arrivedDate.getTime();
+    // Convert the time difference to days
+    const passedDays = Math.ceil(timeDifference / (1000 * 60 * 60 * 24));
+
+    if (shippingMethod === 'air') {
+      return generateMessageForAirShipping(passedDays);
+    } else if (shippingMethod === 'sea') {
+      return generateMessageForSeaShipping(passedDays);
+    }
+  }
+  return 'وصلت البضائع الى مخزننا الخارجية، والان في طريقها الى ليبيا';
 }
