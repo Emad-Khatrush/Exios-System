@@ -138,7 +138,6 @@ class XTrackingPage extends Component<Props, State> {
     }
   }
 
-
   render() {
     const { listData } = this.props;    
     const { selectorValue, searchValue } = this.state;    

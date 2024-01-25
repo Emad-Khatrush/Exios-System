@@ -13,6 +13,7 @@ exports.errorMessages = {
   ORDER_NOT_FOUND: 'order-not-found',
   ORDER_CANT_DELETE: 'order-cant-delete',
   ORDER_HAS_RATING: 'order_has_rating',
+  ORDER_STATUS_NOT_FOUND: 'order_status_not_found',
   // tasks errors
   TASK_ID_TAKEN: 'order-id-taken',
   TASK_NOT_FOUND: 'order-not-found',
@@ -21,6 +22,8 @@ exports.errorMessages = {
   BALANCE_NOT_FOUND: 'balance-not-found',
   BALANCE_CURRENCY_NOT_ACCEPTED: 'balance-currency-not-accepted',
   BALANCE_ALREADY_PAID: 'balance-already-paid',
+  // Balances errors
+  INVENTORY_NOT_FOUND: 'inventory-not-found',
   // expense errors
   EXPENSE_ID_TAKEN: 'expense-id-taken',
   EXPENSE_NOT_FOUND: 'expense-not-found',

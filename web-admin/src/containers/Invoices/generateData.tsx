@@ -224,6 +224,12 @@ export const defaultColumns = (setState: any) => ([
     align: 'center'
   },
   {
+    field: 'paymentExistNote',
+    headerName: 'Payment Exist ?',
+    width: 200,
+    align: 'center'
+  },
+  {
     field: 'orderNote',
     headerName: 'Note',
     width: 200,
@@ -270,6 +276,7 @@ export const generateDataToListType = (list: any[]) => {
     exiosShipmentPrice: data.shipment.exiosShipmentPrice,
     shipmentIncome: data.paymentList,
     placedAt: data.placedAt,
+    paymentExistNote: data.paymentExistNote,
     createdAt: moment(data.createdAt).format('DD-MM-YYYY hh:mm A'),
     madeBy: `${data?.madeBy?.firstName || ''} ${data?.madeBy?.lastName || ''}`
   }));

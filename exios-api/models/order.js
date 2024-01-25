@@ -33,6 +33,7 @@ const orderSchema = new Schema({
     type: Number,
     default: 0
   },
+  paymentExistNote: String,
   placedAt: {
     type: String,
     required: true,
@@ -139,6 +140,14 @@ const orderSchema = new Schema({
     currency: String,
     total: Number,
     default: 0
+  },
+  status: {
+    mark: {
+      type: String,
+      enum: ['found', 'missing', 'unknown'],
+      default: 'found'
+    },
+    missingDescription: String
   },
   paymentList: [{
     link: {

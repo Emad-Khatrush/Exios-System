@@ -16,6 +16,9 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import RatingsPage from './containers/RatingsPage/RatingsPage';
 import Balances from './containers/Balances/Balances';
+import Inventory from './containers/Inventory/Inventory';
+import AddInventory from './containers/Inventory/AddInventory';
+import EditInventory from './containers/Inventory/EditInventory';
 
 const Home = React.lazy(() => import('./containers/Home/Home'));
 const EmployeeHomePage = React.lazy(() => import('./containers/EmployeeHomePage/EmployeeHomePage'));
@@ -65,6 +68,9 @@ const getRoutesByRole = (roles: any) => {
       <Route path='/task/:id/edit' element={<EditTask />} />
       <Route path='/settings' element={<Settings />} />
       <Route path='/balances' element={<Balances />} />
+      <Route path='/inventory' element={<Inventory />} />
+      <Route path='/inventory/add' element={<AddInventory />} />
+      <Route path='/inventory/:id/edit' element={<EditInventory />} />
     </>
   } else if (roles?.isAdmin) {
     return <>
@@ -88,6 +94,9 @@ const getRoutesByRole = (roles: any) => {
       <Route path='/settings' element={<Settings />} />
       <Route path='/ratings' element={<RatingsPage />} />
       <Route path='/balances' element={<Balances />} />
+      <Route path='/inventory' element={<Inventory />} />
+      <Route path='/inventory/add' element={<AddInventory />} />
+      <Route path='/inventory/:id/edit' element={<EditInventory />} />
     </>
   }
 }

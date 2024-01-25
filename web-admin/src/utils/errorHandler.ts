@@ -1,5 +1,5 @@
 import { ApiErrorMessages } from "../models";
-import { BALANCE_ALREADY_PAID, BALANCE_CURRENCY_NOT_ACCEPTED, EXPENSE_ID_TAKEN, EXPENSE_NOT_FOUND, FIELDS_EMPTY, IMAGE_NOT_FOUND, INVALID_CREDENTIALS, INVALID_TOKEN, ORDER_ID_TAKEN, ORDER_NOT_FOUND, SERVER_ERROR, Token_EXPIRED, TOKEN_NOT_FOUND, USER_NOT_FOUND, USER_ROLE_INVALID, USER_SUBSCRIPTION_CANCLED } from "../constants/errors";
+import { BALANCE_ALREADY_PAID, BALANCE_CURRENCY_NOT_ACCEPTED, EXPENSE_ID_TAKEN, EXPENSE_NOT_FOUND, FIELDS_EMPTY, IMAGE_NOT_FOUND, INVALID_CREDENTIALS, INVALID_TOKEN, INVENTORY_NOT_FOUND, ORDER_ID_TAKEN, ORDER_NOT_FOUND, SERVER_ERROR, Token_EXPIRED, TOKEN_NOT_FOUND, USER_NOT_FOUND, USER_ROLE_INVALID, USER_SUBSCRIPTION_CANCLED } from "../constants/errors";
 
 export const getErrorMessage = (errorId: ApiErrorMessages): string => {
   switch (errorId) {
@@ -50,6 +50,9 @@ export const getErrorMessage = (errorId: ApiErrorMessages): string => {
 
     case BALANCE_ALREADY_PAID:
       return 'The Balance has been paid already, please refresh the page.';
+
+    case INVENTORY_NOT_FOUND:
+      return 'Inventory not found';
 
     case SERVER_ERROR:
       return 'Something went wrong, please try again later';

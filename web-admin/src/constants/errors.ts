@@ -12,6 +12,9 @@ export const USER_ROLE_INVALID = 'user-role-invalid';
 export const BALANCE_CURRENCY_NOT_ACCEPTED = 'balance-currency-not-accepted';
 export const BALANCE_ALREADY_PAID = 'balance-already-paid';
 
+// Inventory errors
+export const INVENTORY_NOT_FOUND = 'inventory-not-found';
+
 // order errors
 export const ORDER_ID_TAKEN = 'order-id-taken';
 export const ORDER_NOT_FOUND = 'order-not-found';
