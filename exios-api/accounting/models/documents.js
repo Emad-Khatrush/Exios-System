@@ -80,6 +80,8 @@ const billLineSchema = new Schema({
 const SupplierBill = mongoose.model('AccountingSupplierBill', withLifecycle({
   vendorId: { type: Schema.Types.ObjectId, ref: 'AccountingVendor', required: true },
   vendorRef: String,
+  importReference: String,
+  importHash: String,
   day: { type: String, required: true },
   currency: { type: String, required: true },
   rate: Number,

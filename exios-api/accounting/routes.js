@@ -159,6 +159,10 @@ router.get('/vendors/:id/open-bills', can('purchases', 'payments'), documents.ve
 router.post('/vendors/:id/archive', P.purchases, documents.setVendorActive(false));
 router.post('/vendors/:id/unarchive', P.purchases, documents.setVendorActive(true));
 
+const billImport = require('./services/billImport');
+router.get('/bills/import/references', P.purchases, handle(async (req, res) => res.json(await billImport.templateReferences())));
+router.post('/bills/import/preview', P.purchases, handle(async (req, res) => res.json(await billImport.preview(req.body))));
+router.post('/bills/import/commit', P.purchases, handle(async (req, res) => res.status(201).json(await billImport.commit(req.body, req))));
 router.route('/bills').get(can('purchases', 'payments'), documents.listBills).post(P.purchases, documents.createBill);
 router.route('/bills/:id').get(can('purchases', 'payments'), documents.getBill).patch(P.purchases, documents.updateDraftBill).delete(P.purchases, documents.deleteDraftBill);
 router.post('/bills/:id/post', P.purchases, documents.postDraftBill);
