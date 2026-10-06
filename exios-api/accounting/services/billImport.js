@@ -174,11 +174,15 @@ async function commit(body, req) {
     const existing = await SupplierBill.findOne({ idempotencyKey: group.idempotencyKey }).session(session);
     if (existing) { if (existing.importHash !== group.importHash) throw fail('المعرّف موجود بمحتوى مختلف'); return existing; }
     if (group.input.vendorRef && await SupplierBill.exists({ vendorId: group.input.vendorId, vendorRef: group.input.vendorRef, status: { $ne: 'canceled' }, isCreditNote: { $ne: true } }).session(session)) throw fail('رقم فاتورة المورد استورد بالفعل أثناء المراجعة؛ لن تُكرر التكلفة');
+    if (group.valuationSource === 'carrying') {
+      const current = { ...group.input };
+      if (!(await carriedValue(current, session)) || current.rate !== group.rate) throw fail('تغير متوسط تكلفة رصيد الحساب؛ أعد المعاينة قبل الموافقة');
+    }
     const doc = await createBill({ ...group.input, ...(group.valuationSource !== 'carrying' && { rate: group.rate }), idempotencyKey: group.idempotencyKey }, { session, req, asDraft: body.mode === 'draft' });
     doc.importReference = group.reference; doc.importHash = group.importHash;
     doc.total = group.total;
     await doc.save({ session });
-    await logAudit({ req, action: 'bill.excelImport', model: 'AccountingSupplierBill', docId: doc._id, after: { importReference: group.reference, sourceRows: group.sourceRows.map(row => row.rowNumber), mode: body.mode, kind: body.kind } }, session);
+    await logAudit({ req, action: 'bill.excelImport', model: 'AccountingSupplierBill', docId: doc._id, after: { importReference: group.reference, sourceRows: group.sourceRows.map(row => row.rowNumber), mode: body.mode, kind: body.kind, rate: group.rate, valuationSource: group.valuationSource } }, session);
     return doc;
   });
   return { _id: String(bill._id), number: bill.number, status: bill.status };
