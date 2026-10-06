@@ -40,6 +40,21 @@ exports.addChangedField = (fieldName, newData, oldData, labels) => {
                 changedFrom: String(oldData?.length) || 'empty',
                 changedTo: String(newData?.length) || 'empty',
             }
+        case 'items':
+            return {
+                label: labels[fieldName],
+                value: fieldName,
+                changedFrom: String(oldData?.length) || 'empty',
+                changedTo: String(newData?.length) || 'empty',
+            }
+
+        case 'purchaseItems':
+            return {
+                label: labels[fieldName],
+                value: fieldName,
+                changedFrom: String(oldData?.length) || 'empty',
+                changedTo: String(newData?.length) || 'empty',
+            }
     
         default:
             return {
@@ -54,7 +69,15 @@ exports.addChangedField = (fieldName, newData, oldData, labels) => {
 exports.getTapTypeQuery = (tapType) => {
     switch (tapType) {
         case 'active':
-            return { isFinished: false,  unsureOrder: false, isCanceled: false }
+            return {
+                isFinished: false,
+                unsureOrder: false,
+                isCanceled: false,
+                $or: [
+                    { isPayment: true, isShipment: true },       // both true
+                    { isShipment: true, isPayment: false }       // shipment true & payment false
+                ]
+            }
         
         case 'shipment':
             return { isShipment: true,  unsureOrder: false, isPayment: false,  isFinished: false, isCanceled: false }
@@ -63,21 +86,70 @@ exports.getTapTypeQuery = (tapType) => {
             return { unsureOrder: false, isPayment: true,  orderStatus: 1, isCanceled: false }
 
         case 'arrivedWarehouse':
-            return { $or: [{isPayment: true,  orderStatus: { $or: [2, 3] }, isCanceled: false }, {isPayment: false,  orderStatus: { $or: [1, 2] }, isCanceled: false }] }
+            return {
+                unsureOrder: false,
+                isCanceled: false,
+                $and: [
+                {
+                    $or: [
+                    {
+                        isPayment: true,
+                        orderStatus: { $in: [2, 3] }   // paid & arrived
+                    },
+                    {
+                        isPayment: false,
+                        orderStatus: { $in: [1, 2] }   // unpaid but partially arrived
+                    }
+                    ]
+                },
+                {
+                    $or: [
+                    { isPayment: true, isShipment: true },   // both true
+                    { isShipment: true, isPayment: false }   // shipment true & payment false
+                    ]
+                }
+                ]
+            }
 
         case 'readyForPickup':
-            return { unsureOrder: false, $or: [{isPayment: true,  orderStatus: 4, isCanceled: false }, {isPayment: false,  orderStatus: 3, isCanceled: false }] }
+            return {
+                unsureOrder: false,
+                isCanceled: false,
+                $and: [
+                    {
+                    $or: [
+                        { isPayment: true, orderStatus: 4 },   // ✅ paid & ready
+                        { isPayment: false, orderStatus: 3 }   // ✅ unpaid & ready
+                    ]
+                    },
+                    {
+                    $or: [
+                        { isPayment: true, isShipment: true },   // both true
+                        { isShipment: true, isPayment: false }   // shipment true & payment false
+                    ]
+                    }
+                ]
+            }
         case 'unpaid':
             return { unsureOrder: false,  orderStatus: 0, isPayment: true, isCanceled: false }
 
         case 'finished':
-            return { isFinished: true, isCanceled: false }
+            return { isFinished: true, isCanceled: false, unsureOrder: false }
 
         case 'unsure':
             return { unsureOrder: true, isCanceled: false }
 
+        case 'hasRemainingPayment':
+            return { hasRemainingPayment: true }
+
+        case 'hasProblem':
+            return { hasProblem: true }
+
         case 'canceled':
             return { isCanceled: true };
+
+        case 'invoiceOrders':
+            return { unsureOrder: false, isPayment: true, isShipment: false };
     
         default:
             return { isFinished: false,  unsureOrder: false }

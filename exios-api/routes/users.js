@@ -1,7 +1,15 @@
 const express = require('express');
+const multer = require('multer');
 
 const users = require('../controllers/users');
-const { protect, isEmployee, isAdmin, isClient, allowAdminsAndEmployee } = require('../middleware/check-auth');
+const { protect, isEmployee, isAdmin, isClient, allowAdminsAndEmployee, allowAdminsAndAccountants } = require('../middleware/check-auth');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // No larger than 10mb
+  },
+});
 
 const router  = express.Router();
 
@@ -14,13 +22,47 @@ router.route('/home')
 router.route('/employees')
       .get(protect, allowAdminsAndEmployee, users.getEmployees)
 
+router.route('/clients')
+      .get(protect, allowAdminsAndEmployee, users.getClients)
+      
 router.route('/customer/:id')
       .get(protect, allowAdminsAndEmployee, users.getCustomerData)
 
-router.post('/account/create', users.createUser);
+router.post('/account/create', upload.single('passportImage'), users.createUser);
 
 router.route('/account/update')
       .put(protect, isClient, users.updateUser);
+
+router.route('/account/me')
+      .get(protect, isClient, users.getMyAccount);
+
+router.route('/account/passport/upload')
+      .post(protect, isClient, upload.single('passportImage'), users.uploadPassport);
+
+router.route('/customerId/:id/update')
+      .put(protect, allowAdminsAndEmployee, users.updateCustomerId);
+
+// Only admins can edit a customer's name, username, phone and city
+router.route('/customer/:id/info')
+      .put(protect, isAdmin, users.updateCustomerInfo);
+
+// Only admins set special prices; employees see them when creating shipment invoices
+router.route('/customer/:id/specialPrices')
+      .put(protect, allowAdminsAndAccountants, allowAdminsAndEmployee, users.updateSpecialPrices);
+
+// Only admins and accountants can review passport verifications
+router.route('/customer/:id/passportVerification')
+      .put(protect, allowAdminsAndAccountants, users.updatePassportVerification);
+
+router.route('/passportVerifications')
+      .get(protect, allowAdminsAndAccountants, users.getPendingPassportVerifications);
+
+// Admin only - the "Approved" tab in Passport Review.
+router.route('/passportVerifications/approved')
+      .get(protect, isAdmin, users.getApprovedPassportVerifications);
+
+router.route('/specialPriceCustomers')
+      .get(protect, allowAdminsAndAccountants, allowAdminsAndEmployee, users.getSpecialPriceCustomers);
 
 router.post('/verifyToken', users.verifyToken);
 

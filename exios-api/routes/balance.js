@@ -1,7 +1,7 @@
 const express = require('express');
 
 const balance = require('../controllers/balance');
-const { protect, allowAdminsAndEmployee } = require('../middleware/check-auth');
+const { protect, allowAdminsAndEmployee, isAdmin, allowAdminsAndAccountants } = require('../middleware/check-auth');
 const multer = require('multer');
 const upload = multer({
       storage: multer.memoryStorage(),
@@ -15,8 +15,26 @@ router.route('/balances')
       .get(protect, allowAdminsAndEmployee, balance.getBalances)
       .post(protect, allowAdminsAndEmployee, balance.createBalance);
 
+router.route('/balances/:id')
+      .delete(protect, isAdmin, balance.deleteBalance);
+
 router.route('/balances/:id/paymentHistory')
       .post(protect, allowAdminsAndEmployee, upload.array('files'), balance.createPaymentHistory)
       .put(protect, allowAdminsAndEmployee, balance.updateCompanyBalance);
-      
+
+router.route('/balances/:id/confirmed')
+      .put(protect, isAdmin, balance.confirmDebt)
+
+router.route('/balances/:id/close')
+      .put(protect, allowAdminsAndAccountants, balance.closeDebtManually)
+
+router.route('/debts/search')
+      .get(protect, allowAdminsAndEmployee, balance.searchForDebt)
+
+router.route('/debts/:userId')
+      .get(protect, allowAdminsAndEmployee, balance.getDebtOfUser)
+
+router.route('/debts/user/:customerId')
+      .get(protect, allowAdminsAndEmployee, balance.checkDebtsByUser)
+
 module.exports = router;

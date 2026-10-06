@@ -6,7 +6,7 @@ const activitySchema = new Schema({
   details: {
     path: { type: String },
     status:{ type: String, enum: ['added', 'updated', 'deleted'] }, // updated, deleted, added
-    type: { type: String, enum: ['order', 'expense', 'activity', 'income'] }, // order, expense, activity, income
+    type: { type: String, enum: ['order', 'expense', 'activity', 'income', 'inventory', 'debt'] }, // order, expense, activity, income, inventory, debt
     actionName: { type: String, enum: ['image'] },
     actionId: String
   },
@@ -20,5 +20,9 @@ const activitySchema = new Schema({
 {
   timestamps: true
 })
+
+// The activities page always sorts newest first and filters by date, type or person.
+activitySchema.index({ createdAt: -1 });
+activitySchema.index({ user: 1, createdAt: -1 });
 
 module.exports = mongoose.model("Activity", activitySchema);

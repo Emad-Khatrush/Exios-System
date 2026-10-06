@@ -1,7 +1,8 @@
 const express = require('express');
 
 const orders = require('../controllers/orders');
-const { protect, isAdmin, isClient, isEmployee, allowAdminsAndEmployee } = require('../middleware/check-auth');
+const ordersControl = require('../controllers/ordersControl');
+const { protect, isAdmin, isClient, allowAdminsAndAccountants, allowAdminsAndEmployee } = require('../middleware/check-auth');
 const multer = require('multer');
 // cloudinary settings
 const { storage } = require('../utils/cloudinary');
@@ -34,6 +35,10 @@ router.route('/currentOrdersTab')
 router.route('/orders/search')
       .get(protect, allowAdminsAndEmployee, orders.getOrdersBySearch)
 
+// X-Tracking: stages with counts, one-box search, office/method/service filters
+router.route('/orders/tracking')
+      .get(protect, allowAdminsAndEmployee, orders.getTrackingOrders)
+
 router.route('/unsureOrder/add')
       .post(protect, allowAdminsAndEmployee, orders.createUnsureOrder);
 
@@ -49,8 +54,12 @@ router.route('/order/deleteFiles')
 
 router.route('/order/:id')
       .get(protect, allowAdminsAndEmployee, orders.getOrder)
-      .put(protect, allowAdminsAndEmployee, orders.updateOrder);
+      .put(protect, allowAdminsAndEmployee, orders.updateOrder)
+      .delete(protect, isAdmin, orders.deleteOrder);
 
+router.route('/order/:id/package')
+      .put(protect, allowAdminsAndEmployee, orders.updateSinglePackage);
+      
 router.route('/order/:id/view')
       .get(orders.getPublicOrder)
 
@@ -60,9 +69,50 @@ router.route('/order/:id/cancel')
 router.route('/order/:id/addActivity')
       .post(protect, allowAdminsAndEmployee, orders.createOrderActivity)
 
+router.route('/order/:id/activity/:activityId')
+      .delete(protect, isAdmin, orders.deleteOrderActivity)
+
+// X-Tracking > مراقبة الطلبيات: every open package with its stage and automatic checks (read-only)
+router.route('/orders/control')
+      .get(protect, isAdmin, ordersControl.getOrdersControl)
+
 router.route('/orders/rating')
       .get(protect, isAdmin, orders.getRatings)
 
+router.route('/order/:id/payments')
+      .get(protect, allowAdminsAndEmployee, orders.getPaymentsOfOrder)
+      .post(protect, allowAdminsAndEmployee, upload.array('files'), orders.addPaymentToOrder)
+
+router.route('/orders/:id/confirmInvoice')
+      .post(protect, allowAdminsAndEmployee, orders.confirmInvoice)
+
+router.route('/orders/:id/items')
+      .put(protect, allowAdminsAndEmployee, orders.updateOrderItems)
+
+router.route('/orders/:id/confirmItemsChanges')
+      .put(protect, allowAdminsAndEmployee, orders.confirmItemsChanges)
+
+router.route('/user/:id/packages')
+      .get(protect, allowAdminsAndEmployee, orders.getUserPackagesOfOrdersAdmin)
+
+router.route('/user/:id/markAsDelivered')
+      .post(protect, allowAdminsAndEmployee, orders.markPackagesAsDelivered)
+
+router.route('/invoices/customer/:id')
+      .get(protect, allowAdminsAndEmployee, orders.getInvoicesByCustomer);
+
+router.route('/invoices/:id/cancel')
+      .post(protect, allowAdminsAndAccountants, orders.cancelInvoice);
+
+router.route('/invoices/issued')
+      .get(protect, allowAdminsAndEmployee, orders.getAllIssuedInvoices);
+
+router.route('/monthReport')
+      .get(protect, isAdmin, orders.getMonthReport)
+
+router.route('/odoReport')
+      .get(protect, allowAdminsAndAccountants, orders.odoReport)
+      
 // Client Routes
 
 router.route('/client/home')
@@ -86,5 +136,8 @@ router.route('/client/unsureOrder/:id/delete')
 router.route('/client/order/:id/rating')
       .get(protect, isClient, orders.getOrderRating)
       .post(protect, isClient, orders.createRatingForOrder)
+
+router.route('/client/order/:id/customization')
+      .put(protect, isClient, orders.updateOrderCustomization)
 
 module.exports = router;

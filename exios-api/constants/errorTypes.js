@@ -2,18 +2,23 @@ exports.errorMessages = {
   // user errors
   USER_NOT_FOUND: 'user-not-found',
   USER_EXIST: 'user-exist',
+  PHONE_EXIST: 'phone-exist',
   INVALID_CREDENTIALS: 'invalid-credentials',
   TOKEN_NOT_FOUND: 'token-not-found',
   INVALID_TOKEN: 'invalid-token',
   USER_SUBSCRIPTION_CANCLED: 'user-subscription-canceled',
   PASSWORD_NOT_MATCH: 'password-not-match',
   USER_ROLE_INVALID: 'user-role-invalid',
+  PASSPORT_IMAGE_REQUIRED: 'passport-image-required',
+  PASSPORT_UPLOAD_FAILED: 'passport-upload-failed',
   // order errors
   ORDER_ID_TAKEN: 'order-id-taken',
   ORDER_NOT_FOUND: 'order-not-found',
   ORDER_CANT_DELETE: 'order-cant-delete',
   ORDER_HAS_RATING: 'order_has_rating',
   ORDER_STATUS_NOT_FOUND: 'order_status_not_found',
+  ORDER_NOTE_TOO_LONG: 'order-note-too-long',
+  ORDER_THEME_INVALID: 'order-theme-invalid',
   // tasks errors
   TASK_ID_TAKEN: 'order-id-taken',
   TASK_NOT_FOUND: 'order-not-found',
@@ -22,8 +27,17 @@ exports.errorMessages = {
   BALANCE_NOT_FOUND: 'balance-not-found',
   BALANCE_CURRENCY_NOT_ACCEPTED: 'balance-currency-not-accepted',
   BALANCE_ALREADY_PAID: 'balance-already-paid',
-  // Balances errors
+  BALANCE_RATE_ZERO: 'balance-rate-zero',
+  BALANCE_NOT_ENOUGH: 'balance-not-enough',
+  BALANCE_NOT_CLOSABLE: 'balance-not-closable',
+  BALANCE_HAS_PAYMENTS: 'balance-has-payments',
+  BALANCE_ORDER_CUSTOMER_MISMATCH: 'balance-order-customer-mismatch',
+  // Invetnory errors
   INVENTORY_NOT_FOUND: 'inventory-not-found',
+  // Invetnory errors
+  WALLET_NOT_FOUND: 'wallet-not-found',
+  // Returned Payments errors
+  RETURNED_PAYMENTS_NOT_FOUND: 'returned-payments-not-found',
   // expense errors
   EXPENSE_ID_TAKEN: 'expense-id-taken',
   EXPENSE_NOT_FOUND: 'expense-not-found',

@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const userSchema = new Schema({
+  walletPostingVersion: { type: Number, default: 0 },
   username: {
     type: String,
     required: true,
@@ -26,8 +27,14 @@ const userSchema = new Schema({
   phone: {
     type: Number,
     required: true,
+    unique: true,
   },
   city: {
+    type: String,
+  },
+  // The office a staff member works in (an accounting office code): their expenses are recorded on
+  // that office and paid from its cash box. Set by the owner in Accounting > Access.
+  office: {
     type: String,
   },
   password: {
@@ -58,7 +65,38 @@ const userSchema = new Schema({
       type: Boolean,
       default: false,
     },
-  }
+    isAccountant: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  // Special Exios shipment prices (USD) for chosen customers: air is per KG, sea is per CBM.
+  // Categories are free to add or remove; new customers start with Normal, Copy + Cosmetic, Medical.
+  specialPrices: {
+    enabled: { type: Boolean, default: false },
+    categories: [{
+      _id: false,
+      name: { type: String, trim: true },
+      air: Number,
+      sea: Number,
+    }],
+    note: String,
+    updatedAt: Date,
+    updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  },
+  // Passport verification required at registration; customer can use the app while pending
+  // for the first time, but must re-upload if an admin rejects it, and stays blocked while
+  // that re-upload is pending review (wasRejected tracks that, since status alone can't
+  // tell a first-time pending apart from a pending-after-rejection).
+  passportVerification: {
+    status: { type: String, enum: ['pending', 'verified', 'rejected'], default: 'pending' },
+    imageUrl: { type: String },
+    rejectionReason: { type: String },
+    wasRejected: { type: Boolean, default: false },
+    submittedAt: { type: Date },
+    reviewedAt: { type: Date },
+    reviewedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  },
 }, { timestamps: true });
 
 userSchema.methods.matchPassword = async function(password) {
