@@ -109,6 +109,16 @@ db.once("open", () => {
   });
 })
 
+// Respond to browser visits and Render's probes without waiting on the catch-all handler.
+app.get('/', (req, res) => {
+  res.json({ service: 'Exios API', databaseConnected: mongoose.connection.readyState === 1,
+    message: 'This address serves the API. Open the admin frontend to use the system.' });
+});
+app.get('/health', (req, res) => {
+  const databaseConnected = mongoose.connection.readyState === 1;
+  res.status(databaseConnected ? 200 : 503).json({ ok: databaseConnected });
+});
+
 // render routes
 app.use('/api', users);
 app.use('/api', orders);
@@ -196,8 +206,10 @@ app.use(async (req, res) => {
   //   console.error(error);
   // });
   // res.send(newClients);
+  return res.status(404).send("Page Not Found");
+}
   res.status(404).send("Page Not Found");
-}});
+});
 
 sendMessageQueue.process('resume-jobs', 1, async (job) => {
   // Resume the queue
