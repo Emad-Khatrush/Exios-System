@@ -49,7 +49,8 @@ class Login extends Component<Props, State> {
   render() {
     const { session } = this.props;
     // redirect user if authenticated
-		if (localStorage.getItem("authToken")) {
+		// Same test as the private routes (token and user), so a half-saved session cannot bounce between pages
+		if (localStorage.getItem("authToken") && localStorage.getItem("user")) {
 			return (
 				<Navigate to={'/'} />
 			);
@@ -65,7 +66,7 @@ class Login extends Component<Props, State> {
         <div className='login-card'>
           <Card>
             <div className='text-center mb-4'>
-              <img src="https://storage.googleapis.com/exios-bucket/8424e4c2a34ab9e29b3b.png" style={{ minWidth: '180px' }} width={'50%'} height="50%" alt="Exios" />
+              <img src="https://storage.cloud.google.com/exios-bucket/8424e4c2a34ab9e29b3b.png" style={{ minWidth: '180px' }} width={'50%'} height="50%" alt="Exios" />
             </div>
             {session.isError && 
               <Alert className='mb-3' severity="error">{errorMessage}</Alert>

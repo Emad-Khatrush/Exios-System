@@ -24,6 +24,16 @@ export const generateTabs = (tabs: any): any => {
       icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.unpaidOrdersCount)} color="warning" />
     },
     {
+      label: 'Remaining Payment Orders',
+      value: 'hasRemainingPayment',
+      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.hasRemainingPaymentOrdersCount)} color="warning" />
+    },
+    {
+      label: 'Orders Problems',
+      value: 'hasProblem',
+      icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.hasProblemOrdersCount)} color="danger" />
+    },
+    {
       label: 'Finished',
       value: 'finished',
       icon: <Badge style={{ marginLeft: '8px'}} text={String(tabs.finishedOrdersCount)} color="success" />
@@ -49,7 +59,29 @@ export const formatInvoiceFields = (name: string) => {
 
     case 'containerNumber':
       return 'containerInfo'
+
+    case 'itemQuantity':
+      return 'quantity'
   
+    default:
+      return name;
+  }
+}
+
+export const formatPurchaseFields = (name: string) => {
+  switch (name) {
+    case 'purchaseItemDate':
+      return 'date';
+
+    case 'purchaseItemDescription':
+      return 'description';
+
+    case 'purchaseItemUnitPrice':
+      return 'unitPrice';
+
+    case 'purchaseItemCurrency':
+      return 'currency';
+
     default:
       return name;
   }

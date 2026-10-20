@@ -1,22 +1,41 @@
-import { connect } from 'react-redux'
-import React, { Component } from 'react'
-import { Alert, Autocomplete, Backdrop, Breadcrumbs, Button, ButtonGroup, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Link, Snackbar, Switch, TextField, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
-import Card from '../../components/Card/Card'
-import ImageUploader from '../../components/ImageUploader/ImageUploader'
-import InvoiceForm from '../../components/InvoiceForm/InvoiceForm'
-import CustomButton from '../../components/CustomButton/CustomButton'
-import api from '../../api'
-import { Account, Invoice, OrderActivity, User } from '../../models'
-import withRouter from '../../utils/WithRouter/WithRouter'
-import { RouteMatch } from 'react-router-dom'
-import { getOrderSteps } from '../../utils/methods'
-import QRCode from 'qrcode.react'
-import { formatInvoiceFields } from '../XTrackingPage/utils'
-import { isMobile } from 'react-device-detect';
-import * as htmlToImage from 'html-to-image';
+import React, { Component } from 'react';
+import { connect } from 'react-redux';
+import { RouteMatch } from 'react-router-dom';
+import { Alert, Backdrop, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Skeleton, Snackbar, Tab, Tabs, TextField } from '@mui/material';
+import moment from 'moment';
 
-import './EditInvoice.scss';
-import moment from 'moment'
+import api from '../../api';
+import { Account, Debt, User } from '../../models';
+import withRouter from '../../utils/WithRouter/WithRouter';
+import { calculateTotalWallet, getOrderSteps } from '../../utils/methods';
+import { formatInvoiceFields, formatPurchaseFields } from '../XTrackingPage/utils';
+import Badge from '../../components/Badge/Badge';
+import InvoiceForm from '../../components/InvoiceForm/InvoiceForm';
+import { apiErrorMessage } from '../../components/InvoiceForm/constants';
+import { InvoiceTemplate } from '../../components/InvoiceTemplate/InvoiceTemplate';
+import CreateDebtDialog from '../../components/DebtsPage/CreateDebtDialog';
+import EditInvoiceItems from '../../components/EditInvoiceItems/EditInvoiceItems';
+import SwipeableTextMobileStepper from '../../components/SwipeableTextMobileStepper/SwipeableTextMobileStepper';
+import { OrderAccounting, OrderCosts, OrderRefunds } from '../Accounting/AccountingPanels';
+import FreeShippingReview from '../Accounting/FreeShippingReview';
+import { sys } from '../Accounting/accountingApi';
+import OrderSidebar from './OrderSidebar';
+import OrderPayments from './OrderPayments';
+import OrderWalletDialog from './OrderWalletDialog';
+import ShippingLabelDialog from './ShippingLabelDialog';
+import OrderTheme from './OrderTheme';
+import {
+  CANCEL_ALLOWED_ACCOUNTS, ITEM_FIELDS, PACKAGE_CHECKPOINTS, PACKAGE_FIELDS, PACKAGE_ROW_FIELDS, PURCHASE_FIELDS, SHIPMENT_FIELDS,
+  newItem, newPackage, newPurchaseItem, totalDebts, totalOfItems,
+} from './orderConstants';
+
+import './orderPage.scss';
+
+// Other screens import these from here
+export { countries, orderActions, removeBr } from './orderConstants';
+
+type TabKey = 'details' | 'payments' | 'accounting' | 'refund' | 'costs';
+type WalletCategory = 'invoice' | 'receivedGoods';
 
 type Props = {
   router: RouteMatch
@@ -25,957 +44,650 @@ type Props = {
 }
 
 type State = {
-  formData: Invoice | any
+  order: any
+  loadError: string | null
   employees: User[]
-  changedFields: Invoice | any
-  isInvoicePending: boolean
+  userDebts: Debt[]
+  wallet: any
+  payments: any[]
+  // The rows being edited; the page keeps them because the form's inputs are uncontrolled
+  items: any[]
+  purchaseItems: any[]
   paymentList: any[]
-  activity: OrderActivity,
-  isError: boolean
-  isUpdating: boolean
-  isFinished: boolean
-  resMessage: string | null
-  whatsupMessage: string
-  qrCode: null
-  shouldVerifyQrCode: boolean
-  isCancelOrderDialogOpen: boolean
+  // Only what the user changed is sent on save
+  changedFields: Record<string, any>
+  tab: TabKey
+  isBusy: boolean
+  toast: { open: boolean, type: 'success' | 'error', message: string }
+  copied: boolean
+  cancelDialog: boolean
   cancelationReason: string
-  shippingLabelDialogOpen: boolean
-  shippingMethodForLabel: 'air' | 'sea'
-  inspectionCheckbox: boolean
+  labelDialog: boolean
+  previewDialog: boolean
+  debtDialog: boolean
+  editItemsDialog: boolean
+  // The payment being made from the wallet: what for, which packages and how much is due
+  walletPayment?: { category: WalletCategory, packages: any[], dueUsd: number }
+  previewImages?: any[]
+  deleteDialog: boolean
+  // The order number typed to confirm deleting it, and why the server refused
+  deleteConfirmation: string
+  deleteError: string
 }
 
-const breadcrumbs = [
-  <Link underline="hover" key="1" color="inherit" href="/">
-    Home
-  </Link>,
-  <Link underline="hover" key="2" color="inherit" href="/invoices">
-    Invoices
-  </Link>,
-  <Typography key="3" color='#28323C'>
-    Edit Invoice
-  </Typography>,
-];
-
-export const countries = ['الصين', 'امريكا', 'بريطانيا', 'تركيا', 'الامارات', 'طرابلس', 'بنغازي'];
-export const orderActions = [
-  'تم شراء المنتجات، الان في مرحلة انتظار البضائع للوصول الى مخزننا',
-  'وصلت البضائع الى المخزن، الان في مرحلة التجهيز والشحن الى ليبيا',
-  '...وصل طرد ينتهي رقم التتبع الصيني ب',
-  'وصلت البضائع الى مخازن طرابلس، يرجى تواصل مع الشركة للاستلام',
-  'وصلت البضاعة الى طرابلس، والان متجهه الى بنغازي',
-  'وصلت البضائع الى مخازن بنغازي، يرجى تواصل مع الشركة للاستلام',
-  'تم استلام البضائع من طرف السيد ... شكرا لتعاملكم معنا'
-];
+// A request that may fail without taking the page down with it
+const optional = async <T,>(request: Promise<any>, pick: (response: any) => T, fallback: T): Promise<T> => {
+  try { return pick(await request); } catch { return fallback; }
+};
 
 export class EditInvoice extends Component<Props, State> {
-
   state: State = {
-    formData: null,
+    order: null,
+    loadError: null,
     employees: [],
-    changedFields: [],
-    isInvoicePending: true,
+    userDebts: [],
+    wallet: null,
+    payments: [],
+    items: [],
+    purchaseItems: [],
     paymentList: [],
-    activity: {
-      country: '',
-      description: ''
-    },
-    isError: false,
-    isUpdating: false,
-    isFinished: false,
-    resMessage: null,
-    whatsupMessage: '',
-    qrCode: null,
-    shouldVerifyQrCode: false,
-    isCancelOrderDialogOpen: false,
+    changedFields: {},
+    tab: 'details',
+    isBusy: false,
+    toast: { open: false, type: 'success', message: '' },
+    copied: false,
+    cancelDialog: false,
     cancelationReason: '',
-    shippingLabelDialogOpen: false,
-    shippingMethodForLabel: 'air',
-    inspectionCheckbox: false
-  }
+    labelDialog: false,
+    previewDialog: false,
+    debtDialog: false,
+    editItemsDialog: false,
+    deleteDialog: false,
+    deleteConfirmation: '',
+    deleteError: '',
+  };
+
+  get orderId() { return String(this.props.router.params.id); }
 
   async componentDidMount() {
+    let order: any;
     try {
-      const order = (await api.get(`order/${this.props.router.params.id}`)).data;
-      const employees = (await api.get(`employees`)).data?.results;
-      this.setState({ formData: order, paymentList: order?.paymentList, employees, isInvoicePending: false, shippingMethodForLabel: order.shipment.method })
+      order = (await api.get(`order/${this.orderId}`)).data;
     } catch (error) {
-      console.log(error);
+      return this.setState({ loadError: apiErrorMessage(error, 'Could not load this order.') });
     }
+    // The order is enough to work; the rest is loaded around it
+    const [employees, userDebts, wallet, payments] = await Promise.all([
+      optional(api.get('employees'), (res) => res.data?.results || [], []),
+      optional(api.get(`debts/user/${order?.user?.customerId}`), (res) => res.data || [], []),
+      optional(api.get(`wallet/${order?.user?._id}`), (res) => res.data?.results, null),
+      optional(api.get(`order/${order?._id}/payments`), (res) => res.data?.results || [], []),
+    ]);
+    this.setState({ order, employees, userDebts, wallet, payments, items: order.items || [], purchaseItems: order.purchaseItems || [], paymentList: order.paymentList || [] });
   }
 
-  addNewPaymentField = () => {
-    const newLink = {
-      index: Math.floor(Math.random() * 1000),
-      link: '',
-      status: {
-        paid: false,
-        arrived: false,
-        arrivedLibya: false,
-        received: false,
-      },
-      note: '',
-      settings: {
-        visableForClient: true
-      },
-      deliveredPackages: {
-        trackingNumber: '',
-        arrivedAt: new Date(),
-        weight: {
-          total: null,
-          measureUnit: null
-        },
-        containerInfo: {
-          billOfLading: ''
-        }
-      }
-    };
-    
-    this.setState((prevState: any) => ({
-      formData: {
-        ...prevState.formData,
-        paymentList: [...prevState.formData.paymentList, newLink]
-      },
-      changedFields: {
-        ...this.state.changedFields,
-        paymentList: [...prevState.formData.paymentList, newLink]
-      },
-      paymentList: [...prevState.paymentList, newLink]
-    }));
-  }
+  toast = (type: 'success' | 'error', message: string) => this.setState({ toast: { open: true, type, message } });
 
-  deteteRow = () => {
-    const { paymentList } = this.state;
-    // delete last row of the list
-    // in v2, I will delete rows depending on his index
-    if (paymentList?.length > 1) {
-      paymentList.pop();
-      this.setState({
-        paymentList,
-        formData: {
-          ...this.state.formData,
-          paymentList
-        },
-        changedFields: {
-          ...this.state.changedFields,
-          paymentList
-        }
-      });
+  // Re-reads the order. `rows` also replaces the rows being edited (after a save or a file change).
+  reloadOrder = async ({ rows = false } = {}) => {
+    const order = (await api.get(`order/${this.orderId}`)).data;
+    this.setState({
+      order,
+      ...(rows ? { items: order.items || [], purchaseItems: order.purchaseItems || [], paymentList: order.paymentList || [] } : {}),
+    } as any);
+    return order;
+  };
+
+  // Re-reads what a payment changes: the payments of the order and the customer's wallet
+  reloadMoney = async () => {
+    const { order } = this.state;
+    // A payment on the order also pays down the debts opened on it, so those are re-read too
+    const [wallet, payments, userDebts] = await Promise.all([
+      optional(api.get(`wallet/${order?.user?._id}`), (res) => res.data?.results, this.state.wallet),
+      optional(api.get(`order/${order?._id}/payments`), (res) => res.data?.results || [], this.state.payments),
+      optional(api.get(`debts/user/${order?.user?.customerId}`), (res) => res.data || [], this.state.userDebts),
+    ]);
+    this.setState({ wallet, payments, userDebts });
+  };
+
+  // Runs a server action behind the busy overlay and reports its result
+  run = async (action: () => Promise<string | void>, failure?: string) => {
+    this.setState({ isBusy: true });
+    try {
+      const message = await action();
+      if (message) this.toast('success', message);
+    } catch (error) {
+      this.toast('error', apiErrorMessage(error, failure));
     }
-  }
+    this.setState({ isBusy: false });
+  };
 
-  setFormState = (value: any, name: string, id: number, child?: any) => {    
-    if (name === 'fullName' || name === 'email' || name === 'phone') {
-      this.setState((oldValues) => ({
-        changedFields: {
-          ...oldValues.changedFields,
-          customerInfo: {
-            ...oldValues.changedFields?.customerInfo,
-            [name]: value
-          }
-        }
-      }))
-    } else if (
-        name === 'fromWhere' || 
-        name === 'toWhere' || 
-        name === 'packageCount' || 
-        name === 'exiosShipmentPrice' || 
-        name === 'method' || 
-        name === 'originShipmentPrice' || 
-        name === 'weight') 
-      {
-        this.setState((oldValues) => ({
-          changedFields: {
-            ...oldValues.changedFields,
-            shipment: {
-              ...oldValues.changedFields?.shipment,
-              [name]: value
-            }
-          }
-        }))
-    } else if (name === 'debt' || name === 'currency') {
-      this.setState((oldValues) => ({
-        changedFields: {
-          ...oldValues.changedFields,
-          debt: {
-            ...oldValues.changedFields?.debt,
-            [name === 'debt' ? 'total' : name]: value
-          }
-        }
-      }))
-    } else if (name === 'credit' || name === 'creditCurrency') {
-      this.setState((oldValues) => ({
-        changedFields: {
-          ...oldValues.changedFields,
-          credit: {
-            ...oldValues.changedFields?.credit,
-            [name === 'credit' ? 'total' : name]: value
-          }
-        }
-      }))
-    } else if (name === 'netIncome') {
-      const netIncome = [...this.state.formData.netIncome];
-      // modify the payment income of the invoice
-      // the first element of the income is the net invoice
-      netIncome[0] = {
-        nameOfIncome: 'payment',
-        total: value
-      };
-      
-      this.setState((oldValues) => ({
-        changedFields: {
-          ...oldValues.changedFields,
-          netIncome
-        }
-      }))
-    } else if (['trackingNumber', 'packageWeight', 'measureUnit', 'originPrice', 'exiosPrice', 'receiptNo', 'containerNumber', 'receivedShipmentLYDPackage', 'receivedShipmentUSDPackage', 'arrivedAt', 'visableForClient', 'shipmentMethod'].includes(name)) {      
-      const fieldName = formatInvoiceFields(name);
-      const fieldId = child ? Number(child.props.id) : id;      
-      let paymentList: any = [...this.state.paymentList!];
-      
-      if (fieldName === 'weight') {
-        paymentList[fieldId]['deliveredPackages']['weight'].total = value;
-      } else if (fieldName === 'measureUnit') {        
-        paymentList[fieldId]['deliveredPackages']['weight'].measureUnit = value;
-      } else if (fieldName === 'visableForClient') {
-        paymentList[fieldId]['settings'].visableForClient = value;        
-      } else if (fieldName === 'containerInfo') {
-        paymentList[fieldId]['deliveredPackages']['containerInfo'].billOfLading = value || '';   
-      } else {
-        paymentList[fieldId]['deliveredPackages'][fieldName] = value;
-      }
-      
-      this.setState((oldValues) => ({
-        changedFields: {
-          ...oldValues.changedFields,
-          paymentList
-        }
-      }))
-    } else {            
-      this.setState((oldValues) => ({
-        changedFields: {
-          ...oldValues.changedFields,
-          [name]: value
-        }
-      }))
-    }
-  }
+  change = (patch: Record<string, any>) => this.setState((state) => ({ changedFields: { ...state.changedFields, ...patch } }));
+  changeNested = (key: string, patch: Record<string, any>) => this.setState((state) => ({ changedFields: { ...state.changedFields, [key]: { ...state.changedFields[key], ...patch } } }));
 
+  // ---------- Rows ----------
+
+  addItem = () => this.setState((state) => {
+    const items = [...state.items, newItem()];
+    return { items, changedFields: { ...state.changedFields, items } };
+  });
+
+  removeItem = (index: number) => this.setState((state) => {
+    if (state.items.length <= 1) return null;
+    const items = state.items.filter((_, position) => position !== index);
+    return { items, changedFields: { ...state.changedFields, items } };
+  });
+
+  addPurchaseItem = () => this.setState((state) => {
+    const purchaseItems = [...state.purchaseItems, newPurchaseItem()];
+    return { purchaseItems, changedFields: { ...state.changedFields, purchaseItems } };
+  });
+
+  removePurchaseItem = (index: number) => this.setState((state) => {
+    const purchaseItems = state.purchaseItems.filter((_, position) => position !== index);
+    return { purchaseItems, changedFields: { ...state.changedFields, purchaseItems } };
+  });
+
+  addPackage = (defaults: { shipmentMethod?: string, measureUnit?: string } = {}) => this.setState((state) => {
+    const paymentList = [...state.paymentList, newPackage(defaults)];
+    return { paymentList, changedFields: { ...state.changedFields, paymentList } };
+  });
+
+  removePackage = (index: number) => this.setState((state) => {
+    if (state.paymentList.length <= 1) return null;
+    const paymentList = state.paymentList.filter((_, position) => position !== index);
+    return { paymentList, changedFields: { ...state.changedFields, paymentList } };
+  });
+
+  // ---------- Form ----------
+
+  // Every field of the form reports here. `child` is the chosen option of a select inside the
+  // package dialog (it carries the row index); `customFieldName` is for pickers with no name.
   handleChange = (event: any, checked?: any, child?: any, customFieldName?: string) => {
-    const fieldName = customFieldName ? customFieldName : event.target.name;
-    
-    if (['paid', 'arrived', 'arrivedLibya', 'received', 'paymentLink', 'note'].includes(fieldName)) {      
-      let paymentList: any = [...this.state.paymentList!];
-      let inputValue;
-      if (['paid', 'arrived', 'arrivedLibya', 'received'].includes(fieldName)) {
-        inputValue = paymentList[event.target.id].status[fieldName];
-        paymentList[event.target.id].status[fieldName] = !inputValue;
-      } else if (fieldName === 'paymentLink') {
-        inputValue = paymentList[event.target.id]['link'];
-        paymentList[event.target.id]['link'] = event.target.value;
-      } else {
-        inputValue = paymentList[event.target.id][fieldName];
-        paymentList[event.target.id][fieldName] = event.target.value;
-      }
-      this.setState({ paymentList, changedFields: { ...this.state.changedFields, paymentList } });
-    } else {
-      let value = event.target.inputMode === 'numeric' ? Number(event.target.value) : event.target.value;
-      // if checked has a value
-      if (checked === false || checked === true) {
-        value = checked;
-      }      
+    const name = customFieldName || event.target.name;
+    const id = event.target.id;
 
-      this.setFormState(value, fieldName, event.target.id, child)
+    if (PACKAGE_ROW_FIELDS.includes(name)) {
+      const paymentList = [...this.state.paymentList];
+      const row = paymentList[id];
+      if (!row) return;
+      if (PACKAGE_CHECKPOINTS.includes(name)) row.status = { ...(row.status || {}), [name]: !row.status?.[name] };
+      else if (name === 'paymentLink') row.link = event.target.value;
+      else row[name] = event.target.value;
+      this.setState({ paymentList });
+      return this.change({ paymentList });
+    }
+
+    let value = event.target.inputMode === 'numeric' ? Number(event.target.value) : event.target.value;
+    if (checked === true || checked === false) value = checked;
+    this.setField(name, value, id, child);
+  };
+
+  setField = (name: string, value: any, id: any, child?: any) => {
+    if (['fullName', 'email', 'phone'].includes(name)) return this.changeNested('customerInfo', { [name]: value });
+    if (SHIPMENT_FIELDS.includes(name)) return this.changeNested('shipment', { [name]: value });
+    if (name === 'debt' || name === 'currency') return this.changeNested('debt', { [name === 'debt' ? 'total' : name]: value });
+    if (name === 'credit' || name === 'creditCurrency') return this.changeNested('credit', { [name === 'credit' ? 'total' : name]: value });
+
+    if (name === 'netIncome') {
+      // The first income of an order is the income of its purchase invoice
+      const netIncome = [...(this.state.order.netIncome || [])];
+      netIncome[0] = { nameOfIncome: 'payment', total: value };
+      return this.change({ netIncome });
+    }
+
+    if (PACKAGE_FIELDS.includes(name)) {
+      const field = formatInvoiceFields(name);
+      const paymentList = [...this.state.paymentList];
+      const row = paymentList[child ? Number(child.props.id) : id];
+      if (!row) return;
+      const details = row.deliveredPackages = { ...(row.deliveredPackages || {}) };
+      if (field === 'weight') details.weight = { ...(details.weight || {}), total: value };
+      else if (field === 'measureUnit') details.weight = { ...(details.weight || {}), measureUnit: value };
+      else if (field === 'actualWeight') details.weight = { ...(details.weight || {}), actual: value === '' ? undefined : Number(value) };
+      else if (field === 'visableForClient') row.settings = { ...(row.settings || {}), visableForClient: value };
+      else details[field] = value;
+      this.setState({ paymentList });
+      return this.change({ paymentList });
+    }
+
+    if (ITEM_FIELDS.includes(name)) {
+      const items = [...this.state.items];
+      if (!items[id]) return;
+      items[id] = { ...items[id], [formatInvoiceFields(name)]: value };
+      this.setState({ items });
+      return this.change({ items });
+    }
+
+    if (PURCHASE_FIELDS.includes(name)) {
+      const purchaseItems = [...this.state.purchaseItems];
+      if (!purchaseItems[id]) return;
+      purchaseItems[id] = { ...purchaseItems[id], [formatPurchaseFields(name)]: value };
+      this.setState({ purchaseItems });
+      return this.change({ purchaseItems });
+    }
+
+    this.change({ [name]: value });
+  };
+
+  submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const { order, changedFields, items } = this.state;
+    const payload: any = { isPayment: order.isPayment, isShipment: order.isShipment, orderStatus: order.orderStatus, ...changedFields };
+    const totalInvoice = totalOfItems(items);
+    if (order.totalInvoice !== totalInvoice) payload.totalInvoice = totalInvoice;
+    // The last step of the order's own path means it is finished
+    payload.isFinished = getOrderSteps(payload).length - 1 === payload.orderStatus;
+    // The trip attached to a package is display data; it must not be sent back
+    if (payload.paymentList?.length) payload.paymentList = payload.paymentList.map(({ flight, ...row }: any) => row);
+
+    this.run(async () => {
+      await api.update(`order/${this.orderId}`, payload);
+      await this.reloadOrder({ rows: true });
+      this.setState({ changedFields: {} });
+      return 'Invoice updated';
+    }, 'The invoice could not be saved.');
+  };
+
+  // ---------- Files ----------
+
+  uploadFiles = async (event: any, extra: Record<string, string>) => {
+    const data = new FormData();
+    Array.from(event.target.files as FileList).reverse().forEach((file) => data.append('files', file));
+    data.append('id', this.orderId);
+    Object.entries(extra).forEach(([key, value]) => data.append(key, value));
+    // fetchFormData never throws: a failure comes back as the response itself
+    const response: any = await api.fetchFormData(extra.paymentListId ? 'order/upload/fileLink' : 'order/uploadFiles', 'POST', data);
+    if (response instanceof Error || response?.success === false) throw new Error(response?.message || 'The files could not be uploaded.');
+  };
+
+  uploadOrderImages = (event: any, type: 'invoice' | 'receipts') => this.run(async () => {
+    await this.uploadFiles(event, { type });
+    await this.reloadOrder();
+    return 'Images uploaded';
+  });
+
+  deleteOrderImage = (file: any) => {
+    const image = (this.state.order.images || []).find((img: any) => file._id === img._id);
+    this.run(async () => {
+      await api.delete('order/deleteFiles', { image, id: this.orderId });
+      await this.reloadOrder();
+      return 'Image deleted';
+    });
+  };
+
+  // Files of one package; the form shows whatever this returns
+  imagesOfPackage = (order: any, packageId: string) => (order.paymentList || []).find((row: any) => row?._id === packageId)?.images || [];
+
+  uploadPackageFiles = async (event: any): Promise<any[]> => {
+    const packageId = event.target.id;
+    this.setState({ isBusy: true });
+    try {
+      await this.uploadFiles(event, { paymentListId: packageId });
+      const order = await this.reloadOrder({ rows: true });
+      this.toast('success', 'Files uploaded');
+      return this.imagesOfPackage(order, packageId);
+    } catch (error) {
+      this.toast('error', apiErrorMessage(error));
+      return this.imagesOfPackage(this.state.order, packageId);
+    } finally {
+      this.setState({ isBusy: false });
     }
   };
 
-  deleteImage = (file: any) => {
-    this.setState({ isUpdating: true });
-    const foundImage = this.state.formData.images.find(((img: any) => file._id === img._id));
-    
-    api.delete('order/deleteFiles', { image: foundImage, id: String(this.props.router.params.id) })
-      .then(res => {
-        this.setState({
-          formData: res.data,
-          isFinished: true,
-          isUpdating: false,
-          resMessage: 'Image has been deleted successfully'
-        })
-      })
-      .catch((err) => {
-        this.setState({
-          isError: true,
-          isUpdating: false,
-          resMessage: err.message
-        })
-      })
-  }
-
-  deleteFileOfLink = async (file: any, paymentListId: string) => {
-    this.setState({ isUpdating: true });  
+  deletePackageFile = async (file: any, packageId: string): Promise<any[]> => {
+    this.setState({ isBusy: true });
     try {
-      const res = await api.delete('order/upload/fileLink', { filename: file.filename, id: String(this.props.router.params.id), paymentListId });
-      
-      this.setState({
-        formData: res.data,
-        paymentList: res.data.paymentList,
-        isFinished: true,
-        isUpdating: false,
-        resMessage: 'Image has been deleted successfully'
-      })
-
-      return res.data.paymentList.find(((link: any) => link?._id === paymentListId))?.images;
-    } catch (error: any) {
-      this.setState({
-        isError: true,
-        isUpdating: false,
-        resMessage: error.message
-      })
-      return this.state.paymentList.find(((link: any) => link?._id === paymentListId))?.images;
-    }
-  }
-
-  fileUploaderHandler = async (event: any, type: string) => {
-    const files = event.target.files;
-
-    const newFiles: any = [];
-    
-    for (const file of files) {
-      newFiles.unshift(file)
-    }
-
-    // upload it in the cloudinary
-    const data = new FormData()
-    if (newFiles) {
-      newFiles.forEach((file: any) => {
-        data.append('files', file);
-      });
-    }
-    data.append('id', String(this.props.router.params.id));
-    data.append('type', type);
-    this.setState({ isUpdating: true });
-    try {
-      await api.fetchFormData('order/uploadFiles', 'POST', data);
-      const res = await api.get('order/' + String(this.props.router.params.id));
-      this.setState({
-        formData: res.data,
-        isFinished: true,
-        isUpdating: false,
-        resMessage: 'Images has been updated successfully.'
-      })
-    } catch (error: any) {
-      this.setState({
-        isFinished: true,
-        isUpdating: false,
-        isError: true,
-        resMessage: error.data.message
-      })
-    }
-  }
-
-  submit = (event: MouseEvent) => {
-    event.preventDefault();    
-    this.setState({ isUpdating: true })
-    const order = {
-      isPayment: this.state.formData.isPayment,
-      orderStatus: this.state.formData.orderStatus,
-      ...this.state.changedFields
-    };    
-    const steps = getOrderSteps(order);
-    const isOrderFinished = steps?.length - 1 === order.orderStatus;
-    order.isFinished = isOrderFinished;    
-
-    api.update(`order/${this.props.router.params.id}`, order)
-      .then((res) => {
-        this.setState({
-          formData: res.data,
-          changedFields: [],
-          isUpdating: false,
-          isFinished: true,
-          resMessage: 'Invoice has been updated successfully.'
-        })
-      })
-      .catch((err) => {
-        this.setState({
-          isUpdating: false,
-          isFinished: true,
-          isError: true,
-          resMessage: err.data?.message
-        })
-      })
-  }
-  
-  submitNewActivity = (event: React.MouseEvent) => {
-    event.preventDefault();    
-    const { description, country } = this.state.activity;
-    
-    if (!description || !country) {
-      return;
-    }
-    this.setState({ isUpdating: true })    
-
-    api.post(`order/${this.props.router.params.id}/addActivity`, this.state.activity)
-      .then(() => {
-        this.setState({
-          isUpdating: false,
-          isFinished: true,
-          resMessage: 'New activity has been added successfully',
-          activity: {
-            country: '',
-            description: ''
-          }
-        })
-      })
-      .catch((err) => {
-        this.setState({
-          isUpdating: false,
-          isFinished: true,
-          isError: true,
-          resMessage: err.data.message,
-          activity: {
-            country: '',
-            description: ''
-          }
-        })
-      })
-  }
-
-  cancelOrder = async () => {
-    const { cancelationReason } = this.state;
-    if (!cancelationReason) return;
-    this.setState({ isUpdating: true });
-
-    try {
-      const order = (await api.post(`order/${this.props.router.params.id}/cancel`, { cancelationReason }))?.data;
-      this.setState({
-        formData: order,
-        changedFields: [],
-        isUpdating: false,
-        isFinished: true,
-        resMessage: 'Invoice canceled successfully.',
-        isCancelOrderDialogOpen: false
-      })
+      await api.delete('order/upload/fileLink', { filename: file.filename, id: this.orderId, paymentListId: packageId });
+      const order = await this.reloadOrder({ rows: true });
+      this.toast('success', 'File deleted');
+      return this.imagesOfPackage(order, packageId);
     } catch (error) {
-      console.log(error);
+      this.toast('error', apiErrorMessage(error));
+      return this.imagesOfPackage(this.state.order, packageId);
+    } finally {
+      this.setState({ isBusy: false });
     }
-  }
+  };
 
-  getQrCode = async () => {
-    const response = await api.get('get-qr-code');
-    this.setState({ qrCode: response.data.qrCode });
-  }
+  // ---------- Order actions ----------
 
-  sendWhatsupMessage = async () => {
-    const { formData, whatsupMessage } = this.state;
+  // What cancelling gives back to the wallet: every payment of the order, in full (owner's decision)
+  paidTotals = () => {
+    const totals: Record<string, number> = {};
+    (this.state.payments || []).forEach((p: any) => { totals[p.currency] = Math.round(((totals[p.currency] || 0) + Number(p.receivedAmount || 0)) * 100) / 100; });
+    return Object.entries(totals).map(([currency, amount]) => `${amount} ${currency}`).join(' + ');
+  };
 
-    if (!whatsupMessage) {
-      return;
-    }
+  cancelOrder = () => {
+    const { cancelationReason, order } = this.state;
+    if (!order.isCanceled && !cancelationReason.trim()) return this.toast('error', 'Write the reason for cancelling first');
+    const hadPayments = (this.state.payments || []).length > 0;
+    this.run(async () => {
+      await api.post(`order/${this.orderId}/cancel`, { cancelationReason });
+      await this.reloadOrder({ rows: true });
+      await this.reloadMoney();
+      this.setState({ changedFields: {}, cancelDialog: false, cancelationReason: '' });
+      return hadPayments ? 'تم الإلغاء وإرجاع المدفوعات للمحفظة' : 'Order cancelled';
+    });
+  };
 
-    this.setState({ isUpdating: true })    
+  confirmInvoice = () => this.run(async () => {
+    await api.post(`orders/${this.state.order._id}/confirmInvoice`, {});
+    window.location.reload();
+  });
 
-    api.post(`sendWhatsupMessage`, { phoneNumber: `${formData.customerInfo.phone}@c.us`, message: whatsupMessage })
-      .then((res) => {
-        this.setState({
-          isUpdating: false,
-          isFinished: true,
-          qrCode: res.data,
-          resMessage: 'Whatsup message has been send successfully',
-          activity: {
-            country: '',
-            description: ''
-          }
-        })
-      })
-      .catch((err) => {
-        console.log(err);
-        this.setState({
-          isUpdating: false,
-          isFinished: true,
-          isError: true,
-          resMessage: err.response.data.message === 'whatsup-auth-not-found' ? 'You need to scan QR from your whatsup !' : err.response.data.message
-        })
-      })
-  }
+  decideChanges = (status: 'accepted' | 'rejected') => this.run(async () => {
+    await api.update(`orders/${this.state.order._id}/confirmItemsChanges`, { status, requestedEditDetails: this.state.order?.requestedEditDetails });
+    window.location.reload();
+  });
 
-  uploadFilesToLinks = async (event: any) => {
-    const files = event.target.files;
+  deletePayment = (payment: any) => this.run(async () => {
+    await api.delete(`wallet/${payment.customer?._id || this.state.order.user?._id}`, { payment });
+    await this.reloadMoney();
+    return payment.paymentType === 'wallet' ? 'Payment deleted and returned to the wallet' : 'Payment deleted';
+  });
 
-    const newFiles: any = [];
-    
-    for (const file of files) {
-      newFiles.unshift(file)
-    }
+  // An old dinar payment saved without a rate: the rate is written and the books post it again
+  setPaymentRate = async (payment: any, rate: number) => {
+    let saved = false;
+    await this.run(async () => {
+      await sys.put(`acc/order-payments/${payment._id}/rate`, { rate });
+      await this.reloadMoney();
+      saved = true;
+      return `Rate ${rate} saved on the payment of ${payment.receivedAmount} ${payment.currency}`;
+    });
+    return saved;
+  };
 
-    // upload it in the google could
-    const data = new FormData()
-    if (newFiles) {
-      newFiles.forEach((file: any) => {
-        data.append('files', file);
-      });
-    }
-    data.append('id', String(this.props.router.params.id));
-    data.append('paymentListId', event.target.id);
-    this.setState({ isUpdating: true });
-
+  // Only an order nothing hangs on can be deleted; the server says what is in the way
+  deleteOrder = async () => {
+    this.setState({ isBusy: true, deleteError: '' });
     try {
-      await api.fetchFormData('order/upload/fileLink', 'POST', data);
-      const res = await api.get('order/' + String(this.props.router.params.id));
-      this.setState({
-        formData: res.data,
-        paymentList: res.data.paymentList,
-        isFinished: true,
-        isUpdating: false,
-        resMessage: 'Images has been updated successfully.'
-      })
-      
-      return res.data.paymentList.find(((link: any) => link._id === event.target.id)).images;
-    } catch (error: any) {
-      this.setState({
-        isFinished: true,
-        isUpdating: false,
-        isError: true,
-        resMessage: error.data.message
-      })
-      return [];
+      await api.delete(`order/${this.orderId}`, {});
+      window.location.href = '/invoices';
+    } catch (error) {
+      this.setState({ isBusy: false, deleteError: apiErrorMessage(error, 'The order could not be deleted.') });
     }
-  }
+  };
 
-  displayAlert = (alert: { type: 'error' | 'success', message: string }) => {
-    this.setState({
-      isFinished: true,
-      isError: alert.type === 'error',
-      resMessage: alert.message
-    })
+  copyOrderNumber = () => {
+    navigator.clipboard?.writeText(this.state.order.orderId);
+    this.setState({ copied: true });
+    window.setTimeout(() => this.setState({ copied: false }), 1800);
+  };
+
+  // ---------- Render ----------
+
+  renderHeader() {
+    const { order, userDebts, copied } = this.state;
+    const { account } = this.props;
+    const mayCancel = CANCEL_ALLOWED_ACCOUNTS.includes(account?._id) || account?.roles.isAdmin;
+    const canCancel = !order.isCanceled && mayCancel;
+    const hasPayments = (this.state.payments || []).length > 0;
+    // An order cancelled before payments were given back on cancelling: give them back now
+    const canReturnPayments = order.isCanceled && hasPayments && mayCancel;
+    const { totalUsd, totalLyd } = totalDebts(userDebts);
+    const step = getOrderSteps(order)[order.orderStatus || 0];
+    const orderKind = order.isPayment ? (order.isShipment ? 'combined' : 'purchase') : 'shipping';
+
+    return (
+      <header className="op-header">
+        <nav className="op-crumbs" aria-label="Breadcrumb">
+          <a href="/">Home</a><span>/</span><a href="/invoices">Invoices</a><span>/</span><span>{order.orderId}</span>
+        </nav>
+        <div className="op-header__row">
+          <div className="op-header__title">
+            <h1>Order {order.orderId}</h1>
+            <button type="button" className="op-copy" onClick={this.copyOrderNumber}>{copied ? 'Copied' : 'Copy'}</button>
+            <div className="op-header__badges">
+              {(order.isPayment || order.isShipment) && <span className={`op-order-kind op-order-kind--${orderKind}`} dir="rtl">{orderKind === 'combined' ? 'فاتورة شراء وشحن' : orderKind === 'purchase' ? 'فاتورة شراء' : 'فاتورة شحن'}</span>}
+              {step && <Badge text={step.label} color="success" />}
+              {order.unsureOrder && <Badge text="Not active" color="warning" />}
+              {order.hasProblem && <Badge text="Has a problem" color="danger" />}
+              {order.isCanceled && <Badge text="Cancelled" color="danger" />}
+            </div>
+          </div>
+          <div className="op-actions">
+            <Button variant="outlined" size="small" onClick={() => this.setState({ previewDialog: true })}>Download invoice</Button>
+            <Button variant="outlined" size="small" onClick={() => this.setState({ debtDialog: true })}>Add debt</Button>
+            {canCancel && <Button variant="outlined" color="error" size="small" onClick={() => this.setState({ cancelDialog: true })}>{hasPayments ? 'إلغاء وإرجاع للمحفظة' : 'Cancel order'}</Button>}
+            {canReturnPayments && <Button variant="outlined" color="error" size="small" onClick={() => this.setState({ cancelDialog: true })}>إرجاع المدفوعات للمحفظة</Button>}
+            {account?.roles.isAdmin && (
+              <Button variant="outlined" color="error" size="small" onClick={() => this.setState({ deleteDialog: true, deleteConfirmation: '', deleteError: '' })}>Delete order</Button>
+            )}
+          </div>
+        </div>
+        <p className="op-header__sub">
+          {order.customerInfo?.fullName}
+          {order.user?._id && <>, <a href={`/user/${order.user._id}`} target="_blank" rel="noreferrer">{order.user.customerId}</a></>}
+          {order.createdAt && <>, created {moment(order.createdAt).format('DD/MM/YYYY')}</>}
+        </p>
+        {(totalLyd > 0 || totalUsd > 0) && (
+          <Alert severity="error" className="op-alert">This customer ({order.user?.customerId}) has open debts: {totalLyd} LYD and {totalUsd} USD.</Alert>
+        )}
+        {order.isCanceled && (
+          <Alert severity="warning" className="op-alert">
+            Cancelled on {moment(order.cancelation?.date).format('DD/MM/YYYY HH:mm')}. Reason: {order.cancelation?.reason || 'not given'}
+          </Alert>
+        )}
+      </header>
+    );
   }
 
   render() {
-    const { formData, isInvoicePending, isUpdating, isError, isFinished, resMessage, whatsupMessage, employees, isCancelOrderDialogOpen, shippingLabelDialogOpen } = this.state;    
-    const { account } = this.props;
+    return <OrderTheme>{this.renderPage()}</OrderTheme>;
+  }
 
-    const invoiceFileRef = React.createRef();
-    const receiptsFileRef = React.createRef();
+  deleteActivity = (activity: any) => this.run(async () => {
+    await api.delete(`order/${this.orderId}/activity/${activity._id}`, {});
+    await this.reloadOrder();
+    return 'Activity deleted';
+  });
 
-    if (isInvoicePending) {
-      return <CircularProgress color="inherit" />
-    }
+  renderPage() {
+    const { order, loadError, tab, isBusy, toast, changedFields, payments, wallet, walletPayment } = this.state;
+    const { account, isEmployee } = this.props;
 
-    const supplierDefaultMessage = `
-    Hello, we placed the order, please print and put this label on the packages, it is our shipping mark.
-also before shipping do not forget to send us photos. 
-
-    Hello, we placed the order, please write this on the package, 
-      Exios39 - by ${formData?.shipment?.method}(${formData?.orderId}) 
-      it is our shipping mark 
-                        
-      also before shipping do not forget 
-      to send us photos. 
-      thanks 
-    `;
-
-    const warehouseDefaultMessage = `
-اهلا بك عميلنا ${formData.customerInfo.fullName}
-لقد حدثنا طلبيتك رقم ${formData.orderId} على ان تم وصوله الى مخازننا الخارجية
-يرجى زيارة موقعنا الاكتروني لكي تتابع شحنتك بالتفصيل
-https://www.exioslibya.com/login
-شركة اكسيوس للشراء والشحن
-شكرا لكم
-    `;
-
-    const arrivedLibyaDefaultMessage = `
-اهلا بك عميلنا ${formData.customerInfo.fullName}
-رقم الطلبية ${formData.orderId} الخاص بك قد وصل الى مخزننا في ليبيا
-يرجى التواصل مع اقرب مندوب لك او زيارة مقر الشركة للاستلام
-شركة اكسيوس للشراء والشحن
-تحياتي لكم
-    `;
-
-    const activities = (formData.activity || []).sort((a: any, b: any) => (new Date(b.createdAt) as any) - (new Date(a.createdAt) as any))
-    
-    return (
-      <div className="m-4 edit-invoice">
-        <div style={{ maxWidth: '1400px', margin: 'auto'}}>
-          <div className="col-12 mb-3">
-            <div className={`d-flex justify-content-between ${isMobile ? 'flex-column my-2' : ''}`}>
-              <h4 className='mb-2'> Edit Invoice</h4>
-              <div>
-                {(!formData?.isCanceled && (['62bb47b22aabe070791f8278', '632aeb399aefb9b93b7a7527'].includes(account?._id) || account?.roles.isAdmin)) &&
-                  <Button 
-                    style={{ marginRight: '8px' }} 
-                    variant="outlined" 
-                    color="error" 
-                    size='small'
-                    onClick={() => this.setState({ isCancelOrderDialogOpen: true })}
-                  >
-                    Cancel
-                  </Button>
-                }
-                <CustomButton
-                  background='rgb(0, 171, 85)' 
-                  size="small"
-                  href={`https://www.exioslibya.com/xtracking/${formData.orderId}/ar`}
-                  target="_blank"
-                >
-                  Preview
-                </CustomButton>
-              </div>
-            </div>
-              <Breadcrumbs separator="›" aria-label="breadcrumb">
-                {breadcrumbs}
-              </Breadcrumbs>
-          </div>
-
-          <div
-            className="row"
-          >
-            <div className="col-md-4">
-              <Card>
-                <h5> Admin Images </h5>
-                <ImageUploader
-                  id={'invoice'}
-                  inputFileRef={invoiceFileRef}
-                  fileUploaderHandler={(event: MouseEvent) => this.fileUploaderHandler(event, 'invoice')}
-                  previewFiles={this.state.formData.images?.filter(((img: any) => img.category === 'invoice'))}
-                  deleteImage={this.deleteImage}
-                />
-              </Card>
-
-              <Card>
-                <h5> Client Images </h5>
-                <ImageUploader
-                  id={'receipts'}
-                  inputFileRef={receiptsFileRef}
-                  fileUploaderHandler={(event: any) => this.fileUploaderHandler(event, 'receipts')}
-                  previewFiles={this.state.formData.images?.filter(((img: any) => img.category === 'receipts'))}
-                  deleteImage={this.deleteImage}
-                />
-              </Card>
-
-              <form
-                onSubmit={(event: any) => this.submitNewActivity(event)}
-              >
-                <Card>
-                  <h5 className='mb-3'> Add Activity </h5>
-                  <div className="row">
-                    <div className="col-md-12 mb-4">
-                      <Autocomplete
-                        disablePortal
-                        id="free-solo-demo"
-                        freeSolo
-                        options={countries}
-                        onChange={(event: any) => (
-                          this.setState({
-                          activity: {
-                            ...this.state.activity,
-                            country: event.target.innerText
-                          }
-                        }))}
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            id={'outlined-helperText'}
-                            name="country"
-                            required={true}
-                            label={'Country'}
-                            defaultValue={this.state.activity.country}
-                            onChange={(event: any) => (
-                              this.setState({
-                              activity: {
-                                ...this.state.activity,
-                                country: event.target.value
-                              }
-                            }))}
-                            style={{ direction: 'rtl' }}
-                          />
-                        )}
-                      />
-                    </div>
-
-                    <div className="col-md-12 mb-4">
-                      <Autocomplete
-                        disablePortal
-                        id="free-solo-demo"
-                        freeSolo
-                        options={orderActions}
-                        onChange={(event: any) => this.setState({
-                          activity: {
-                            ...this.state.activity,
-                            description: event.target.innerText
-                          }
-                        })}
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            id={'outlined-helperText'}
-                            name="description"
-                            required={true}
-                            label={'Description'}
-                            defaultValue={this.state.activity.description}
-                            onChange={(event: any) => ( 
-                              this.setState({
-                              activity: {
-                                ...this.state.activity,
-                                description: event.target.value
-                              }
-                            }))}
-                            style={{ direction: 'rtl' }}
-                          />
-                        )}
-                      />
-                    </div>
-                    <div className="col-md-12 mb-4 text-end">
-                      <CustomButton 
-                        background='rgb(0, 171, 85)' 
-                        size="small"
-                        disabled={(isUpdating || formData?.isCanceled) ? true : false}
-                      >
-                        Add Activity
-                      </CustomButton>
-                    </div>
-                  </div>
-                </Card>
-              </form>
-
-              <Card>
-                <h5 className='mb-3'> Send Whatsup Message </h5>
-                <textarea 
-                  style={{ height: '200px', direction: 'rtl' }} 
-                  placeholder='Message' 
-                  className='form-control mb-2' 
-                  defaultValue={whatsupMessage}
-                  onChange={(e) => this.setState({ whatsupMessage: e.target.value })}
-                >
-                </textarea>
-
-                <div className="col-md-12 mb-4 text-end">
-                  <ButtonGroup variant="outlined" aria-label="outlined button group">
-                    <Button onClick={() => this.setState({ whatsupMessage: warehouseDefaultMessage })}>وصلت مخزن</Button>
-                    <Button onClick={() => this.setState({ whatsupMessage: arrivedLibyaDefaultMessage })}>وصلت ليبيا</Button>
-                    <Button onClick={() => this.setState({ whatsupMessage: '' })}>حقل فارغ</Button>
-                  </ButtonGroup>
-                </div>
-                <Switch value={this.state.shouldVerifyQrCode} onChange={(e) => this.setState({ shouldVerifyQrCode: e.target.checked })} />
-                
-                {this.state.shouldVerifyQrCode && <QRCode value={this.state.qrCode || ''} />}
-                
-                <div className="col-md-12 mb-4 text-end">
-                  <CustomButton 
-                    background='rgb(0, 171, 85)' 
-                    size="small"
-                    disabled={(isUpdating || formData?.isCanceled) ? true : false}
-                    onClick={this.sendWhatsupMessage}
-                  >
-                    Send Message
-                  </CustomButton>
-                </div>
-
-                <div className="col-md-12 mb-4 text-end">
-                  <CustomButton 
-                    background='rgb(0, 74, 171)' 
-                    size="small"
-                    disabled={(isUpdating || formData?.isCanceled) ? true : false}
-                    onClick={this.getQrCode}
-                  >
-                    Get QR
-                  </CustomButton>
-                </div>
-
-              </Card>
-
-              <div className="col-md-12 mb-4">
-                <CustomButton 
-                  className='my-2'
-                  background='rgb(0, 171, 85)' 
-                  size="small"
-                  disabled={(isUpdating || formData?.isCanceled) ? true : false}
-                  onClick={() => this.setState({ shippingLabelDialogOpen: true })}
-                >
-                  Download Shipping Label
-                </CustomButton>
-
-                <textarea 
-                  style={{ height: '300px' }} 
-                  placeholder='Message' 
-                  className='form-control' 
-                  defaultValue={supplierDefaultMessage}
-                >
-                </textarea>
-              </div>
-
-              <Card>
-                <h5 className='mb-3'> Activities </h5>
-                
-                {activities.length > 0 ? activities.map((data: OrderActivity) => (
-                  <>
-                    <div className="d-flex gap-3 overflow-auto" style={{ direction: 'rtl' }}>
-                      <p>{moment(data.createdAt).format('DD/MM/YYYY')}</p>
-                      <p>{data.country}</p>
-                      <p>{data.description}</p>
-                    </div>
-                    <hr style={{ color: '#a1a1a1', height: '1px' }} />
-                  </>
-                ))
-                :
-                <p>No activity found</p>
-                }
-              </Card>
-
-            </div>
-
-            <div className="col-md-8">
-              {formData?.isCanceled &&
-                <Card>
-                  <h5 className='mb-3' style={{ color: '#d32f2f' }}> Order Canceled </h5>
-                  <p className='mb-1'> <strong>Cancelation Date:</strong> {moment(formData.cancelation.date).format('DD-MM-YYYY / HH:mm')} time </p>
-                  <p className='mb-1'> <strong>Reason:</strong> {formData.cancelation.reason} </p>
-                </Card>
-              }
-              <form
-                onSubmit={(event: any ) => this.submit(event)}
-              >
-                <Card>
-                  <InvoiceForm 
-                    handleChange={this.handleChange}
-                    paymentList={this.state.paymentList}
-                    addNewPaymentField={this.addNewPaymentField}
-                    fileUploaderHandler={this.uploadFilesToLinks}
-                    displayAlert={this.displayAlert}
-                    deleteFileOfLink={this.deleteFileOfLink}
-                    deteteRow={this.deteteRow}
-                    invoice={formData || null}
-                    isEmployee={this.props.isEmployee}
-                    employees={employees}
-                  />
-                  <div className="col-md-12 mb-2 text-end">
-                    <CustomButton 
-                      background='rgb(0, 171, 85)' 
-                      size="small"
-                      disabled={(isUpdating || formData?.isCanceled) ? true : false}
-                    >
-                      Update Invoice
-                    </CustomButton>
-                  </div>
-                </Card>
-              </form>
-            </div>
+    if (loadError) return <div className="order-page"><Alert severity="error">{loadError}</Alert></div>;
+    if (!order) {
+      return (
+        <div className="order-page" aria-busy="true">
+          <Skeleton variant="text" width={280} height={44} />
+          <Skeleton variant="rectangular" height={48} className="op-skeleton" />
+          <div className="op-layout">
+            <Skeleton variant="rectangular" height={520} className="op-skeleton" />
+            <Skeleton variant="rectangular" height={520} className="op-skeleton" />
           </div>
         </div>
-        <Backdrop
-          sx={{ color: '#fff', zIndex: (theme: any) => theme.zIndex.drawer + 1000 }}
-          open={isUpdating}
-        >
+      );
+    }
+
+    const isAdmin = !!account?.roles.isAdmin;
+    const { totalUsd: walletUsd, totalLyd: walletLyd } = calculateTotalWallet(wallet);
+    // The form always reports the customer id when it opens; that alone is not a change
+    const hasChanges = Object.keys(changedFields).some((key) => !(key === 'customerId' && changedFields[key] === order.user?.customerId));
+    const locked = isBusy || !!order.isCanceled;
+
+    return (
+      <div className="order-page">
+        {this.renderHeader()}
+
+        <div className="op-tabs">
+          <Tabs value={tab} onChange={(_, value) => this.setState({ tab: value })} variant="scrollable" scrollButtons="auto">
+            <Tab value="details" label="Order details" />
+            <Tab value="payments" label={`Payments (${payments.length})`} />
+            {(isAdmin || account?.roles.isAccountant) && <Tab value="accounting" label="المحاسبة" />}
+            {(isAdmin || account?.roles.isAccountant) && order.isPayment && <Tab value="refund" label="الريفاند / الاستردادات" />}
+            {(isAdmin || account?.roles.isAccountant) && <Tab value="costs" label="إضافة التكاليف" />}
+          </Tabs>
+        </div>
+
+        {/* The form stays mounted while another tab is open, so unsaved edits are not lost */}
+        <div className="op-layout" hidden={tab !== 'details'}>
+          <form className="op-main" onSubmit={this.submit}>
+            <InvoiceForm
+              handleChange={this.handleChange}
+              invoice={order}
+              employees={this.state.employees}
+              isEmployee={isEmployee}
+              totalInvoice={totalOfItems(this.state.items)}
+              displayAlert={(alert) => this.toast(alert.type, alert.message)}
+              items={this.state.items}
+              onAddItem={this.addItem}
+              onRemoveItem={this.removeItem}
+              purchaseItems={this.state.purchaseItems}
+              onAddPurchaseItem={this.addPurchaseItem}
+              onRemovePurchaseItem={this.removePurchaseItem}
+              paymentList={this.state.paymentList}
+              onAddPackage={this.addPackage}
+              onRemovePackage={this.removePackage}
+              onUploadPackageFiles={this.uploadPackageFiles}
+              onDeletePackageFile={this.deletePackageFile}
+            />
+            {order.isPayment && !order.isRemittance && !order.isCanceled && <div className="mt-3" dir="rtl"><FreeShippingReview orderId={order._id} disabled={locked || hasChanges}
+              onApplied={() => { this.reloadOrder({ rows: true }).catch(() => {}); }} /></div>}
+            <div className="op-savebar">
+              <span className={hasChanges ? 'op-savebar__dirty' : 'op-muted'}>{order.isCanceled ? 'A cancelled order cannot be changed.' : hasChanges ? 'You have unsaved changes.' : 'No changes to save.'}</span>
+              <Button variant="contained" type="submit" disabled={locked}>Update invoice</Button>
+            </div>
+          </form>
+          <OrderSidebar
+            order={order}
+            disabled={locked}
+            toast={this.toast}
+            onUploadImages={this.uploadOrderImages}
+            onDeleteImage={this.deleteOrderImage}
+            onOrderChanged={() => this.reloadOrder().catch(() => {})}
+            canDeleteActivity={isAdmin}
+            onDeleteActivity={this.deleteActivity}
+            onOpenLabel={() => this.setState({ labelDialog: true })}
+          />
+        </div>
+
+        {tab === 'payments' && (
+          <OrderPayments
+            order={order}
+            isAdmin={isAdmin}
+            payments={payments}
+            wallet={{ walletUsd, walletLyd }}
+            debts={Array.isArray(this.state.userDebts) ? this.state.userDebts : []}
+            onPay={(category, packages, dueUsd) => this.setState({ walletPayment: { category, packages, dueUsd } })}
+            onAddDebt={() => this.setState({ debtDialog: true })}
+            onDeletePayment={this.deletePayment}
+            canSetRate={isAdmin || !!account?.roles.isAccountant}
+            onSetRate={this.setPaymentRate}
+            onPreviewImages={(previewImages) => this.setState({ previewImages })}
+            onConfirmInvoice={this.confirmInvoice}
+            onRequestEdit={() => this.setState({ editItemsDialog: true })}
+            onDecideChanges={this.decideChanges}
+          />
+        )}
+
+        {tab === 'accounting' && <OrderAccounting orderId={order._id} orderNumber={order.orderId} isPayment={!!order.isPayment} separateActions />}
+        {tab === 'refund' && order.isPayment && <OrderRefunds orderId={order._id} />}
+        {tab === 'costs' && <OrderCosts orderId={order._id} orderNumber={order.orderId} legacyPurchases={order.purchaseItems || []} />}
+
+        <Backdrop sx={{ color: '#fff', zIndex: (theme: any) => theme.zIndex.drawer + 1000 }} open={isBusy}>
           <CircularProgress color="inherit" />
         </Backdrop>
 
-        <Snackbar 
-          open={isFinished} 
-          autoHideDuration={6000}
-          onClose={() => this.setState({ isFinished: false, isError: false })}
-        >
-          <Alert 
-            severity={isError ? 'error' : 'success'}
-            sx={{ width: '100%' }}
-            onClose={() => this.setState({ isFinished: false, isError: false })}
-          >
-            {resMessage}
-          </Alert>
+        <Snackbar open={toast.open} autoHideDuration={6000} onClose={() => this.setState({ toast: { ...toast, open: false } })}>
+          <Alert severity={toast.type} sx={{ width: '100%' }} onClose={() => this.setState({ toast: { ...toast, open: false } })}>{toast.message}</Alert>
         </Snackbar>
 
-        <Dialog open={isCancelOrderDialogOpen} onClose={() => this.setState({ isCancelOrderDialogOpen: false })}>
-          <DialogTitle>Are you sure to cancel this order?</DialogTitle>
+        <Dialog open={this.state.cancelDialog} onClose={() => this.setState({ cancelDialog: false })} fullWidth maxWidth="sm">
+          <DialogTitle>{this.state.order?.isCanceled ? 'إرجاع مدفوعات الطلب الملغى للمحفظة؟' : (this.state.payments || []).length ? 'إلغاء الطلب وإرجاع المدفوع للمحفظة؟' : 'Cancel this order?'}</DialogTitle>
           <DialogContent>
-            <p>يرجى كتابة سبب الالغاء بالتفصيل</p>
-            <textarea 
-              name="cancelationReason"
-              onChange={(e) => this.setState({ cancelationReason: e.target.value })}
-              rows={10}
-              style={{ width: '100%' }}
+            {(this.state.payments || []).length > 0 && (
+              <Alert severity="info" className="mb-2" dir="rtl">
+                سيُرجع للعميل في محفظته كامل المدفوع على الطلب: <strong>{this.paidTotals()}</strong> ({this.state.payments.length} دفعة).
+                تكلفة المورد إن وُجدت تبقى معلّقة حتى يسوّيها المحاسب.
+                وإن أُرجع له ريفاند على هذا الطلب، يُخصم من محفظته الآن، فيكون مجموع ما رجع له مساوياً لما دفعه.
+              </Alert>
+            )}
+            {!this.state.order?.isCanceled && (
+              <TextField
+                className="mt-2" label="يرجى كتابة سبب الالغاء بالتفصيل" dir="rtl" multiline minRows={6} fullWidth autoFocus
+                value={this.state.cancelationReason} onChange={(event) => this.setState({ cancelationReason: event.target.value })}
+              />
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => this.setState({ cancelDialog: false })}>الرجوع</Button>
+            <Button onClick={this.cancelOrder} color="error" variant="contained" disabled={!this.state.order?.isCanceled && !this.state.cancelationReason.trim()}>
+              {this.state.order?.isCanceled ? 'إرجاع للمحفظة' : (this.state.payments || []).length ? 'إلغاء وإرجاع للمحفظة' : 'الغاء الفاتورة'}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <OrderWalletDialog
+          open={!!walletPayment}
+          category={walletPayment?.category || 'invoice'}
+          packages={walletPayment?.packages || []}
+          dueUsd={walletPayment?.dueUsd || 0}
+          order={order}
+          wallet={{ walletUsd, walletLyd }}
+          onClose={() => this.setState({ walletPayment: undefined })}
+          onDone={(message) => {
+            this.setState({ walletPayment: undefined });
+            this.toast('success', message);
+            this.reloadMoney();
+          }}
+        />
+
+        <Dialog open={this.state.deleteDialog} onClose={() => this.setState({ deleteDialog: false })} fullWidth maxWidth="sm">
+          <DialogTitle>Delete order {order.orderId} for good?</DialogTitle>
+          <DialogContent>
+            {this.state.deleteError && <Alert severity="error" className="op-alert--tight" dir="auto">{this.state.deleteError}</Alert>}
+            <ul className="op-delete-list">
+              <li>The order, its packages, items and timeline are removed and cannot be brought back.</li>
+              <li>In accounting, what the order billed the customer is taken back, as for a cancellation.</li>
+              <li>It is refused while the order has payments, debts, supplier bills, or packages on a trip or in a warehouse. Cancel the order instead if you need to keep its history.</li>
+            </ul>
+            <TextField
+              label={`Type ${order.orderId} to confirm`} fullWidth autoFocus value={this.state.deleteConfirmation}
+              onChange={(event) => this.setState({ deleteConfirmation: event.target.value })}
             />
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => this.setState({ isCancelOrderDialogOpen: false })} >الرجوع</Button>
-            <Button 
-              onClick={() => this.cancelOrder()}
-              color="error"
-            >
-              الغاء الفاتورة
-            </Button>
+            <Button onClick={() => this.setState({ deleteDialog: false })}>Back</Button>
+            <Button color="error" variant="contained" onClick={this.deleteOrder} disabled={isBusy || this.state.deleteConfirmation.trim() !== String(order.orderId)}>Delete order</Button>
           </DialogActions>
         </Dialog>
 
-        <Dialog open={shippingLabelDialogOpen} onClose={() => this.setState({ shippingLabelDialogOpen: false })}>
+        <ShippingLabelDialog open={this.state.labelDialog} order={order} onClose={() => this.setState({ labelDialog: false })} onError={(message) => this.toast('error', message)} />
+
+        <Dialog fullScreen open={this.state.previewDialog} onClose={() => this.setState({ previewDialog: false })}>
           <DialogContent>
-            <div>
-              <ToggleButtonGroup
-                color="success"
-                value={this.state.shippingMethodForLabel}
-                exclusive
-                onChange={(event: any, value: 'air' | 'sea') => this.setState({ shippingMethodForLabel: value }) }
-                size="small"
-              >
-                <ToggleButton value="air">Air</ToggleButton>
-                <ToggleButton value="sea">Sea</ToggleButton>
-              </ToggleButtonGroup>
+            <InvoiceTemplate invoice={{ ...order, items: this.state.items }} changedFields={changedFields} onClose={() => this.setState({ previewDialog: false })} />
+          </DialogContent>
+        </Dialog>
 
-              <FormControlLabel 
-                style={{ marginLeft: '5px' }} 
-                label="Inspection Required" 
-                control={
-                  <Checkbox 
-                    defaultChecked={this.state.inspectionCheckbox}
-                    onChange={(e: any) => this.setState({ inspectionCheckbox: e.target.checked })}
-                  />
-                } 
-              />
+        <Dialog open={this.state.debtDialog} onClose={() => this.setState({ debtDialog: false })}>
+          <CreateDebtDialog setDialog={() => this.setState({ debtDialog: false })} orderId={order.orderId} customerId={order.user?.customerId} />
+        </Dialog>
 
-              <div style={{ background: 'white', textAlign: 'center', border: '2px solid black', width: '400px', height: '460px' }} id='test222'>
-                <div style={{ border: '2px solid black' }} className="p-3">
-                  <img src="/images/exios-logo.png" alt="Exios" width={160} height={90} />
-                </div>
-                <div style={{ border: '2px solid black' }} className="p-3">
-                  <QRCode value={`http://exios-admin-frontend.web.app/shouldAllowToAccessApp?id=${formData?._id}`} />
-                </div>
-                <div style={{ border: '2px solid black' }} className="p-3">
-                  <p> <strong>Customer ID:</strong> {formData?.orderId} </p>
-                  <p className={this.state.inspectionCheckbox ? 'mb-1' : ''}> <strong>Shipment Method:</strong> {this.state.shippingMethodForLabel} </p>
-                  {this.state.inspectionCheckbox && 
-                    <p className='mt-0' style={{ color: 'red' }}>Inspection Required</p>
-                  }
-                </div>
-              </div>  
-            </div>
+        <Dialog open={this.state.editItemsDialog} onClose={() => this.setState({ editItemsDialog: false })}>
+          <EditInvoiceItems items={this.state.items} orderId={order._id} />
+        </Dialog>
+
+        <Dialog open={!!this.state.previewImages} onClose={() => this.setState({ previewImages: undefined })}>
+          <DialogContent>
+            <SwipeableTextMobileStepper data={this.state.previewImages} />
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => this.setState({ shippingLabelDialogOpen: false })} >Back</Button>
-            <Button 
-              onClick={() => {
-                const node = document.getElementById('test222');
-                htmlToImage.toJpeg(node as any)
-                  .then(function (dataUrl) {
-                    require("downloadjs")(dataUrl, 'shipping Label.jpeg');
-                  })
-                  .catch(function (error) {
-                    console.error('oops, something went wrong!', error);
-                  });
-              }}
-              color='success'
-            >
-              Download Label
-            </Button>
+            <Button onClick={() => this.setState({ previewImages: undefined })}>Close</Button>
           </DialogActions>
         </Dialog>
       </div>
-    )
+    );
   }
 }
 
-const mapStateToProps = (state: any) => {
-	return {
-    isEmployee: state.session.account?.roles.isEmployee,
-    account: state.session.account
-	};
-}
+const mapStateToProps = (state: any) => ({
+  isEmployee: state.session.account?.roles.isEmployee,
+  account: state.session.account,
+});
 
-const mapDispatchToProps = {}
-
-export default connect(mapStateToProps, mapDispatchToProps)(withRouter(EditInvoice))
+export default connect(mapStateToProps)(withRouter(EditInvoice));

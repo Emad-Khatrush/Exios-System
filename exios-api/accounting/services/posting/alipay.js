@@ -37,6 +37,7 @@ async function alipayAccount(id) {
 async function createYuanPurchase(input, { session, req }) {
   const existing = await findExisting(YuanPurchase, input.idempotencyKey, session);
   if (existing) return existing;
+  if (input.totalUsd !== undefined) return require('./yuanSettlement').create(input, { session, req });
   if (!isDay(input.day)) throw fail('التاريخ غير صالح');
   notFuture(input.day);
   const broker = await Vendor.findById(input.vendorId).session(session);
@@ -92,7 +93,6 @@ async function completeYuanPurchase(id, input, { session, req }) {
   if (!doc || doc.status !== 'posted') throw fail('العملية غير موجودة أو ملغاة');
   if (doc.arrived) throw fail('اليوان وصل مسبقاً');
   if (doc.fundedFromPaymentId) {
-    require('./batchPaymentTrial').assertTrial();
     const payment = await require('../../models/documents').SupplierPayment.findById(doc.fundedFromPaymentId).session(session);
     if (!payment || payment.status !== 'posted') throw fail('الدفعة الأصلية غير متاحة؛ راجعها قبل تأكيد الوصول');
   }
@@ -141,7 +141,15 @@ async function dashboard({ from, to, accountId } = {}) {
   const accountScope = accountId ? { toAccountId: accountId } : {};
   const range = from || to ? { day: { ...(from && { $gte: from }), ...(to && { $lte: to }) } } : {};
   const purchases = await YuanPurchase.find({ status: 'posted', ...range, ...accountScope }).sort({ day: -1 })
-    .populate('vendorId', 'name').populate('fromAccountId', 'code name currency').populate('toAccountId', 'code name').populate('fundedFromPaymentId', 'number').lean();
+    .populate({ path: 'vendorId', select: 'name linkedCustomer', populate: { path: 'linkedCustomer', select: 'firstName lastName customerId' } }).populate('fromAccountId', 'code name currency').populate('toAccountId', 'code name').populate('fundedFromPaymentId', 'number').populate('initialPaymentId', 'number status amount currency').populate('initialNettingId', 'number status amountUsd').lean();
+  const keys = purchases.filter(p => p.settlementBillId).map(p => `BILL:${p.settlementBillId}`);
+  const openRows = keys.length ? await JournalEntry.aggregate([
+    { $match: { 'lines.apKey': { $in: keys } } }, { $unwind: '$lines' },
+    { $match: { 'lines.apKey': { $in: keys } } },
+    { $group: { _id: '$lines.apKey', value: { $sum: { $subtract: ['$lines.credit', '$lines.debit'] } } } },
+  ]) : [];
+  const openByKey = new Map(openRows.map(row => [row._id, row.value]));
+  for (const purchase of purchases) if (purchase.settlementBillId) purchase.openUsd = openByKey.get(`BILL:${purchase.settlementBillId}`) || 0;
   const brokers = new Map();
   purchases.filter((p) => p.arrived).forEach((p) => {
     const key = String(p.vendorId?._id || '');

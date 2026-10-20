@@ -10,25 +10,28 @@ import SwipeableTextMobileStepper from '../SwipeableTextMobileStepper/SwipeableT
 import moment from 'moment-timezone';
 
 import './OrderWidget.scss';
-import { getOrderSteps } from '../../utils/methods';
+import { convertGoogleStorageUrl, getOrderSteps } from '../../utils/methods';
 import ActionCard from '../ActionCard/ActionCard';
 
 type Props = {
   order: Invoice
   orderIndex: number
   isSearchingForTrackingNumber: boolean
+  currentTap?: string
 }
 
 const OrderWidget = (props: Props) => {
-  const { order, isSearchingForTrackingNumber } = props;
+  const { order, isSearchingForTrackingNumber, currentTap } = props;
 
   const [previewImages, setPreviewImages] = useState<any>();  
   const [hasCopiedText, setHasCopiedText] = useState<boolean>(false);  
   
   const steps = getOrderSteps(order);
-  const lastActivityOrder = order.activity.slice(-1)[0];  
-  const diffActivityDates = moment(new Date()).diff(moment(lastActivityOrder?.createdAt));
-  const remainingActivityDay = moment(diffActivityDates).format('D');
+  const lastActivityAt = order.activity?.reduce((latest, activity) => {
+    const value = activity.createdAt ? new Date(activity.createdAt).getTime() : NaN;
+    return Number.isFinite(value) ? Math.max(latest, value) : latest;
+  }, new Date(order.createdAt).getTime());
+  const remainingActivityDay = Math.max(0, Math.floor((Date.now() - lastActivityAt) / 86400000));
   const trackingNumber = (order as any).paymentList?.deliveredPackages?.trackingNumber;
 
   return (
@@ -57,6 +60,13 @@ const OrderWidget = (props: Props) => {
                     />
                   </div>
                 }
+
+                {currentTap === 'hasProblem' &&
+                  <div className='mb-2'>
+                    <h6 className='mb-1'> Note: </h6>
+                    <div style={{ background: '#d6d6d6', direction: 'rtl' }} dangerouslySetInnerHTML={{__html: order.orderNote}} />
+                  </div>
+                }
             
                 <h5 style={{ marginRight: '8px' }} className='mb-1'> {order.customerInfo.fullName} </h5>
                 <div className='mb-2'>
@@ -64,7 +74,7 @@ const OrderWidget = (props: Props) => {
                     style={{
                       fontFamily: 'system-ui'
                     }}
-                    text={`${steps[order.orderStatus].label} - ${remainingActivityDay} يوم`} 
+                    text={`${steps[order.orderStatus]?.label} - ${remainingActivityDay} يوم`} 
                     color='success' 
                   />
                   <Badge 
@@ -81,7 +91,7 @@ const OrderWidget = (props: Props) => {
                   setHasCopiedText(true);
                 }}
               > 
-                Tracking Number: {order.orderId}
+                رقم الطلبية: {order.orderId}
               </p>
             </div>
 
@@ -137,7 +147,7 @@ const OrderWidget = (props: Props) => {
                   key={img.filename}
                   className='order-image'
                   alt={img.filename} 
-                  src={img.path}
+                  src={convertGoogleStorageUrl(img.path)}
                   onClick={(event: React.MouseEvent) => setPreviewImages(order.images)}
                 />
               ))}

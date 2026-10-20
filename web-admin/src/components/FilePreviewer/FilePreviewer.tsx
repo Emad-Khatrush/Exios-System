@@ -1,8 +1,9 @@
 import React from 'react'
-import { AiOutlineFileWord } from 'react-icons/ai'
+import { AiOutlineFile, AiOutlineFileWord } from 'react-icons/ai'
 import { ImFileText2 } from 'react-icons/im'
 import { SiMicrosoftexcel } from 'react-icons/si'
 import { VscFilePdf } from 'react-icons/vsc'
+import { convertGoogleStorageUrl } from '../../utils/methods'
 
 type Props = {
   uploadedFile: {
@@ -34,8 +35,8 @@ const FilePreviewer = (props: Props) => {
   const { uploadedFile } = props;
 
   return (
-    <a href={uploadedFile.path} target="_blank" rel="noreferrer">
-      {fileTypes[uploadedFile.type]}
+    <a href={convertGoogleStorageUrl(uploadedFile.path)} target="_blank" rel="noreferrer">
+      {fileTypes[uploadedFile.type] || <AiOutlineFile scale="large" size="80" />}
     </a>
   )
 }

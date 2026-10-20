@@ -23,7 +23,14 @@ export interface IInvoice{
   unpaidOrdersCount: number
   unsureOrdersCount: number
   arrivingOrdersCount: number
+  hasProblemOrdersCount: number,
+  hasRemainingPaymentOrdersCount: number,
   tabType: string
+  order?: Invoice
+  countList?: {
+    all: number
+    requestedEditInvoices: number
+  }
 }
 
 export const initialState: IInvoice = {
@@ -46,7 +53,13 @@ export const initialState: IInvoice = {
   unpaidOrdersCount: 0,
   unsureOrdersCount: 0,
   arrivingOrdersCount: 0,
-  tabType: 'active' 
+  hasProblemOrdersCount: 0,
+  hasRemainingPaymentOrdersCount: 0,
+  tabType: 'active' ,
+  countList: {
+    all: 0,
+    requestedEditInvoices: 0
+  }
 }
 
 export const invoice = (state: IInvoice = initialState, action: any) => {
@@ -73,7 +86,8 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
               isSuccess: true,
               isLoading: false,
               message: 'Invoice has been created Successfully',
-            }
+            },
+            order: action.payload.order
           }
         }
         case STATUS_ERROR: {
@@ -151,7 +165,8 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
                 list: orders,
                 tabType: action.payload?.data?.tabType,
                 total: action.payload?.data?.total,
-                query: action.payload?.data?.query
+                query: action.payload?.data?.query,
+                countList: action.payload?.data?.countList
               }
             }
             return {
@@ -169,9 +184,12 @@ export const invoice = (state: IInvoice = initialState, action: any) => {
               unpaidOrdersCount: action.payload?.data?.unpaidOrdersCount,
               unsureOrdersCount: action.payload?.data?.unsureOrdersCount,
               arrivingOrdersCount: action.payload?.data?.arrivingOrdersCount,
+              hasProblemOrdersCount: action.payload?.data?.hasProblemOrdersCount,
+              hasRemainingPaymentOrdersCount: action.payload?.data?.hasRemainingPaymentOrdersCount,
               tabType: action.payload?.data?.tabType,
               total: action.payload?.data?.total,
-              query: action.payload?.data?.query
+              query: action.payload?.data?.query,
+              countList: action.payload?.data?.countList
             }
           }
           case STATUS_ERROR: {

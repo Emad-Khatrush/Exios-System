@@ -1,0 +1,247 @@
+import { Alert, Backdrop, Box, CircularProgress, DialogContent, FormControl, InputLabel, MenuItem, Select, Snackbar, TextField } from '@mui/material';
+import React from 'react'
+import CustomButton from '../CustomButton/CustomButton';
+import api from '../../api';
+
+type Props = {
+  package: any
+  fetchSelectedOrders?: () => void
+  setChecked?: () => void
+  setShowDialog: (value: boolean) => void
+}
+
+const EditPackageWeight = (props: Props) => {
+  const [ isLoading, setLoading ] = React.useState(false);
+  const [ deliveredPackages, setDeliveredPackages ] = React.useState(props?.package?.paymentList?.deliveredPackages);
+  const [ isSucceed, setIsSucceed ] = React.useState<boolean>(false);
+  const [ showResponseMessage, setShowResponseMessage ] = React.useState<String | undefined>();
+  const delivered = !!props.package?.paymentList?.status?.received;
+
+  const updatePackage = async (event: any) => {
+    event.preventDefault();
+    if (delivered) return;
+
+    try {
+      setLoading(true);
+      await api.update(`order/${props.package._id}/package`, { paymentList: { ...props.package.paymentList, deliveredPackages } })
+      if (props.fetchSelectedOrders) {
+        props.fetchSelectedOrders();
+        if (props.setChecked) {
+          props.setChecked();
+        }
+      }
+      props.setShowDialog(false);
+      setShowResponseMessage('Package data updated successfully');
+      setIsSucceed(true);
+    } catch (error: any) {
+      console.log(error);
+      setShowResponseMessage(error.response.data.message);
+      setIsSucceed(false);
+    } finally {
+      setLoading(false);
+    }
+  }
+  
+  return (
+    <div>
+      <DialogContent>
+        <form
+          onSubmit={(event: any) => updatePackage(event)}
+        >
+          <h5 className='mb-3'> Update Weight </h5>
+          <Box component="fieldset" disabled={delivered || isLoading} sx={{ border: '0 !important', borderRadius: '0 !important', p: 0, m: 0, minWidth: 0 }}><div className="row">
+            <div className="col-md-6 mb-4 d-flex">
+              <TextField
+                id={deliveredPackages._id}
+                label={'Tracking number'}
+                name="trackingNumber"
+                onChange={(event: any) => {
+                  setDeliveredPackages({
+                    ...deliveredPackages,
+                    trackingNumber: event.target.value
+                  })
+                }}
+                defaultValue={deliveredPackages?.trackingNumber}
+                onWheel={(event: any) => event.target.blur()}
+              />
+            </div>
+
+            <div className="d-flex col-md-6 mb-4">
+              <TextField
+                id={deliveredPackages._id}
+                className='connect-field-right'
+                name="packageWeight"
+                type={'number'}
+                inputProps={{ inputMode: 'numeric', step: .01 }}
+                label={deliveredPackages?.volumetric?.enabled && deliveredPackages?.weight?.measureUnit !== 'CBM' ? 'Chargeable weight (KG)' : 'Weight'}
+                onChange={(event: any) => {
+                  setDeliveredPackages({
+                    ...deliveredPackages,
+                    ...(deliveredPackages?.volumetric?.enabled && deliveredPackages?.weight?.measureUnit !== 'CBM' ? { volumetric: { ...deliveredPackages.volumetric, chargeableWeight: event.target.value } } : {}),
+                    weight: {
+                      ...deliveredPackages.weight,
+                      total: Number(event.target.value)
+                    }
+                  })
+                }}
+                defaultValue={deliveredPackages?.weight?.total}
+                onWheel={(event: any) => event.target.blur()}
+              />
+              <FormControl style={{ width: '100%' }}>
+                <InputLabel>Unit</InputLabel>
+                <Select
+                  className='connect-field-left'
+                  defaultValue={deliveredPackages?.weight?.measureUnit}
+                  label={'Unit'}
+                  name="measureUnit"
+                  onChange={(event: any) => {
+                    setDeliveredPackages({
+                      ...deliveredPackages,
+                      weight: {
+                        ...deliveredPackages.weight,
+                        measureUnit: event.target.value
+                      }
+                    })
+                  }}
+                >
+                  <MenuItem id={deliveredPackages._id} value={'KG'}>
+                    <em> KG </em>
+                  </MenuItem>
+                  <MenuItem id={deliveredPackages._id} value={'CBM'}>
+                    <em> CBM </em>
+                  </MenuItem>
+                </Select>
+              </FormControl>
+            </div>
+
+            <div className="col-md-6 mb-4 d-flex">
+              <TextField
+                id={deliveredPackages._id}
+                label={'Exios Price'}
+                name="exiosPrice"
+                type={'number'}
+                inputProps={{ inputMode: 'numeric', step: .01 }}
+                onChange={(event: any) => {
+                  setDeliveredPackages({
+                    ...deliveredPackages,
+                    exiosPrice: Number(event.target.value)
+                  })
+                }}
+                defaultValue={deliveredPackages?.exiosPrice}
+                onWheel={(event: any) => event.target.blur()}
+              />
+            </div>
+
+            <div className="col-md-6 mb-4 d-flex">
+              <TextField
+                id={deliveredPackages._id}
+                label={'Original Price'}
+                name="originPrice"
+                type={'number'}
+                inputProps={{ inputMode: 'numeric', step: .01 }}
+                onChange={(event: any) => {
+                  setDeliveredPackages({
+                    ...deliveredPackages,
+                    originPrice: Number(event.target.value)
+                  })
+                }}
+                defaultValue={deliveredPackages?.originPrice}
+                onWheel={(event: any) => event.target.blur()}
+              />
+            </div>
+
+            {/* The transport fee to another office, in the currency it is charged in (spec v8) */}
+            <div className="col-md-6 mb-4 d-flex">
+              <TextField
+                className='connect-field-right'
+                label={'Transport fee'}
+                type={'number'}
+                inputProps={{ inputMode: 'numeric', step: .01, min: 0 }}
+                defaultValue={deliveredPackages?.domesticFee?.amount ?? ''}
+                onChange={(event: any) => setDeliveredPackages({ ...deliveredPackages, domesticFee: { currency: deliveredPackages?.domesticFee?.currency || 'LYD', amount: event.target.value === '' ? 0 : Number(event.target.value) } })}
+                onWheel={(event: any) => event.target.blur()}
+              />
+              <FormControl style={{ width: '100%' }}>
+                <InputLabel>Currency</InputLabel>
+                <Select
+                  className='connect-field-left'
+                  value={deliveredPackages?.domesticFee?.currency || 'LYD'}
+                  label={'Currency'}
+                  onChange={(event: any) => setDeliveredPackages({ ...deliveredPackages, domesticFee: { amount: deliveredPackages?.domesticFee?.amount || 0, currency: event.target.value } })}
+                >
+                  <MenuItem value={'LYD'}>LYD</MenuItem>
+                  <MenuItem value={'USD'}>USD</MenuItem>
+                </Select>
+              </FormControl>
+            </div>
+
+            <div className="col-md-6 mb-4 d-flex">
+              <TextField
+                id={deliveredPackages.id}
+                label={'Boxes Count'}
+                name="boxesCount"
+                onChange={(event: any) => {
+                  setDeliveredPackages({
+                    ...deliveredPackages,
+                    boxesCount: event.target.value
+                  })
+                }}                
+                defaultValue={deliveredPackages?.boxesCount}
+                onWheel={(event: any) => event.target.blur()}
+              />
+            </div>
+
+            <div className="col-md-6 mb-4 d-flex">
+              <TextField
+                id={deliveredPackages.id}
+                label={'Placed At'}
+                name="locationPlace"
+                onChange={(event: any) => {
+                  setDeliveredPackages({
+                    ...deliveredPackages,
+                    locationPlace: event.target.value
+                  })
+                }}                
+                defaultValue={deliveredPackages?.locationPlace}
+                onWheel={(event: any) => event.target.blur()}
+              />
+            </div>
+
+            <div className="col-md-12 mb-4 text-end">
+              <CustomButton 
+                background='rgb(0, 171, 85)' 
+                size="small"
+                disabled={isLoading || delivered}
+              >
+                Update
+              </CustomButton>
+            </div>
+          </div></Box>
+        </form>
+      </DialogContent>
+
+      <Snackbar 
+        open={!!showResponseMessage}
+        autoHideDuration={6000}
+        onClose={() => setShowResponseMessage(undefined)}
+      >
+        <Alert 
+          severity={isSucceed ? 'success' : 'error'}
+          sx={{ width: '100%' }}
+          onClose={() => setShowResponseMessage(undefined)}
+        >
+          {showResponseMessage}
+        </Alert>
+      </Snackbar>
+
+      <Backdrop
+        sx={{ color: '#fff', zIndex: (theme: any) => theme.zIndex.drawer + 1 }}
+        open={isLoading}
+      >
+        <CircularProgress color="inherit" />
+      </Backdrop>
+    </div>
+  )
+}
+
+export default EditPackageWeight;

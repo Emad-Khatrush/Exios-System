@@ -8,11 +8,14 @@ import InfoTable from "../../components/InfoTable/InfoTable";
 import { defaultColumns, generateDataToListType } from "./generateData";
 import Card from "../../components/Card/Card";
 import { connect } from "react-redux";
+import WalletsWidget from "../../components/WalletsWidget";
+import { MyCustodyWidget, StaffCustodyWidget } from "../../components/CustodyWidget";
 
 type State = {
   HomeData: HomeData | null
   expenses: Expense[]
   isLoading: boolean
+  wallets: any[]
 }
 
 type Props = {
@@ -24,16 +27,18 @@ class EmployeeHomePage extends React.Component<Props, State> {
   state: State = {
     HomeData: null,
     expenses: [],
-    isLoading: false
+    isLoading: false,
+    wallets: []
   }
 
   async componentDidMount() {
     try {
       this.setState({ isLoading: true });
       const homeResponse = await api.get(`employeeHome?office=${this.props.session?.account.city || 'tripoli'}`);
+      const wallets = (await api.get('wallets')).data?.results;
 
       const expensesResponse = await api.get('expenses?office=tripoli');
-      this.setState({ HomeData: homeResponse.data, expenses: expensesResponse.data, isLoading: false });
+      this.setState({ wallets, HomeData: homeResponse.data, expenses: expensesResponse.data, isLoading: false });
     } catch (error) {
       console.log(error);
     }
@@ -68,6 +73,22 @@ class EmployeeHomePage extends React.Component<Props, State> {
               debts={this.state.HomeData?.debts || []}
               credits={this.state.HomeData?.credits || []}
               account={this.props.session.account}
+            />
+          </div>
+
+          {/* Custody: each staff member's own; everyone's for the admin and the accountant */}
+          <div className="col-md-6">
+            <MyCustodyWidget />
+          </div>
+          {(this.props.session.account?.roles?.isAdmin || this.props.session.account?.roles?.isAccountant) && (
+            <div className="col-md-6">
+              <StaffCustodyWidget />
+            </div>
+          )}
+
+          <div className="col-md-6">
+            <WalletsWidget 
+              wallets={this.state.wallets}
             />
           </div>
         </div>

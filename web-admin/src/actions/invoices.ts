@@ -18,22 +18,25 @@ export const createInvoice = (data: any) => {
     });
 
     api.fetchFormData('orders', 'POST', data)
-      .then((res: any) => {        
-        if (!(res?.success !== undefined && !res?.success)) {
+      .then((res: any) => {
+        // fetchFormData never throws: a network failure comes back as an Error, a refused
+        // request as { success: false, message }. Only a created order is a success.
+        const failed = !res || res instanceof Error || res.success === false;
+        if (!failed) {
           dispatch({
             status: STATUS_SUCCESS,
             type: CREATE_INVOICE,
+            payload: {
+              order: res
+            }
           });
         } else {
           dispatch({
-            payload: { error: res.statusText },
+            payload: { error: { data: { message: res?.message } } },
             status: STATUS_ERROR,
             type: CREATE_INVOICE,
           });
         }
-        // window.setTimeout(function(){
-        //   window.location.replace('/expenses');
-        // }, 2500);
       })
       .catch(error => {
         dispatch({
@@ -175,7 +178,7 @@ export const getInvoices = (config?: { skip?: number, limit?: number, tabType?: 
   }
 }
 
-export const getInvoicesBySearch = (query?: { searchValue: string, dateValue?: any[], selectorValue: string, tabType: string, cancelToken: any }) => {
+export const getInvoicesBySearch = (query?: { searchValue: string, dateValue?: any[], selectorValue: string, tabType: string, cancelToken: any, hideFinishedOrdersCheck: boolean }) => {
   return (dispatch: Dispatch<Action>): void => {
 
     dispatch({
@@ -189,7 +192,7 @@ export const getInvoicesBySearch = (query?: { searchValue: string, dateValue?: a
       endDate = query?.dateValue[1];
     }
 
-    api.get(`orders/search?tabType=${query?.tabType}`, { cancelToken: query?.cancelToken?.token, startDate, endDate, searchValue: query?.searchValue, searchType: query?.selectorValue })
+    api.get(`orders/search?tabType=${query?.tabType}`, { cancelToken: query?.cancelToken?.token, startDate, endDate, searchValue: query?.searchValue, searchType: query?.selectorValue, hideFinishedOrdersCheck: query?.hideFinishedOrdersCheck })
       .then(({ data }) => {
         dispatch({
           payload: { data, dontUpdateOrdersCount: true },
