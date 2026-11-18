@@ -86,6 +86,14 @@ const billLineSchema = new Schema({
 });
 
 const SupplierBill = mongoose.model('AccountingSupplierBill', withLifecycle({
+  // A reminder written on the bill at any time, even after it is posted (no entry, no effect on the
+  // books); active while it is needed, then switched off and kept (owner's request 2026-11-10)
+  reminder: {
+    note: String,
+    active: Boolean,
+    updatedAt: Date,
+    updatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  },
   yuanPurchaseId: { type: Schema.Types.ObjectId, ref: 'AccountingYuanPurchase' },
   duplicateDecision: String,
   duplicateReason: String,
@@ -152,8 +160,9 @@ const SupplierPayment = mongoose.model('AccountingSupplierPayment', withLifecycl
   currency: String,
   amount: Number,
   rate: Number,
-  // USD cents taken off each bill; the rest of the payment is an advance to the vendor
-  allocations: [{ _id: false, billId: { type: Schema.Types.ObjectId, ref: 'AccountingSupplierBill' }, amountUsd: Number }],
+  // USD cents taken off each bill; the rest of the payment is an advance to the vendor.
+  // amount: what was paid in the bill's own currency, when the payment is in that currency
+  allocations: [{ _id: false, billId: { type: Schema.Types.ObjectId, ref: 'AccountingSupplierBill' }, amountUsd: Number, amount: Number }],
   advanceUsd: { type: Number, default: 0 },
   // The difference between what was paid and what the bills said, put on the bills' cost (USD
   // cents, + paid more, - paid less): the cost is what the money really cost (owner 2026-10-04)
@@ -187,6 +196,9 @@ const ClaimWriteOff = mongoose.model('AccountingClaimWriteOff', withLifecycle({
   partnerId: { type: Schema.Types.ObjectId, ref: 'User' },
   amountUsd: { type: Number, required: true },
   reason: { type: String, required: true },
+  // The order's open debts that only reminded of this claim, closed with it; cancelling the
+  // write-off reopens them as they were
+  closedDebts: [{ balanceId: { type: Schema.Types.ObjectId, ref: 'Balance' }, status: String }],
 }));
 
 // Yuan bought from a broker for the Alipay accounts (spec 19.5): paid in dollars (or another
@@ -313,6 +325,9 @@ const SalaryPayment = mongoose.model('AccountingSalaryPayment', withLifecycle({
   // Same currency as the salary
   advanceDeduction: { type: Number, default: 0 },
   paidFromAccountId: { type: Schema.Types.ObjectId, ref: 'AccountingAccount', required: true },
+  // Paid from an account in another currency (a yuan salary from a dollar account): what left it
+  paidCurrency: String,
+  paidAmount: Number,
 }));
 
 const EquityTransaction = mongoose.model('AccountingEquityTransaction', withLifecycle({
@@ -390,6 +405,10 @@ const bankLineSchema = new Schema({
   coveredNote: String,
   // Supplier payments this line made for a partner's grouped Alipay transfers (cancelled with the match)
   groupPaymentIds: [{ type: Schema.Types.ObjectId, ref: 'AccountingSupplierPayment' }],
+  // Yuan purchases this line recorded for the yuan a partner sold us in it (cancelled with the match)
+  groupPurchaseIds: [{ type: Schema.Types.ObjectId, ref: 'AccountingYuanPurchase' }],
+  // The person said none of the proposed sets of operations is this line (bankCombos)
+  combinationsDismissed: Boolean,
   unidentified: {
     status: { type: String, enum: ['open', 'decided', 'resolved'] },
     hint: { type: String, enum: ['purchase', 'shipping', 'refund', 'customer', 'expense', 'unknown'] },

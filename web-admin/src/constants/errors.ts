@@ -7,6 +7,9 @@ export const INVALID_TOKEN = 'invalid-token';
 export const Token_EXPIRED = 'authorize-invalid';
 export const USER_SUBSCRIPTION_CANCLED = 'user-subscription-canceled';
 export const USER_ROLE_INVALID = 'user-role-invalid';
+// Sign-in protection (API): 10 wrong passwords pause an account 15 minutes; 20 tries per 10 minutes from one address
+export const ACCOUNT_LOCKED = 'account-locked';
+export const TOO_MANY_REQUESTS = 'too-many-requests';
 
 // Balance errors
 export const BALANCE_CURRENCY_NOT_ACCEPTED = 'balance-currency-not-accepted';
@@ -36,3 +39,6 @@ export const FIELDS_EMPTY = 'fields-empty';
 
 // global errors
 export const SERVER_ERROR = 'server-error'
+
+// A staff member asked for something outside their permissions (Settings > Permissions)
+export const PERMISSION_DENIED = 'permission-denied'

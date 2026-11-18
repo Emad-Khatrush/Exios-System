@@ -709,3 +709,6 @@ $co-ease: cubic-bezier(0.16, 1, 0.3, 1);
   font-weight: 600;
   dd { font-size: 18px; font-variant-numeric: tabular-nums; }
 }
+
+// What points already paid on a package, beside its cost
+.customer-orders .co-points-paid dd { color: #8a5a12; }

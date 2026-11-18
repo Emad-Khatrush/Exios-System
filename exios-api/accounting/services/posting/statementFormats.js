@@ -16,6 +16,28 @@ const round2 = (value) => Math.round(value * 100) / 100;
 const TR_MONTHS = { ocak: 1, şubat: 2, mart: 3, nisan: 4, mayıs: 5, haziran: 6, temmuz: 7, ağustos: 8, eylül: 9, ekim: 10, kasım: 11, aralık: 12 };
 const dotDay = (text) => { const [d, m, y] = text.split('.'); return `${y}-${m}-${d}`; };
 
+// A Kuveyt Türk currency exchange: "DövizSatış,DövizTürü:USD,DövizKuru:44.34842,DövizMiktarı:693"
+// is printed the same on both accounts: on the lira account with the lira received (30.733,46), on
+// the dollar account with the dollars sold (-693,00). What the other account moved is the line's own
+// figure: the dollars on the lira side, the dollars times the bank's rate on the dollar side. Only
+// when the line's amount agrees with the rate and its sign with "Satış/Alış"; otherwise left for review.
+function kuveytExchange(body, amount) {
+  const match = String(body).replace(/\s+/g, '').match(/Döviz(Satış|Alış),DövizTürü:([A-Z]{3}),DövizKuru:([\d.]+),DövizMiktarı:([\d.]+)/i);
+  if (!match) return {};
+  const selling = /sat/i.test(match[1]);
+  const foreign = match[2].toUpperCase(), rate = Number(match[3]), quantity = Number(match[4]);
+  if (!(rate > 0) || !(quantity > 0)) return {};
+  const lira = quantity * rate;
+  const description = `Döviz ${selling ? 'Satış' : 'Alış'}: ${quantity} ${foreign}, Kur ${rate}`;
+  // The dollar account: the amount is the dollars themselves (out when selling)
+  if (Math.abs(Math.abs(amount) - quantity) <= 0.005 && (selling ? amount < 0 : amount > 0))
+    return { description, counterAmount: round2(lira), counterCurrency: 'TRY', exchangeRate: rate };
+  // The lira account: the amount is the lira, within the bank's rounding (in when selling)
+  if (Math.abs(Math.abs(amount) - lira) <= Math.max(1, lira * 0.0005) && (selling ? amount > 0 : amount < 0))
+    return { description, counterAmount: quantity, counterCurrency: foreign, exchangeRate: rate };
+  return { description };
+}
+
 // ---- Kuveyt Türk current account (Hesap Özeti) ----
 // "01.09.2026A05XFKrediKartıNo:5398********5271,KrediKartıBorçÖdemesi-25.000,0048.184,03"
 const kuveytAccount = {
@@ -23,17 +45,47 @@ const kuveytAccount = {
   detect: (text) => /HESAP\s*ÖZET/i.test(text) && /KUVEYT/i.test(text) && /Bakiye/i.test(text),
   parse(text) {
     const pattern = new RegExp(`^(\\d{2}\\.\\d{2}\\.\\d{4})([A-Z0-9]{5})(.+?)(${TR_AMOUNT})(${TR_AMOUNT})$`);
+    const starts = /^\d{2}\.\d{2}\.\d{4}[A-Z0-9]{5}/;
+    const lines = text.split(/\r?\n/).map(line => line.trim());
     const rows = [];
-    for (const raw of text.split(/\r?\n/)) {
-      const match = raw.trim().match(pattern);
+    // The balance carried in ("DevirBakiyesi33.742,48"): the first line's amount is checked against it
+    const opening = text.match(new RegExp(`Devir\\s*Bakiyesi\\s*(${TR_AMOUNT})`, 'i'));
+    let previous = opening ? trNumber(opening[1]) : null;
+    for (let i = 0; i < lines.length; i += 1) {
+      if (!starts.test(lines[i])) continue;
+      // A long description wraps: the amount and balance (even the "-" alone) come on the next
+      // lines ("23.10.2026AYQ6H" / "Gönderen:...,Ödeme" / "Türü:BireyselÖdeme" / "-5.000,0034.609,76")
+      let joined = lines[i];
+      let match = joined.match(pattern);
+      for (let next = i + 1; !match && next < lines.length && next <= i + 4 && !starts.test(lines[next]); next += 1) {
+        joined += lines[next];
+        match = joined.match(pattern);
+      }
       if (!match) continue;
-      const [, day, reference, body, amount, balance] = match;
+      const [, day, reference] = match;
+      let [, , , body, amount, balance] = match;
+      // An amount never starts with a zero before another digit: that zero ends the description
+      // ("DövizMiktarı:1150" + "49.823,09" read as "115" + "049.823,09")
+      while (/^0\d/.test(amount)) { body += '0'; amount = amount.slice(1); }
+      // Digits that end the description are glued to the amount ("DövizMiktarı:693" + "30.733,46"
+      // read as "69" + "330.733,46", owner's statement 2026-11-12). The running balance settles it:
+      // the amount is what moved the balance, and the extra leading digits go back to the description
+      if (previous !== null && Math.abs(previous + trNumber(amount) - trNumber(balance)) > 0.005 && /^\d/.test(amount)) {
+        for (let cut = 1; cut < amount.length - 3; cut += 1) {
+          const rest = amount.slice(cut);
+          if (!new RegExp(`^${TR_AMOUNT}$`).test(rest) || /^0\d/.test(rest)) continue;
+          if (Math.abs(previous + trNumber(rest) - trNumber(balance)) <= 0.005) { body += amount.slice(0, cut); amount = rest; break; }
+        }
+      }
+      previous = trNumber(balance);
       // The text comes without spaces: the two kinds of line are written out again readably
       const card = body.match(/KrediKartıNo:([\d*]+)/);
       let description = body;
       if (/KrediKartıBorçÖdemesi/i.test(body)) description = `Kredi Kartı Borç Ödemesi${card ? ` (kart ${card[1].slice(-4)})` : ''}`;
       else if (/FASTParaTransferi/i.test(body)) description = `FAST Para Transferi - Gönderen: ${(body.match(/Gönderen:([^,]+)/) || [])[1] || ''}`.trim();
-      rows.push({ day: dotDay(day), description, reference, amount: trNumber(amount), balanceAfter: trNumber(balance) });
+      const row = { day: dotDay(day), description, reference, amount: trNumber(amount), balanceAfter: trNumber(balance) };
+      Object.assign(row, kuveytExchange(body, row.amount));
+      rows.push(row);
     }
     return rows;
   },
@@ -181,11 +233,15 @@ const garantiAccount = {
     if (!['TRY', 'USD'].includes(currency)) return [];
     const lines = normalized.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     const rows = [];
+    // A movement starts on a line beginning with its date. The PDF usually puts the date alone on
+    // that line, but can join the date, text and amounts into one line (seen on the newest row).
+    const startsMovement = /^(\d{2})\.(\d{2})\.(\d{4})(.*)$/;
     for (let index = 0; index < lines.length; index++) {
-      const date = lines[index].match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+      const date = lines[index].match(startsMovement);
       if (!date) continue;
-      const block = [];
-      for (let next = index + 1; next < lines.length && !/^\d{2}\.\d{2}\.\d{4}$/.test(lines[next]); next++) block.push(lines[next]);
+      const block = date[4].trim() ? [date[4].trim()] : [];
+      const sameLine = block.length;
+      for (let next = index + 1; next < lines.length && !startsMovement.test(lines[next]); next++) block.push(lines[next]);
       const amountPattern = /([+-]?\s*\d+(?:\.\d{3})*,\d{2})\s*(TL|TRY|USD)\s*([+-]?\s*\d+(?:\.\d{3})*,\d{2})\s*(TL|TRY|USD)$/i;
       const amountIndex = block.findIndex(line => amountPattern.test(line));
       if (amountIndex < 0) continue;
@@ -212,7 +268,7 @@ const garantiAccount = {
         }
       }
       rows.push(row);
-      index += amountIndex + 1;
+      index += amountIndex + 1 - sameLine;
     }
     return rows;
   },
@@ -325,7 +381,8 @@ const aswaq = {
 // Wasl's amounts are glued in plain text. Read their actual PDF columns instead of guessing.
 const wasl = {
   name: 'وصل - كشف الحساب بالدولار',
-  detect: text => /وصل للحوالات المالية/.test(text) && /كشف حساب#/.test(text),
+  // Both of Wasl's letterheads: «وصل للحوالات المالية» and the older «وصل المتحدة للشحن والخدمات اللوجستية»
+  detect: text => /وصل (?:للحوالات المالية|المتحدة للشحن)/.test(text) && /كشف حساب#/.test(text),
   parse(text, pages = []) {
     const rows = [];
     for (const items of pages) {
@@ -343,12 +400,14 @@ const wasl = {
         const [day, month, year] = date.text.split('-');
         if (amount) {
           const row = { day: `${year}-${month}-${day}`, description: label, reference: '', amount, balanceAfter: -usNumber(balance.text) };
-          if (/Alipay/i.test(label)) {
-            const sum = label.match(/[\d,]+\s*\+\s*[\d,]+(?:\s*\+\s*[\d,]+)*/);
-            const single = label.match(/بقيمة\s*([\d,]+)/);
-            const yuan = sum ? sum[0].split('+').reduce((s, n) => s + usNumber(n.trim()), 0) : single ? usNumber(single[1]) : 0;
+          // A yuan transfer, by Alipay or by bank («حواله بنك بقيمة 100,000¥ … صرف $6.78»)
+          if (/Alipay/i.test(label) || /حوال.*بقيمة.*¥/.test(label)) {
+            // «32,723.88+40,909=73,632.88¥»: the total printed after «=» first, else the parts with their decimals
+            const parsed = require('./partnerTransfers').partsOf(label);
+            const single = label.match(/بقيمة\s*([\d,]+(?:\.\d+)?)/);
+            const yuan = parsed ? Math.round(parsed.total * 100) / 100 : single ? usNumber(single[1]) : 0;
             if (yuan > 0) Object.assign(row, { originalAmount: yuan, originalCurrency: 'CNY', counterAmount: yuan, counterCurrency: 'CNY' });
-            const quote = label.match(/صرف\s+([\d.]+)/);
+            const quote = label.match(/صرف\s+\$?([\d.]+)/);
             if (quote) row.exchangeRate = Number(quote[1]);
           }
           rows.push(row);

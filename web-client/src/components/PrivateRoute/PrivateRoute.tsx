@@ -1,26 +1,37 @@
-import { useLayoutEffect, useState } from 'react';
-import { useSelector } from 'react-redux';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Suspense, useLayoutEffect, useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import api from '../../api';
+import { setAccountData } from '../../actions/session';
 import { addAuthInterceptor } from '../../utils/AuthInterceptor';
-import Navbar from '../Navbar/Navbar';
-import ResponsiveSidebar from '../Sidebar/ResponsiveSidebar';
-import Sidebar from '../Sidebar/Sidebar';
+import Sidebar, { MobileTopbar } from '../Sidebar/Sidebar';
+import PassportVerificationGate, { getPassportGateMode } from '../PassportVerificationGate/PassportVerificationGate';
+import PopupAdsGate from '../PopupAdsGate/PopupAdsGate';
+import PageLoader from '../PageLoader/PageLoader';
 
 const PrivateRoute = () => {
   const [show, setShow] = useState(false);
   const [token, setToken] = useState(localStorage.getItem('authToken'));
   const session = useSelector((state: any) => state.session);
+  const dispatch = useDispatch();
+  const location = useLocation();
 
   if (!session.isLoggedIn) {
-    return <Navigate to="/login" />;
+    // remember where they were going, so signing in takes them back there
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
-  
+
   useLayoutEffect(() => {
     if (token) {
       api.verifyToken(token)
       .then(() => {
         setToken(token);
+        // Refresh the account from the server on every load/refresh so status
+        // changes made by an admin (e.g. passport rejection) show up without
+        // requiring the user to log out and back in.
+        api.getMyAccount()
+          .then((res: any) => setAccountData(res.data, session, dispatch))
+          .catch(() => {});
       })
       .catch(() => {
         localStorage.removeItem('user');
@@ -28,6 +39,7 @@ const PrivateRoute = () => {
         window.location.replace('/login');
       })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   
   if (!token) {
@@ -38,24 +50,23 @@ const PrivateRoute = () => {
 
   addAuthInterceptor(token || '');
 
-  return (
-    <div className="w-full h-full bg-gray-200">
-      <div className="w-full h-full flex flex-no-wrap flex-row-reverse">
-        <Sidebar account={session.account} />
-        <ResponsiveSidebar 
-          show={show}
-          setShow={setShow}
-          account={session.account}
-        />
-        <div className="w-full overflow-auto">
-          <Navbar
-            show={show}
-            setShow={setShow}
-            account={session.account}
-          />
+  // Popup ads are suppressed while the passport gate is blocking, so the
+  // customer never sees two non-dismissible dialogs stacked on top of each other.
+  const isPassportGateBlocking = !!getPassportGateMode(session.account);
 
-          <Outlet />
-          
+  return (
+    <div className="w-full h-full" style={{ background: '#f2f5f3' }}>
+      <PassportVerificationGate />
+      {!isPassportGateBlocking && <PopupAdsGate />}
+      {/* The sidebar comes first and the row is reversed, so it sits on the right */}
+      <div className="w-full h-full flex flex-nowrap flex-row-reverse">
+        <Sidebar account={session.account} open={show} setOpen={setShow} />
+        <div className="app-main w-full min-w-0 overflow-auto">
+          <MobileTopbar account={session.account} />
+          {/* While a page's file downloads, the sidebar stays and only the content area waits */}
+          <Suspense fallback={<PageLoader />}>
+            <Outlet />
+          </Suspense>
         </div>
       </div>
     </div>

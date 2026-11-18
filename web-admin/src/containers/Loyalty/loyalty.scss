@@ -1,0 +1,937 @@
+// The loyalty screens: the points page, a customer's Points tab, the adjust dialog and the
+// receipt in the order's points dialog. Same tokens as the order page (copied here so these
+// screens don't depend on its stylesheet): neutral greys and the admin's green as the only action
+// colour. A muted gold is used only for the coin and for points about to expire.
+// Radius: 14px containers, 10px controls, 8px chips.
+// The screens are Arabic and right-to-left: sides are written as logical properties (inline
+// start/end), numbers sit in <bdi dir="ltr" class="lp-num"> with tabular figures.
+// Motion: transform and opacity only, on one easing, and none at all under reduced motion.
+
+// The coin's gold, also for the points row in the customer's wallet box
+.lp, .lp-coin-tokens {
+  --lp-coin: #b7791f;
+  --lp-coin-soft: #fdf6e7;
+  // Gold text on light backgrounds (the coin hue, darkened to read at small sizes)
+  --lp-coin-ink: #8a5a12;
+}
+
+.lp {
+  --op-ink: #1c2530;
+  --op-muted: #5d6875;
+  --op-line: #e4e8ee;
+  --op-soft: #f6f8fa;
+  --op-accent: #007b3d;
+  --op-accent-ink: #00602f;
+  --lp-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --lp-hover: rgba(0, 123, 61, 0.045);
+  --lp-shadow: 0 1px 2px rgba(28, 37, 48, 0.04), 0 10px 28px -14px rgba(28, 37, 48, 0.16);
+
+  color: var(--op-ink);
+  font-family: 'IBM Plex Sans Arabic', 'Red Hat Text', 'Segoe UI', Tahoma, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  text-align: start;
+
+  a { color: var(--op-accent-ink); font-weight: 600; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  :is(button, a, [tabindex='0']):focus-visible {
+    outline: 2px solid var(--op-accent);
+    outline-offset: 2px;
+  }
+
+}
+
+// The admin's global rules give elements their own size and margins; inside these screens text
+// follows its parent. :where() keeps this at zero specificity, so any class (MUI's included) wins.
+:where(.lp *) { font-size: inherit; }
+:where(.lp) :where(h1, h3, h4, p, ul, dl, dd) { margin: 0; }
+
+.lp-label { font-size: 12.5px; font-weight: 600; color: var(--op-muted); }
+.lp-muted { color: var(--op-muted); }
+.lp-coin-icon { color: var(--lp-coin); flex: none; }
+
+// A number inside Arabic text: left-to-right, tabular
+.lp-num { unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
+
+// A press that answers the hand, quickly
+.lp-press {
+  transition: transform 160ms var(--lp-ease, cubic-bezier(0.22, 1, 0.36, 1)), opacity 160ms var(--lp-ease, cubic-bezier(0.22, 1, 0.36, 1)),
+    background-color 180ms var(--lp-ease, cubic-bezier(0.22, 1, 0.36, 1)), color 180ms var(--lp-ease, cubic-bezier(0.22, 1, 0.36, 1)), box-shadow 180ms var(--lp-ease, cubic-bezier(0.22, 1, 0.36, 1));
+  &:active:not(:disabled) { transform: scale(0.98); }
+}
+
+// ---------- Motion ----------
+
+@keyframes lp-rise { from { opacity: 0; transform: translateY(8px); } }
+@keyframes lp-rise-card { from { opacity: 0; transform: translateY(10px) scale(0.98); } }
+@keyframes lp-fade { from { opacity: 0; } }
+@keyframes lp-tick { from { opacity: 0; transform: translateY(-4px); } }
+
+// One entrance per screen: each child rises in turn (its place is --lp-i, ~65ms apart),
+// the summary or balance card also settles from 0.98. The last step ends before 0.7s.
+.lp-enter > * {
+  animation: lp-rise 420ms var(--lp-ease) backwards;
+  animation-delay: calc(var(--lp-i, 0) * 65ms);
+}
+.lp-enter > .lp-enter__card { animation-name: lp-rise-card; transform-origin: 50% 0; }
+
+// Rows and day groups when they are (re)loaded or the page changes
+.lp-fade-in { animation: lp-fade 260ms var(--lp-ease, cubic-bezier(0.22, 1, 0.36, 1)) backwards; }
+
+// A figure whose value changed (keyed on the value, so it plays again)
+.lp-tick { display: inline-block; animation: lp-tick 240ms var(--lp-ease, cubic-bezier(0.22, 1, 0.36, 1)) backwards; }
+
+// ---------- Chips ----------
+
+.lp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--op-soft);
+  color: var(--op-muted);
+  transition: background-color 180ms var(--lp-ease), color 180ms var(--lp-ease), transform 160ms var(--lp-ease);
+
+  svg { font-size: 14px; }
+
+  &--coin { background: var(--lp-coin-soft); color: var(--lp-coin-ink); svg { color: var(--lp-coin); } }
+}
+
+// ---------- Segmented control ----------
+
+.lp-segment {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #eceff3;
+
+  &--full { display: flex; button { flex: 1; } }
+
+  button {
+    border: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--op-muted);
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 180ms var(--lp-ease), color 180ms var(--lp-ease), box-shadow 180ms var(--lp-ease), transform 160ms var(--lp-ease);
+
+    &:hover { color: var(--op-ink); }
+    &:active:not(:disabled) { transform: scale(0.98); }
+    &[aria-pressed='true'] { background: #fff; color: var(--op-ink); box-shadow: 0 1px 2px rgba(28, 37, 48, 0.1); }
+    &:disabled { cursor: default; opacity: 0.6; }
+  }
+}
+
+// ---------- Points page ----------
+
+.lp-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 24px 48px;
+
+  @media (max-width: 600px) { padding: 16px 16px 40px; }
+}
+
+.lp-head {
+  margin-bottom: 22px;
+
+  h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+  p { margin-top: 4px; font-size: 14px; color: var(--op-muted); }
+}
+
+.lp-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px 40px;
+  margin-bottom: 24px;
+
+  &__main { min-width: 0; }
+  &__side { display: flex; flex-wrap: wrap; gap: 10px; }
+}
+
+.lp-figure {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+
+  svg { font-size: 30px; }
+  small { font-size: 16px; font-weight: 600; letter-spacing: 0; color: var(--op-muted); }
+
+  @media (max-width: 600px) { font-size: 32px; }
+}
+
+.lp-figure-sub {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--op-muted);
+
+  strong { color: var(--op-ink); font-weight: 600; }
+}
+
+.lp-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 180px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--op-soft);
+  text-align: start;
+
+  strong { font-size: 18px; font-weight: 700; line-height: 1.3; }
+  small { font-size: 12.5px; color: var(--op-muted); }
+
+  &--toggle {
+    border: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+
+    &:hover { background: var(--lp-coin-soft); }
+    &[aria-pressed='true'] {
+      background: var(--lp-coin-soft);
+      box-shadow: inset 0 0 0 1.5px var(--lp-coin);
+      strong { color: var(--lp-coin-ink); }
+    }
+  }
+}
+
+.lp-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.lp-search {
+  flex: 1 1 240px;
+  max-width: 380px;
+
+  .MuiOutlinedInput-root { border-radius: 10px; background: #fff; font-size: 14px; }
+  svg { font-size: 18px; color: var(--op-muted); }
+}
+
+.lp-filter {
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+
+  svg { font-size: 15px; }
+}
+
+.lp-card {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: var(--lp-shadow);
+  overflow: hidden;
+
+  .MuiTablePagination-root { border-top: 1px solid var(--op-line); }
+}
+
+.lp .MuiTablePagination-root :is(p, div, button) { font-size: 13px; }
+
+.lp-table-wrap { overflow-x: auto; }
+
+.lp-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+
+  th {
+    padding: 11px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--op-muted);
+    text-align: start;
+    background: var(--op-soft);
+    white-space: nowrap;
+  }
+
+  td { padding: 12px 16px; border-top: 1px solid var(--op-line); vertical-align: middle; }
+  tbody tr:first-child td { border-top: 0; }
+  .is-num { text-align: end; }
+}
+
+.lp-row {
+  cursor: pointer;
+  transition: background-color 160ms var(--lp-ease), opacity 160ms var(--lp-ease);
+
+  &:hover { background: var(--lp-hover); }
+  &:active { opacity: 0.8; }
+  &:focus-visible { outline: 2px solid var(--op-accent); outline-offset: -2px; }
+}
+
+.lp-person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+
+  &__avatar {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: var(--op-soft);
+    color: var(--op-muted);
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+
+  &__name { font-weight: 600; line-height: 1.3; }
+  &__meta { font-size: 12.5px; color: var(--op-muted); }
+}
+
+.lp-amount {
+  strong { display: block; font-size: 15px; font-weight: 700; line-height: 1.3; }
+  span { font-size: 12.5px; color: var(--op-muted); }
+}
+
+// Empty and error states, inside the card
+.lp-state-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 48px 24px;
+  text-align: center;
+
+  &__icon {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 6px;
+    border-radius: 50%;
+    background: var(--lp-coin-soft);
+    color: var(--lp-coin);
+    svg { font-size: 22px; }
+  }
+
+  &--error &__icon { background: #fdeceb; color: #c62828; }
+
+  strong { font-size: 15px; font-weight: 700; }
+  p { max-width: 420px; font-size: 13.5px; color: var(--op-muted); }
+  .MuiButton-root { margin-top: 10px; }
+}
+
+// ---------- A customer's Points tab ----------
+
+.lp-tab { display: grid; gap: 22px; }
+
+.lp-passbook {
+  padding: 20px 22px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--lp-shadow);
+
+  &__top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  &__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    margin-top: 10px;
+  }
+}
+
+.lp-balance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-top: 2px;
+
+  svg { align-self: center; font-size: 26px; }
+  strong { font-size: 34px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; }
+  &__unit { font-size: 15px; font-weight: 600; color: var(--op-muted); }
+  &__usd { font-size: 16px; font-weight: 600; color: var(--op-muted); }
+}
+
+.lp-expiring {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--lp-coin-ink);
+
+  svg { font-size: 16px; color: var(--lp-coin); }
+}
+
+.lp-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--op-line);
+
+  div { display: flex; align-items: baseline; gap: 8px; }
+  dt { font-size: 12.5px; font-weight: 600; color: var(--op-muted); }
+  dd { font-size: 15px; font-weight: 700; }
+}
+
+.lp-section {
+  &__title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+}
+
+.lp-list {
+  list-style: none;
+  padding: 0;
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+
+  > li + li { border-top: 1px solid var(--op-line); }
+}
+
+.lp-pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 11px 16px;
+
+  &__order { flex: 1 1 auto; min-width: 0; }
+  &__pts { font-weight: 700; color: var(--op-accent-ink); }
+}
+
+// "N طلبيات · P نقطة في الطريق"
+.lp-summary-line {
+  margin: -4px 0 10px;
+  color: var(--op-muted);
+  font-size: 13px;
+  font-weight: 600;
+  .lp-num { color: var(--op-ink); font-weight: 700; }
+}
+
+// Filter chips over a list (pending and history): the chosen one filled
+.lp-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+
+.lp-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--op-line);
+  border-radius: 999px;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--op-muted);
+  cursor: pointer;
+  transition: background-color 180ms var(--lp-ease), border-color 180ms var(--lp-ease), color 180ms var(--lp-ease), transform 160ms var(--lp-ease);
+
+  .lp-num { font-size: 12px; opacity: 0.8; }
+  &:hover { border-color: var(--op-accent); color: var(--op-accent-ink); }
+  &:active { transform: scale(0.98); }
+  &[aria-pressed='true'] { border-color: var(--op-accent); background: var(--op-accent); color: #fff; }
+}
+
+// "عرض الكل" / "عرض المزيد" under a list
+.lp-more { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 12px; }
+
+// Where a pending claim stands: quiet, but told apart
+.lp-waiting {
+  &--payment { background: var(--op-soft); color: var(--op-muted); }
+  &--delivery { background: #eef3fa; color: #3d5a80; }
+  &--processing { background: rgba(0, 123, 61, 0.08); color: var(--op-accent-ink); }
+}
+
+.lp-history {
+  transition: opacity 160ms var(--lp-ease);
+  &.is-loading { opacity: 0.55; }
+}
+
+// Months: the name, then what the month gained (green) and spent (muted), over the whole month
+.lp-month + .lp-month { margin-top: 16px; }
+// A long history: the browser skips laying out months far off screen
+.lp-month { content-visibility: auto; contain-intrinsic-size: auto 320px; }
+
+.lp-month__title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 6px;
+  padding-inline: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--op-ink);
+}
+
+.lp-month__sums {
+  display: inline-flex;
+  gap: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  .is-gain { color: var(--op-accent-ink); }
+  .is-spent { color: var(--op-muted); }
+}
+
+.lp-move {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+
+  &__icon {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    svg { font-size: 17px; }
+  }
+
+  &--gain &__icon { background: rgba(0, 123, 61, 0.09); color: var(--op-accent); }
+  &--spend &__icon { background: var(--op-soft); color: var(--op-muted); }
+  &--warn &__icon { background: var(--lp-coin-soft); color: var(--lp-coin); }
+
+  &__body { flex: 1 1 auto; min-width: 0; }
+  &__title { font-weight: 600; line-height: 1.35; }
+  &__note { font-size: 12.5px; color: var(--op-muted); overflow-wrap: anywhere; }
+
+  &__side { flex: none; text-align: end; }
+  &__delta { font-size: 15px; font-weight: 700; line-height: 1.35; }
+  &--gain &__delta { color: var(--op-accent-ink); }
+  &--warn &__delta { color: var(--lp-coin-ink); }
+  &__after { font-size: 12.5px; color: var(--op-muted); }
+
+  // One line per movement in a long history: title, then the time and the reason cut short
+  &--compact {
+    gap: 10px;
+    padding: 8px 14px;
+    .lp-move__icon { width: 28px; height: 28px; svg { font-size: 15px; } }
+    .lp-move__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .lp-move__delta { font-size: 14px; }
+    .lp-move__after { font-size: 12px; white-space: nowrap; }
+  }
+  &__meta { display: flex; gap: 6px; min-width: 0; font-size: 12px; color: var(--op-muted); }
+  &__when { flex: none; white-space: nowrap; }
+  &__why {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    &::before { content: '·'; margin-inline-end: 6px; }
+  }
+}
+
+// The balance in the customer page's header
+.lp-header-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--lp-coin-soft);
+  color: var(--op-ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+
+  svg { font-size: 17px; color: var(--lp-coin); }
+  span { color: var(--op-muted); font-weight: 500; }
+  transition: box-shadow 180ms var(--lp-ease), transform 160ms var(--lp-ease);
+  &:hover { box-shadow: inset 0 0 0 1px var(--lp-coin); }
+}
+
+// ---------- Adjust dialog ----------
+
+.lp-dialog {
+  border-radius: 14px !important;
+
+  .MuiDialogTitle-root { font-size: 18px; font-weight: 700; }
+  .MuiDialogContent-root { display: grid; gap: 16px; }
+  .MuiOutlinedInput-root { border-radius: 10px; }
+}
+
+.lp-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+
+  button {
+    border: 0;
+    font: inherit;
+    cursor: pointer;
+    &:hover:not(:disabled) { color: var(--op-ink); background: #eceff3; }
+    &:disabled { cursor: default; opacity: 0.5; }
+    &[aria-pressed='true'] { background: rgba(0, 123, 61, 0.08); color: var(--op-accent-ink); }
+  }
+}
+
+.lp-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--op-soft);
+
+  &__arrow { color: var(--op-muted); }
+  &__now { color: var(--op-muted); font-weight: 600; }
+  &__next { font-size: 17px; font-weight: 700; }
+  &__usd { color: var(--op-muted); }
+}
+
+// ---------- Order points dialog ----------
+
+.lp-quote {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 28px;
+  margin-bottom: 14px;
+
+  div { display: flex; align-items: baseline; gap: 8px; }
+  dt { font-size: 12.5px; font-weight: 600; color: var(--op-muted); }
+  dd { font-weight: 700; }
+}
+
+.lp-receipt {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--op-soft);
+
+  > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 3px 0; }
+  dt { color: var(--op-muted); }
+  dd { font-weight: 600; }
+  .is-discount dd { color: var(--op-accent-ink); }
+
+  // The hairline above the total
+  .is-total {
+    margin-top: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--op-line);
+
+    dt { color: var(--op-ink); font-weight: 600; }
+    dd { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+  }
+}
+
+// ---------- Points inside a payment form (Loyalty/PaymentPoints.tsx) ----------
+// A compact row: the coin, what the customer has and the most this payment may use, the field,
+// then the form's totals as a receipt
+
+.lp-pay-points {
+  margin: 0 0 16px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--op-line);
+  border-radius: 14px;
+  background: #fff;
+
+  &__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  &__coin {
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--lp-coin-soft);
+    color: var(--lp-coin);
+    flex: none;
+  }
+  &__title { font-weight: 700; }
+  &__facts { color: var(--op-muted); font-size: 13px; .lp-num:first-child { color: var(--lp-coin-ink); font-weight: 600; } }
+  &__alert { margin-top: 10px; }
+  &__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    .MuiTextField-root { flex: 1 1 170px; }
+    .MuiOutlinedInput-root { border-radius: 10px; }
+  }
+  &__note { margin-top: 8px; font-size: 12.5px; color: var(--op-muted); }
+  &__receipt { margin-top: 12px; padding: 10px 14px; .is-total dd { font-size: 20px; } }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp, .lp *, .lp-switch *, .lp-num, .lp-fade-in, .lp-tick { transition: none !important; animation: none !important; }
+  .lp:active, .lp :active { transform: none !important; }
+}
+
+// ---------- Points used on an order (the order's payments) ----------
+
+.lp-redemptions {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 4px;
+
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 10px;
+    padding: 4px 0;
+    font-size: 13px;
+  }
+  li + li { border-top: 1px solid var(--op-soft, #eef0f3); }
+  &__when, &__by, &__note { font-size: 12.5px; color: var(--op-muted); }
+  &__amount { font-weight: 600; }
+  &__note { overflow-wrap: anywhere; }
+  li.is-canceled .lp-redemptions__amount { text-decoration: line-through; color: var(--op-muted); font-weight: 500; }
+  > .lp-text-btn { justify-self: start; }
+}
+
+.lp-text-btn {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--op-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  &:hover { color: var(--op-ink); }
+  &:focus-visible { outline: 2px solid var(--op-accent-ink, #007b3d); outline-offset: 2px; border-radius: 2px; }
+}
+
+// ---------- The loyalty points page: list beside the programme's activity ----------
+.lp-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
+
+  &__main { min-width: 0; }
+  &__side { display: grid; gap: 16px; position: sticky; top: 16px; }
+
+  @media (max-width: 1100px) {
+    grid-template-columns: minmax(0, 1fr);
+    &__side { position: static; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  }
+}
+
+.lp-count { margin-inline-start: auto; font-size: 13px; color: var(--op-muted); }
+
+.lp-kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--op-line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  font: 600 11px/1 inherit;
+  color: var(--op-muted);
+  background: var(--op-soft);
+}
+
+// While new rows load the old ones stay, dimmed, under a thin moving bar
+.lp-card { position: relative; }
+.lp-progress {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 160ms var(--lp-ease);
+  pointer-events: none;
+  z-index: 1;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 35%;
+    background: var(--op-accent);
+    border-radius: 2px;
+    animation: lp-progress 1s var(--lp-ease) infinite;
+  }
+}
+@keyframes lp-progress { from { transform: translateX(-110%); } to { transform: translateX(310%); } }
+.lp-card.is-refreshing {
+  .lp-progress { opacity: 1; }
+  tbody { opacity: 0.5; transition: opacity 160ms var(--lp-ease); pointer-events: none; }
+}
+.lp-table tbody { transition: opacity 200ms var(--lp-ease); }
+
+// The row's "open" arrow shows on hover and focus only
+.lp-row__go {
+  width: 32px;
+  color: var(--op-muted);
+  svg { font-size: 20px; display: block; opacity: 0; transform: translateX(4px); transition: opacity 160ms var(--lp-ease), transform 160ms var(--lp-ease); }
+}
+.lp-row:hover .lp-row__go svg, .lp-row:focus-visible .lp-row__go svg { opacity: 1; transform: none; }
+
+.lp-panel {
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--lp-shadow);
+
+  &__title { font-size: 15px; font-weight: 700; margin-bottom: 10px; .lp-muted { font-weight: 500; font-size: 13px; } }
+  &__rows { display: grid; gap: 2px; margin: 0; }
+  &__empty { font-size: 13px; padding: 6px 0; }
+}
+
+.lp-month-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px dashed var(--op-line);
+  &:last-child { border-bottom: 0; }
+
+  dt { font-size: 13.5px; color: var(--op-ink); }
+  dd { margin: 0; display: flex; align-items: baseline; gap: 8px; }
+  strong { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  small { font-size: 11.5px; color: var(--op-muted); white-space: nowrap; }
+  &.is-gain strong { color: var(--op-accent-ink); }
+  &.is-warn strong { color: var(--lp-coin-ink); }
+}
+
+.lp-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--op-line);
+    &:last-child { border-bottom: 0; }
+  }
+  &__icon {
+    display: grid; place-items: center; flex: none;
+    width: 28px; height: 28px; border-radius: 50%;
+    svg { font-size: 15px; }
+  }
+  .is-gain &__icon { background: rgba(0, 123, 61, 0.09); color: var(--op-accent); }
+  .is-spend &__icon { background: var(--op-soft); color: var(--op-muted); }
+  .is-warn &__icon { background: var(--lp-coin-soft); color: var(--lp-coin); }
+
+  &__body { flex: 1 1 auto; min-width: 0; }
+  &__who {
+    display: block; max-width: 100%; padding: 0; border: 0; background: none; cursor: pointer;
+    font: 600 13.5px/1.35 inherit; color: var(--op-ink); text-align: start;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    &:hover { color: var(--op-accent-ink); text-decoration: underline; }
+    &:focus-visible { outline: 2px solid var(--op-accent); outline-offset: 2px; border-radius: 4px; }
+  }
+  &__what {
+    font-size: 12px; color: var(--op-muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    a { color: var(--op-accent-ink); text-decoration: none; &:hover { text-decoration: underline; } }
+  }
+  &__side { flex: none; text-align: end; line-height: 1.3; }
+  &__side strong { display: block; font-size: 14px; font-weight: 700; }
+  &__side small { font-size: 11.5px; color: var(--op-muted); }
+  .is-gain &__side strong { color: var(--op-accent-ink); }
+  .is-warn &__side strong { color: var(--lp-coin-ink); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-progress::after { animation: none !important; width: 100%; opacity: 0.4; }
+}
+
+// ---- Loyalty levels ----
+// A level's name in its own colour (`--lv`), outlined; the first level stays grey
+.lp-level-badge {
+  display: inline-flex; align-items: center; gap: 5px; padding: 1px 10px 1px 8px; border: 1px solid var(--lv, #64748b);
+  border-radius: 8px; color: var(--lv, #64748b); font-size: 13px; font-weight: 700; line-height: 1.6; white-space: nowrap;
+  &.is-sm { padding: 0 7px; font-size: 12px; }
+  &.is-base { border-color: var(--op-line, #e4e8ee); color: var(--op-muted, #5d6875); }
+}
+.lp-level-line { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--op-muted); }
+.lp-head__link { display: inline-block; margin-top: 6px; font-size: 13.5px; }
+
+.lp-levelbox {
+  border-inline-start: 4px solid var(--lv);
+  &__head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  &__name { font-size: 26px; font-weight: 700; line-height: 1.2; color: var(--lv); }
+  &__facts {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 18px; margin: 14px 0 10px;
+    dt { font-size: 12px; color: var(--op-muted); }
+    dd { margin: 0; display: flex; align-items: center; gap: 8px; font-weight: 700; }
+  }
+  &__progress { display: grid; gap: 6px; font-size: 13.5px; }
+  &__bar { height: 8px; overflow: hidden; border-radius: 999px; background: var(--op-soft);
+    span { display: block; height: 100%; border-radius: inherit; background: var(--lv); } }
+  &__manual { margin-top: 8px; font-size: 13px; }
+  &__perks, &__history { margin-top: 14px;
+    ul { margin: 6px 0 0; padding-inline-start: 18px; display: grid; gap: 4px; font-size: 13.5px; } }
+  &__history ul { list-style: none; padding: 0; }
+  &__why { color: var(--op-ink); }
+}
+.lp-level-pick[aria-checked='true'] { border-color: var(--lv); background: var(--lv); color: #fff; }
+
+.lp-ladder {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px;
+  &__step { display: grid; gap: 2px; padding: 14px 16px; border-radius: 14px; background: #fff; box-shadow: var(--lp-shadow);
+    border-top: 4px solid var(--lv); }
+  &__name { font-weight: 700; color: var(--lv); }
+  &__count { font-size: 30px; font-weight: 700; line-height: 1.2; }
+  &__rule { margin-top: 4px; font-size: 12px; color: var(--op-muted); }
+}
+.lp-levels-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-bottom: 20px; align-items: start; }
+.lp-panel__hint { margin: -6px 0 8px; font-size: 12.5px; }
+
+// The level stamp (LevelEmblem.tsx): in badges, the customers' table and the Points tab
+.lv-emblem { display: block; flex: none; overflow: visible; }
+.lv-emblem.is-locked { filter: grayscale(1); opacity: 0.45; }
+.lv-emblem__sparks path { transform-box: fill-box; transform-origin: center; }
+.lv-emblem__sheen { transform-box: fill-box; transform-origin: center; transform: rotate(20deg); }
+@media (prefers-reduced-motion: no-preference) {
+  .lv-emblem__sheen { animation: lv-sheen 5s 1s ease-in-out infinite; }
+  .lv-emblem__sparks path { animation: lv-twinkle 2.4s ease-in-out infinite; }
+  .lv-emblem__sparks path:nth-child(2) { animation-delay: 0.8s; }
+  .lv-emblem__sparks path:nth-child(3) { animation-delay: 1.6s; }
+}
+@keyframes lv-sheen { 0% { transform: translateX(0) rotate(20deg); } 22%, 100% { transform: translateX(110px) rotate(20deg); } }
+@keyframes lv-twinkle { 0%, 100% { opacity: 0.2; transform: scale(0.5); } 50% { opacity: 1; transform: scale(1.15); } }

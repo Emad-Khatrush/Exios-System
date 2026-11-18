@@ -13,6 +13,7 @@ async function initAccounting() {
       console.log(`[accounting] default setup created ${report.created.length} items`);
     }
     await require('./seed/merchantSetup').ensureMerchantSetup();
+    await require('./seed/loyaltySetup').ensureLoyaltySetup();
   } catch (error) {
     console.error('[accounting] default setup failed:', error.message);
   }
@@ -40,6 +41,8 @@ let reconciliationTimer = null;
 function startDailyReconciliation() {
   if (reconciliationTimer) return;
   const tick = async () => {
+    // Loyalty points every hour, whatever the reconciliation does below
+    await runLoyaltyJobs();
     try {
       const { getConfig } = require('./services/config');
       const { today } = require('./services/dates');
@@ -74,4 +77,24 @@ async function runMonthlySchedules() {
   }
 }
 
-module.exports = { routes, systemRoutes, initAccounting, runMonthlySchedules };
+// Loyalty points (spec 2026-11-16), every hour: paid claims earn, lots past their date expire,
+// cancelled and "no points" orders settle. Each job runs its own transaction per item and returns
+// its counts; a job that fails is logged and the next one still runs.
+async function runLoyaltyJobs() {
+  const loyalty = require('./services/loyalty');
+  const results = {};
+  const levels = require('./services/loyalty/levels');
+  for (const [name, job] of [['award', loyalty.awardDue], ['expire', loyalty.expireDue], ['settle', loyalty.settleOrders], ['levels', levels.reviewDue]]) {
+    try {
+      results[name] = await job();
+      const counts = Object.entries(results[name]).filter(([, value]) => value);
+      if (counts.length) console.log(`[accounting] loyalty: ${name}`, JSON.stringify(results[name]));
+    } catch (error) {
+      results[name] = { error: error.message };
+      console.error(`[accounting] loyalty: ${name}:`, error.message);
+    }
+  }
+  return results;
+}
+
+module.exports = { routes, systemRoutes, initAccounting, runMonthlySchedules, runLoyaltyJobs };

@@ -398,6 +398,10 @@
 
   &__count { font-weight: 700; color: var(--accent-ink); margin-inline-end: 4px; }
   &__hint { color: var(--muted); font-size: 13.5px; }
+  &__item { display: inline-flex; align-items: center; gap: 8px; }
+  &__sep { width: 1px; align-self: stretch; min-height: 22px; background: #bfdcd8; margin: 0 2px; }
+  &__clear { margin-inline-start: auto !important; }
+  .MuiButton-root { white-space: nowrap; }
 }
 
 // ---------- Written guide ----------
@@ -1082,4 +1086,85 @@
   .acc-settlement-step { padding: 8px 4px; font-size: 13px; }
   .acc-settlement-navigation { padding: 0 14px 12px; }
   .acc-settlement-footer.MuiDialogActions-root { padding: 12px; > div { width: 100%; justify-content: flex-end; } }
+}
+
+// One statement line being linked in place: dimmed with a thin bar, then a short confirmation that fades in
+.acc-row-action {
+  position: relative;
+  transition: opacity .2s ease;
+  &--busy {
+    opacity: .55;
+    pointer-events: none;
+  }
+  &__bar {
+    position: absolute !important;
+    inset: 0 0 auto 0;
+    height: 3px !important;
+    border-radius: 3px;
+    z-index: 1;
+  }
+}
+.acc-row-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #e6f4ef;
+  color: #14634f;
+  font-size: 13px;
+  font-weight: 600;
+  animation: acc-row-done-in .35s cubic-bezier(.16, 1, .3, 1);
+}
+@keyframes acc-row-done-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+// A line whose approval waits its turn in the queue, or is running now
+.acc-row-queue {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  &--waiting { background: #f2f4f7; color: #475467; }
+  &--running { background: #e6f4ef; color: #14634f; font-weight: 600; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .acc-row-done { animation: none; }
+  .acc-row-action { transition: none; }
+}
+
+// The actions of a statement line, by weight: the main one, other ways to settle it, then the quiet ones
+.acc-row-actions {
+  display: inline-grid;
+  justify-items: stretch;
+  gap: 4px;
+  min-width: 150px;
+  &__main {
+    white-space: nowrap;
+    border-radius: 8px !important;
+  }
+  &__group {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2px;
+    .MuiButton-root {
+      min-width: 0;
+      padding-inline: 8px;
+      white-space: nowrap;
+      border-radius: 8px;
+    }
+    &--quiet .MuiButton-root {
+      color: #5b6b75;
+      font-weight: 500;
+    }
+  }
+  &__delete {
+    color: #9aa7af !important;
+    &:hover { color: #b42318 !important; background: #fdecea !important; }
+  }
 }

@@ -133,6 +133,8 @@ async function loadDeliverablePackages(customerId, selectedPackages, { feeMode =
     packages.push({
       ...selected,
       deliveryInvoiceId: undefined,
+      // Never what the client sent: set below from the ledger
+      pointsUsd: undefined,
       feeOnly: false,
       feeField: undefined,
       id: packageId,
@@ -154,6 +156,10 @@ async function loadDeliverablePackages(customerId, selectedPackages, { feeMode =
         ...FEE_KEYS.filter(({ field }) => feesOf[field] && !(feesOf[field].currency === 'LYD' && feeMode !== 'usd')).map(({ suffix }) => `SHP:${order._id}:${packageId}:${suffix}`),
       ] : undefined,
       cost: Number((weight * exiosPrice + feeUSD).toFixed(2)),
+      // Kept to take off what loyalty points already paid on the shipping (below)
+      orderMongoId: order._id,
+      shippingUSD: Number((weight * exiosPrice).toFixed(2)),
+      feeUSD,
     });
   }
 
@@ -161,9 +167,35 @@ async function loadDeliverablePackages(customerId, selectedPackages, { feeMode =
     throw new ErrorHandler(400, 'No packages selected');
   }
 
+  // Points already paid on a package's shipping claim SHP:<order>:<package> (net of what came back)
+  // are not asked again: the shipping is reduced by them, never below zero; the fees never are
+  const paidWithPoints = await require('../accounting/services/loyalty').pointsPaidOnPackages(
+    packages.map((pkg) => ({ orderId: pkg.orderMongoId, packageId: pkg.id })), session);
+  for (const pkg of packages) {
+    const pointsUsd = roundToTwo(Math.min(paidWithPoints.get(pkg.id) || 0, pkg.shippingUSD));
+    if (pointsUsd > 0) {
+      pkg.pointsUsd = pointsUsd;
+      pkg.cost = Number((pkg.shippingUSD - pointsUsd + pkg.feeUSD).toFixed(2));
+    }
+    delete pkg.orderMongoId;
+    delete pkg.shippingUSD;
+    delete pkg.feeUSD;
+  }
+
   const totalCost = roundToTwo(packages.reduce((sum, pkg) => sum + pkg.cost, 0));
   const totalFeeLYD = roundToTwo(feesLYD.reduce((sum, f) => sum + f.amount, 0));
   return { packages, totalCost, feesLYD, totalFeeLYD };
+}
+
+// Points sent with a delivery (owner's decision: they are part of the payment, not a step before
+// it). Redeemed in the delivery's own transaction, before the packages are priced, on the selected
+// packages' shipping claims (same cap, balance and owed checks): the delivery then collects only the
+// rest, and any later failure rolls the points back with it. Returns the points used (0: none).
+async function redeemDeliveryPoints(customerId, selectedPackages, points, { session, req } = {}) {
+  if (!(points > 0)) return 0;
+  const packageIds = [...new Set((selectedPackages || []).map((pkg) => String(pkg?.id || '')).filter(Boolean))];
+  await require('../accounting/services/loyalty').redeemPackages({ userId: customerId, packageIds, points }, { session, req });
+  return points;
 }
 
 // Claim packages before any wallet movement. A competing transaction conflicts and retries,
@@ -197,7 +229,9 @@ function truncateToTwo(num) {
 function checkSufficientFunds(walletMap, payment, totalCost, totalFeeLYD = 0) {
   const { amountUSD, amountLYD, rate } = payment;
   if (amountLYD + totalFeeLYD > (walletMap['LYD'] || 0) + BALANCE_EPSILON) {
-    throw new ErrorHandler(400, totalFeeLYD ? `Not enough LYD for the payment and the transport fees (${totalFeeLYD} LYD)` : 'Balance not enough for LYD payment');
+    throw new ErrorHandler(400, totalFeeLYD
+      ? `محفظة الدينار لا تكفي: المطلوب ${roundToTwo(amountLYD + totalFeeLYD)} LYD (رسوم النقل/التخليص ${totalFeeLYD} LYD${amountLYD ? ` + دفعة الشحن ${amountLYD} LYD` : ''}) والمتاح ${roundToTwo(walletMap['LYD'] || 0)} LYD. أودع الدينار في محفظة العميل أولًا.`
+      : 'Balance not enough for LYD payment');
   }
 
   if (amountUSD > (walletMap['USD'] || 0) + BALANCE_EPSILON) {
@@ -219,7 +253,10 @@ function checkSufficientFunds(walletMap, payment, totalCost, totalFeeLYD = 0) {
   }
 }
 
-async function processPackagesPayment(req, res, next, id, selectedPackages, payment, { session } = {}) {
+// How a payment is spread over the packages, in their order: dollars first, then dinars at the
+// payment's rate; the last package takes whatever is left (rounding). Pure, so a delivery split
+// into batches pays each package exactly what one single delivery would have.
+function allocatePayment(selectedPackages, payment) {
   let remainingLYD = +(payment.amountLYD || 0);
   let remainingUSD = +(payment.amountUSD || 0);
   const rate = +(payment.rate || 0);
@@ -229,10 +266,8 @@ async function processPackagesPayment(req, res, next, id, selectedPackages, paym
     throw new ErrorHandler(400, 'Exchange rate is required for LYD payments');
   }
 
-  for (let i = 0; i < selectedPackages.length; i++) {
-    const pkg = selectedPackages[i];
-    if (!pkg) continue;
-
+  return selectedPackages.map((pkg, i) => {
+    if (!pkg) return { usd: 0, lyd: 0 };
     const pkgCost = +(pkg.cost || 0);
     const isLast = i === selectedPackages.length - 1;
 
@@ -243,7 +278,7 @@ async function processPackagesPayment(req, res, next, id, selectedPackages, paym
       usdToDeduct = remainingUSD;
       lydToDeduct = remainingLYD;
     } else {
-      if (pkgCost <= 0) continue;
+      if (pkgCost <= 0) return { usd: 0, lyd: 0 };
 
       usdToDeduct = Math.min(remainingUSD, pkgCost);
       const stillOwedUSD = +(pkgCost - usdToDeduct).toFixed(2);
@@ -255,18 +290,29 @@ async function processPackagesPayment(req, res, next, id, selectedPackages, paym
       }
     }
 
-    if (usdToDeduct > 0) {
-      await useWalletBalance(req, res, next, id, pkg, +usdToDeduct.toFixed(2), 'USD', rate, isLast, session);
-      remainingUSD = +(remainingUSD - usdToDeduct).toFixed(2);
-    }
-    
-    if (lydToDeduct > 0) {
-      // Safeguard: Ensure rate is not 0 before calling LYD deduction
-      const currentRate = rate > 0 ? rate : 1; 
-      await useWalletBalance(req, res, next, id, pkg, +lydToDeduct.toFixed(2), 'LYD', currentRate, isLast, session);
-      remainingLYD = +(remainingLYD - lydToDeduct).toFixed(2);
-    }
+    const usd = usdToDeduct > 0 ? +usdToDeduct.toFixed(2) : 0;
+    const lyd = lydToDeduct > 0 ? +lydToDeduct.toFixed(2) : 0;
+    if (usd > 0) remainingUSD = +(remainingUSD - usdToDeduct).toFixed(2);
+    if (lyd > 0) remainingLYD = +(remainingLYD - lydToDeduct).toFixed(2);
+    return { usd, lyd };
+  });
+}
+
+// Takes each package's share from the wallets (see allocatePayment)
+async function payAllocations(req, res, next, id, selectedPackages, allocations, rate, session) {
+  for (let i = 0; i < selectedPackages.length; i++) {
+    const pkg = selectedPackages[i];
+    const { usd, lyd } = allocations[i] || {};
+    if (!pkg) continue;
+    if (usd > 0) await useWalletBalance(req, res, next, id, pkg, usd, 'USD', rate, false, session);
+    // Safeguard: Ensure rate is not 0 before calling LYD deduction
+    if (lyd > 0) await useWalletBalance(req, res, next, id, pkg, lyd, 'LYD', rate > 0 ? rate : 1, false, session);
   }
+}
+
+async function processPackagesPayment(req, res, next, id, selectedPackages, payment, { session } = {}) {
+  const allocations = allocatePayment(selectedPackages, payment);
+  await payAllocations(req, res, next, id, selectedPackages, allocations, +(payment.rate || 0), session);
 }
 
 async function useWalletBalance(req, res, next, id, pkg, amount, currency, rate, isLast, session) {
@@ -388,6 +434,27 @@ async function updateOrderStatuses(selectedPackages, session) {
   }
 }
 
+// One package line of a delivery invoice
+const invoiceItem = (pkg) => ({
+  packageId: pkg?.id,
+  trackingNumber: pkg?.trackingNumber,
+  weight: {
+    total: pkg?.weight,
+    measureUnit: pkg?.measureUnit
+  },
+  boxesCount: pkg?.boxesCount || '-',
+  cost: pkg?.cost || 0,
+  exiosPrice: pkg?.exiosPrice || 0,
+  orderId: pkg?.orderId,
+  ...(pkg?.domesticFee && { domesticFee: pkg.domesticFee }),
+  ...(pkg?.customsFee && { customsFee: pkg.customsFee }),
+  // The part of the shipping loyalty points paid before the delivery (cost is what was left to pay)
+  ...(pkg?.pointsUsd > 0 && { pointsUsd: pkg.pointsUsd }),
+});
+
+// What loyalty points paid on a delivery's packages, in dollars
+const pointsUsdOf = (packages) => roundToTwo((packages || []).reduce((sum, pkg) => sum + (Number(pkg?.pointsUsd) || 0), 0));
+
 async function createInvoice(user, customerId, selectedPackages, payment, totalCost, session) {
   const latestInvoice = await Invoices.findOne({})
     .sort({ referenceId: -1 })
@@ -408,21 +475,11 @@ async function createInvoice(user, customerId, selectedPackages, payment, totalC
     amountUSD: payment.amountUSD || 0,
     amountLYD: payment.amountLYD || 0,
     rate: payment.rate || 0,
-    list: selectedPackages.map(pkg => ({
-      packageId: pkg?.id,
-      trackingNumber: pkg?.trackingNumber,
-      weight: {
-        total: pkg?.weight,
-        measureUnit: pkg?.measureUnit
-      },
-      boxesCount: pkg?.boxesCount || '-',
-      cost: pkg?.cost || 0,
-      exiosPrice: pkg?.exiosPrice || 0,
-      orderId: pkg?.orderId,
-      ...(pkg?.domesticFee && { domesticFee: pkg.domesticFee }),
-      ...(pkg?.customsFee && { customsFee: pkg.customsFee }),
-    }))
+    list: selectedPackages.map(invoiceItem),
   };
+  // total is what was left to pay; pointsUsd what loyalty points paid on the shipping before
+  const pointsUsd = pointsUsdOf(selectedPackages);
+  if (pointsUsd > 0) invoice.pointsUsd = pointsUsd;
 
   if (session) return (await Invoices.create([invoice], { session }))[0];
   return Invoices.create(invoice);
@@ -732,4 +789,4 @@ try {
 }
 
 module.exports = {
-  payFeesLYD, cancelInvoicePackages, deliveryInvoiceOf, refundWalletPayment, statementOfPayment, getPurchaseItemsByDate, getInvoicesQuery, formatDate, cleanUpInventory, isNewCustomer, createInvoice, updateOrderStatuses, useWalletBalance, processPackagesPayment, checkSufficientFunds, truncateToTwo, getUserWalletMap, validatePayment, validatePackages, loadDeliverablePackages, claimPackagesForDelivery, calculateRate, withCalculatedRate };
+  payFeesLYD, cancelInvoicePackages, deliveryInvoiceOf, refundWalletPayment, statementOfPayment, getPurchaseItemsByDate, getInvoicesQuery, formatDate, cleanUpInventory, isNewCustomer, createInvoice, invoiceItem, pointsUsdOf, updateOrderStatuses, useWalletBalance, processPackagesPayment, allocatePayment, payAllocations, checkSufficientFunds, truncateToTwo, getUserWalletMap, validatePayment, validatePackages, loadDeliverablePackages, redeemDeliveryPoints, claimPackagesForDelivery, calculateRate, withCalculatedRate };

@@ -543,7 +543,7 @@ async function updateWithdrawal(statement, body, req, session) {
   let funding;
   // An unchanged office/source keeps its explicitly recorded cash account. Changing
   // the office mapping later must not silently move an edited withdrawal to another box.
-  if (source === 'box' && (statement.withdrawalSource || 'box') === 'box' && String(office || '') === String(statement.office || '') && statement.accountId) {
+  if (['box', 'bank'].includes(source) && (statement.withdrawalSource || 'box') === source && String(office || '') === String(statement.office || '') && statement.accountId) {
     const account = await require('../accounting/models').Account.findById(statement.accountId).session(session).lean();
     if (!account?.isActive || account.isGroup || !account.isCash || (account.currency || 'USD') !== statement.currency) throw new ErrorHandler(400, 'The original withdrawal account is unavailable. Choose a valid withdrawal source before saving.');
     funding = { account, office };
@@ -562,7 +562,7 @@ async function updateWithdrawal(statement, body, req, session) {
   statement.note = body.note === undefined ? statement.note : String(body.note);
   statement.actionType = 'withdrawal'; statement.withdrawalSource = source;
   statement.office = funding.office || office;
-  statement.accountId = source === 'box' ? funding.account._id : undefined;
+  statement.accountId = source === 'custody' ? undefined : funding.account._id;
   statement.custodyEmployeeId = source === 'custody' ? statement.createdBy : undefined;
   if (body.rate !== undefined) {
     if (body.rate !== '' && body.rate !== null && (!Number.isFinite(Number(body.rate)) || Number(body.rate) <= 0)) throw new ErrorHandler(400, 'سعر الصرف يجب أن يكون موجبًا');
@@ -971,18 +971,26 @@ module.exports.useBalanceOfWallet = async (req, res, next) => {
     const { createdAt, amount, currency, description, note, orderId, category, rate, actionType, office } = req.body;
     if (actionType === 'exchange') throw new ErrorHandler(400, 'استخدم نافذة الصرافة لتسجيل طرفي التحويل معًا');
     const withdrawalSource = req.body.withdrawalSource || 'box';
-    if (actionType === 'withdrawal' && !['box', 'custody'].includes(withdrawalSource)) throw new ErrorHandler(400, 'اختر مصدر السحب النقدي');
+    if (actionType === 'withdrawal' && !['box', 'custody', 'bank'].includes(withdrawalSource)) throw new ErrorHandler(400, 'اختر مصدر السحب النقدي');
     if (actionType === 'withdrawal' && withdrawalSource === 'custody') {
       const { settings } = await require('../accounting/services/config').getConfig();
       if (!settings?.liveEnabled) throw new ErrorHandler(400, 'السحب من العهدة يحتاج إلى تفعيل الترحيل المحاسبي المباشر');
       if (!(req.user?.roles?.isEmployee || req.user?.roles?.isAccountant || req.user?.roles?.isAdmin)) throw new ErrorHandler(403, 'السحب من العهدة متاح للموظفين فقط');
     }
-    const amountValue = roundToTwo(positiveWalletAmount(amount));
-    if (amountValue <= 0) throw new ErrorHandler(400, 'Amount must be at least 0.01');
+    // Loyalty points sent with a payment on an order (the invoice, or the shipping of packages):
+    // paid first in the same transaction, the money then pays the rest. Only points (no amount) is
+    // accepted when they close what is due.
+    const points = require('../accounting/services/loyalty').pointsOfPayment(req.body.points);
+    if (points > 0 && (actionType === 'withdrawal' || !orderId || !['invoice', 'receivedGoods'].includes(category))) {
+      throw new ErrorHandler(400, 'النقاط تُستعمل فقط مع دفعة فاتورة الشراء أو الشحن');
+    }
+    const pointsOnly = points > 0 && (amount === undefined || amount === null || amount === '' || Number(amount) === 0);
+    const amountValue = pointsOnly ? 0 : roundToTwo(positiveWalletAmount(amount));
+    if (!pointsOnly && amountValue <= 0) throw new ErrorHandler(400, 'Amount must be at least 0.01');
 
     // Dinars paid on an order are counted at a rate that may not be lower than the accountant's
     // rate by more than the tolerance
-    if (category && currency === 'LYD') {
+    if (!pointsOnly && category && currency === 'LYD') {
       if (!(Number(rate) > 0)) return next(new ErrorHandler(400, 'Enter the exchange rate the dinars are counted at.'));
       const limits = await lydRateLimits(createdAt);
       if (limits && Number(rate) < limits.minimum - 1e-9) {
@@ -990,14 +998,16 @@ module.exports.useBalanceOfWallet = async (req, res, next) => {
       }
     }
 
-    const wallet = await Wallet.findOne({
-      user: id,
-      currency,
-    });
-    if (!wallet) return next(new ErrorHandler(404, errorMessages.WALLET_NOT_FOUND));
+    if (!pointsOnly) {
+      const wallet = await Wallet.findOne({
+        user: id,
+        currency,
+      });
+      if (!wallet) return next(new ErrorHandler(404, errorMessages.WALLET_NOT_FOUND));
 
-    if (wallet.balance < amountValue) {
-      return next(new ErrorHandler(400, 'Insufficient wallet balance'));
+      if (wallet.balance < amountValue) {
+        return next(new ErrorHandler(400, 'Insufficient wallet balance'));
+      }
     }
 
     if (actionType === 'withdrawal') {
@@ -1024,6 +1034,11 @@ module.exports.useBalanceOfWallet = async (req, res, next) => {
     }
 
     const userStatement = await runInTransaction(async (session) => {
+    if (points > 0) {
+      const target = await orderPointsTarget(id, orderId, category, list, session);
+      await require('../accounting/services/loyalty').redeemInPayment({ userId: id, target, points, pointsOnly }, { session, req });
+      if (pointsOnly) return null;
+    }
     const withdrawalSettings = actionType === 'withdrawal' ? await require('../accounting/services/periodLock').lockPeriod(session) : null;
     const funding = actionType === 'withdrawal'
       ? await require('../accounting/services/posting/operations').resolveWithdrawalAccount(req.user, office, currency, withdrawalSource, session)
@@ -1105,9 +1120,20 @@ module.exports.useBalanceOfWallet = async (req, res, next) => {
     });
 
     res.status(200).json({
-      createdAt: userStatement.createdAt
+      createdAt: userStatement?.createdAt || null,
+      ...(points > 0 && { points }),
     });
   } catch (error) {
     return next(new ErrorHandler(error.statusCode || 500, error.message));
   }
 };
+
+// The claims a wallet payment on an order pays, for its points: the purchase invoice, or the
+// shipping of the packages sent with it (all the order's packages when none were sent)
+async function orderPointsTarget(userId, orderNumber, category, list, session) {
+  const order = await Order.findOne({ orderId: orderNumber }).select('_id user').session(session).lean();
+  if (!order) throw new ErrorHandler(404, 'الطلبية غير موجودة');
+  if (String(order.user) !== String(userId)) throw new ErrorHandler(400, 'هذه الطلبية ليست لهذا العميل');
+  const packageIds = category === 'receivedGoods' ? (list || []).map((p) => String(p?._id || p?.id || '')).filter(Boolean) : [];
+  return { orderId: order._id, category, ...(packageIds.length && { packageIds }) };
+}

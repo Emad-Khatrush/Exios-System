@@ -103,6 +103,11 @@ async function rateMargin(keys, usd, currency, options, session) {
   // A claim written off is owed again by what is paid on it (the order sync takes the write-off back)
   const { ClaimWriteOff } = require('../../models/documents');
   if (await ClaimWriteOff.exists({ arKey: { $in: keys }, status: 'posted' }).session(session)) return { claimUsd: usd, margin: 0 };
+  // Nothing billed yet (an order not active, or its total typed after the payment): the payment is
+  // the customer's credit on the order until its claim is posted (owner's decision 2026-10-02), not
+  // an overpayment taken as profit (prod 0692-2181, 2026-11-07)
+  const { CLAIM_EVENTS } = require('../claims/keys');
+  if (!(await JournalEntry.exists({ eventType: { $in: CLAIM_EVENTS }, status: 'posted', 'lines.arKey': { $in: keys } }).session(session))) return { claimUsd: usd, margin: 0 };
   const open = await openBalances(keys, session);
   const owed = keys.reduce((sum, key) => sum + Math.max(open.get(key) || 0, 0), 0);
   const margin = usd - owed;
@@ -162,21 +167,26 @@ async function operationRate(statement, options, session) {
   return undefined;
 }
 
-// Whose office box live cash lands in (spec v8): a clerk's cash is in their own office, whatever
-// the screen says; the owner and the accountant record for any office, so the office written on
-// the operation decides (and changing it on the operation moves the money to that office's box)
+// Whose office box live cash lands in (owner 2026-11-17, replacing spec v8's "a clerk's cash is in
+// their own office"): the office chosen on the operation's screen decides, whoever entered it, and
+// changing it on the operation moves the money to that office's box. Only an operation saved with
+// no office falls back to the office of whoever entered it.
 async function cashOffice(createdBy, recordOffice, session) {
-  if (createdBy && mongoose.isValidObjectId(String(createdBy))) {
-    const user = await User.findById(createdBy).select('roles').session(session || null).lean();
-    const { isOwner } = require('../access');
-    if (recordOffice && (user?.roles?.isAccountant || await isOwner({ _id: createdBy }))) return recordOffice;
-  }
-  return (await officeOfCreator(createdBy, session)) || recordOffice || null;
+  return recordOffice || (await officeOfCreator(createdBy, session)) || null;
 }
 
 // Cash withdrawals must have a valid funding account before the wallet is touched.
 async function resolveWithdrawalAccount(user, recordOffice, currency, source, session) {
-  if (!['box', 'custody'].includes(source)) throw fail('اختر مصدر السحب النقدي');
+  if (!['box', 'custody', 'bank'].includes(source)) throw fail('اختر مصدر السحب النقدي');
+  if (source === 'bank') {
+    // Paid to the customer from a company bank (the Libyan bank, Al-Mutahida): the same bank
+    // places as the deposit screen, resolved to their mapped account in this currency
+    const { STATEMENT_OFFICE_ALIASES } = require('../../seed/defaults');
+    if (!recordOffice || !Object.prototype.hasOwnProperty.call(STATEMENT_OFFICE_ALIASES, recordOffice)) throw fail('اختر البنك الذي يُصرف منه');
+    const account = await require('../moneyAccounts').resolveDepositAccount({ office: recordOffice, currency });
+    if (!account?.isActive || !account.isCash || (account.currency || 'USD') !== currency) throw fail(`لا يوجد حساب ${currency} لهذا البنك`);
+    return { account, office: recordOffice };
+  }
   if (source === 'custody') {
     const account = await require('../custody').accountOf('custody', currency);
     if (!account?.isActive || (account.currency || 'USD') !== currency) throw fail(`لا توجد عهدة متاحة بعملة ${currency}`);
@@ -235,6 +245,11 @@ async function postStatement(statementId, options = {}) {
     return { reversed: reversals.length };
   }
   if (await JournalEntry.exists({ eventKey }).session(session)) return { skipped: 'already posted' };
+  // Given back to the wallet before it ever reached the books (its posting had failed, owner
+  // 2026-11-17): the give-back reversed nothing, so posting it now would never be taken back
+  const givenBack = await AccountingEvent.exists({ type: 'statement', status: 'done',
+    'payload.reverses': { $in: [String(statement._id), statement._id] } }).session(session);
+  if (givenBack && !options.isHistorical) return { skipped: 'canceled before it was posted' };
 
   const { settings, offices } = await getConfig();
   const currency = CURRENCY_ALIASES[statement.currency] || statement.currency;
@@ -258,13 +273,16 @@ async function postStatement(statementId, options = {}) {
   const lines = [];
   let affectedKeys = [];
 
+  // The books are in dollar cents: an amount worth less than half a cent (0.01 LYD at 10.4, owner
+  // 2026-11-17) is carried at one cent, as for bank lines, instead of an entry with nothing to post
+  const atLeastCent = (usd) => (usd === 0 && minor > 0 ? 1 : usd);
   const walletIn = async () => {
-    const usd = await rates.toUsd(minor, currency, day, docRate);
+    const usd = atLeastCent(await rates.toUsd(minor, currency, day, docRate));
     lines.push(moneyLine(wallet, 'credit', minor, usd, { partnerId, label: statement.description }));
     return usd;
   };
   const walletOut = async () => {
-    const usd = await valueOut(wallet, minor, { day, docRate: docRate, rates, partnerId });
+    const usd = atLeastCent(await valueOut(wallet, minor, { day, docRate: docRate, rates, partnerId }));
     lines.push(moneyLine(wallet, 'debit', minor, usd, { partnerId, label: statement.description }));
     return usd;
   };
@@ -338,13 +356,13 @@ async function postStatement(statementId, options = {}) {
     }
     const cashUsd = cash.currency === currency
       ? await valueOut(cash, minor, { day, docRate: docRate, rates, ...(fromCustody && { employeeId }) })
-      : await rates.toUsd(minor, currency, day, docRate);
+      : atLeastCent(await rates.toUsd(minor, currency, day, docRate));
     lines.push(moneyLine(cash, 'credit', minor, cashUsd, { office, label: statement.description, ...(fromCustody && { employeeId: oid(employeeId) }) }));
   } else {
     const recoveryBalance = target.balanceId && await Balance.findById(target.balanceId).select('status sourceBalance').session(session).lean();
     if (recoveryBalance?.status === 'lost' && recoveryBalance.sourceBalance) {
       await walletOut();
-      const recoveredUsd = await rates.toUsd(minor, currency, day, docRate);
+      const recoveredUsd = atLeastCent(await rates.toUsd(minor, currency, day, docRate));
       const originalDebt = await Balance.findById(recoveryBalance.sourceBalance).select('accountingKind').session(session).lean();
       const serviceRecovery = originalDebt?.accountingKind === 'service_sale';
       const recoveryAccount = await resolveAccount(serviceRecovery ? 'revenue_services' : 'bad_debt_expense');
@@ -354,7 +372,7 @@ async function postStatement(statementId, options = {}) {
     // WALLET_PAYMENT: the claims are paid at the operation's rate; the wallet gives up the
     // dinars at its average rate; the difference is an exchange gain/loss (spec 2.4, E8)
     await walletOut();
-    const atRate = await rates.toUsd(minor, currency, day, docRate);
+    const atRate = atLeastCent(await rates.toUsd(minor, currency, day, docRate));
     const keys = await resolveClaimKeys(options.target, session);
     if (keys.length) {
       await lockClaimAllocations(keys, session);
@@ -633,5 +651,5 @@ module.exports = {
   OVERPAID_LABEL, OVERPAID_REVIEW_CENTS,
   repostPaymentRate,
   postStatement, repostStatement, reverseStatement, postCashPayment, reverseCashPayment,
-  postGeneralDebt, postDebtWriteOff, reverseBalance, resolveClaimKeys, splitOverClaims, openBalances, statementKind,
+  postGeneralDebt, postDebtWriteOff, reverseBalance, resolveClaimKeys, splitOverClaims, openBalances, claimLines, statementKind,
 };

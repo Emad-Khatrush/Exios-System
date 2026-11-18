@@ -114,6 +114,20 @@ export class ApiError {
 
 export const base = new APIBase(endpoint);
 
+// fetchFormData returns the raw Response (unlike the axios-based `send`), so multipart
+// callers parse the body themselves and normalize errors into the shape `error.data.message`
+// that the rest of the app already reads (see ApiError / apiErrorsTypes usage).
+const sendMultipart = async (url: string, method: string, body: FormData): Promise<{ data: any }> => {
+  const response = await base.fetchFormData(url, method, body);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error: any = new Error(data?.message || 'request-failed');
+    error.data = data;
+    throw error;
+  }
+  return { data };
+}
+
 // eslint-disable-next-line import/no-anonymous-default-export
 export default {
   // region common
@@ -129,12 +143,23 @@ export default {
 
   // App Endpoints
 
-  createClientAccount: (formData: User) => base.post(`account/create`, formData),
+  createClientAccount: (formData: FormData) => sendMultipart(`account/create`, 'POST', formData),
+
+  // Whether an email or phone already has an account, asked on the first sign-up step
+  checkSignupAvailability: (body: { email: string, phone: string }) => base.post(`account/check`, body),
 
   updateAccount: (formData: User) => base.put(`account/update`, formData),
 
+  getMyAccount: () => base.get(`account/me`),
+
+  uploadPassport: (file: File) => {
+    const body = new FormData();
+    body.append('passportImage', file);
+    return sendMultipart(`account/passport/upload`, 'POST', body);
+  },
+
   // Auth Endpoints
-  login: (body: { username: string, password: string }, loginType: 'admin' | 'client') => base.post(`/login`, { ...body, loginType }),
+  login: (body: { username: string, password: string, loginMethod: string }, loginType: 'admin' | 'client') => base.post(`/login`, { ...body, loginType }),
 
   getPasswordToken: (body: { email: string }) => base.post(`get-token-password`, { ...body }),
 
@@ -159,11 +184,47 @@ export default {
 
   getOrderRating: (orderId: any) => base.get(`client/order/${orderId}/rating`, {}),
 
+  updateOrderCustomization: (orderId: string, body: { note?: string, theme?: string }) => base.put(`client/order/${orderId}/customization`, body),
+
+  // Loyalty points (read-only: staff are the only ones who redeem)
+  getLoyalty: () => base.get(`client/loyalty`),
+
+  getLoyaltyHistory: (page: number, type: string = 'all') => base.get(`client/loyalty/history`, { page, type }),
+
+  getOrderLoyalty: (id: string) => base.get(`client/order/${id}/loyalty`),
+
+  // { [orderId]: { earned, pending } } for the orders list badges
+  getLoyaltyOrders: () => base.get(`client/loyalty/orders`),
+
+  // Loyalty levels: every level with its perks, and "the app celebrated my new level"
+  getLoyaltyTiers: () => base.get(`client/loyalty/tiers`),
+
+  markLevelSeen: () => base.post(`client/loyalty/level/seen`, {}),
+
+  // The customer's wallet: balances, debts, packages on the way, and the movements of one currency
+  getWallet: () => base.get(`client/wallet`),
+
+  getWalletStatement: (currency: 'USD' | 'LYD') => base.get(`client/wallet/statement`, { currency }),
+
+  // Phone notifications: this device's Firebase token, saved when turned on, removed on logout
+  savePushToken: (token: string) => base.post(`client/push/token`, { token }),
+
+  removePushToken: (token: string) => base.delete(`client/push/token`, { token }),
+
   // Settings Endpoints
   getAnnouncements: () => base.get(`announcements`),
 
   getShippingPrices: () => base.get(`shipmentPrices`),
 
   getExchangeRate: () => base.get(`exchangeRate`),
+
+  // Everything the Prices page shows (admin: Settings > Customer prices)
+  getPricing: (parts?: string[]) => base.get(`pricing`, parts?.length ? { parts: parts.join(',') } : undefined),
+
+  getActivePopupAds: () => base.get(`popupAds/active`),
+
+  acknowledgePopupAd: (id: string) => base.post(`popupAds/${id}/acknowledge`, {}),
+
+  trackVisit: (body: { sessionId: string, path: string, referrer?: string }) => base.post(`analytics/visit`, body),
 
 }

@@ -1,31 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import { Alert, Autocomplete, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, IconButton, MenuItem, Stack, TextField, Tooltip } from '@mui/material';
-import { ArrowLeftRight, EyeOff, RotateCcw, Settings2, Trash2, Upload } from 'lucide-react';
+import { Alert, Autocomplete, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, IconButton, LinearProgress, MenuItem, Stack, TextField, Tooltip } from '@mui/material';
+import { ArrowLeftRight, Check, EyeOff, RotateCcw, Settings2, Trash2, Upload } from 'lucide-react';
 import api from '../../api';
 import { CURRENCY_DECIMALS, acc, errorText } from './accountingApi';
 import { accountLabel, useAccountingData } from './useAccountingData';
 import { useBulk } from './bulk';
-import { Badge, DataTable, FilterBar, Ltr, Money, Open, PageHeader, Panel, Stat, StatGrid, StatusBadge, Sub } from './ui';
-import { AlipayExcludedRow, Mapping, ROLES, StatementRow, alipayRows, detect, readSheet, rowsFrom } from './bankImport';
+import { Amount, Badge, DataTable, FilterBar, Ltr, Money, Open, PageHeader, Panel, Stat, StatGrid, StatusBadge, Sub } from './ui';
+import { AlipayExcludedRow, Mapping, ROLES, StatementRow, alipayRows, detect, kuveytCardRows, mergeClassifiedChoices, readSheet, rowsFrom } from './bankImport';
 import { RemotePicker, orderLabel, tripLabel, userLabel } from './shared';
 import PurchaseMatchPicker from './PurchaseMatchPicker';
 import BankFinancialOperation from './BankFinancialOperation';
 import BankReviewComparison, { ReviewField } from './BankReviewComparison';
+import MatchChoices from './MatchChoices';
+import CoverBeforeCount, { coverableLine } from './CoverBeforeCount';
 import BankLineDetails from './BankLineDetails';
 import UnidentifiedPark from './UnidentifiedPark';
-import { DepositPicker, TransferPicker, YuanPurchaseDialog } from './PartnerPickers';
+import { DepositPicker, GroupedLineDialog, YuanPurchaseDialog, partLabel, proposedParts } from './PartnerPickers';
+import BankBillsPayPicker from './BankBillsPayPicker';
+import BankLineSplit from './BankLineSplit';
 import { isBeforeCount, useCountDay } from '../../utils/useCountDay';
 import StatementCoverage from './StatementCoverage';
 import BankMatchingSettings, { MatchingSettings, readMatchingSettings } from './BankMatchingSettings';
 import BankDuplicateSettlement from './BankDuplicateSettlement';
+import HeldAccountLink from './HeldAccountLink';
 import LinkedWalletRefundInfo, { WALLET_REFUND_LINK_MESSAGE } from './LinkedWalletRefundInfo';
 import { batchTrialAvailable } from './BatchPaymentTrial';
 import { bankSourceTextOverride } from './bankSourceTextOverride';
 import StatementDescriptionTranslation, { canTranslateDescription } from './StatementDescriptionTranslation';
 import { BankDuplicateReview, BankGroupMatch, BankIntegrityDialog, MatchQuality } from './BankMatchTools';
 import LocalBankReset, { localBankResetHost } from './LocalBankReset';
-
+import BankImportProgress, { ImportProgressState } from './BankImportProgress';
+import BankBulkPost from './BankBulkPost';
+import DayField from './DayField';
 type Preview = {
   fileName: string
   kind: 'sheet' | 'pdf'
@@ -47,6 +54,9 @@ type Preview = {
   choices: Record<number, Choice>
   alipay?: boolean
   excluded?: AlipayExcludedRow[]
+  // Days this account's statement already holds (a Kuveyt card export overlapping the PDF): left out
+  coveredRange?: { from: string, to: string } | null
+  kuveyt?: boolean
 }
 
 // `link`: the purchase cost typed on an order that this line paid (kept while its account is unchanged)
@@ -89,6 +99,10 @@ const BankReconciliation = () => {
   const [settlingDuplicates, setSettlingDuplicates] = useState(false);
   const [referenceReview, setReferenceReview] = useState<any>(null);
   const [groupMatchLines, setGroupMatchLines] = useState<any[] | null>(null);
+  // Outgoing lines picked together to settle one supplier bill or several
+  const [payBillsLines, setPayBillsLines] = useState<any[] | null>(null);
+  // Several lines reviewed and posted at once, each on its own account
+  const [bulkPostLines, setBulkPostLines] = useState<any[] | null>(null);
   const [integrityOpen, setIntegrityOpen] = useState(false);
   const [translationProgress, setTranslationProgress] = useState<{ done: number; total: number } | null>(null);
   const matchingEnabled = (engine: string) => matchingSettings.engines.includes(engine);
@@ -109,6 +123,7 @@ const BankReconciliation = () => {
   const [to, setTo] = useState('');
   const [search, setSearch] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [heldOpen, setHeldOpen] = useState(false);
   const loadVersion = useRef(0);
   useEffect(() => { const timer = window.setTimeout(() => setSearchQuery(search.trim()), 300); return () => window.clearTimeout(timer); }, [search]);
   const [message, setMessage] = useState<any>(null);
@@ -121,6 +136,11 @@ const BankReconciliation = () => {
   const [purchaseReview, setPurchaseReview] = useState<any>(null);
   const [detailsId, setDetailsId] = useState<string | null>(() => new URLSearchParams(window.location.search).get('lineId'));
   const [parkFor, setParkFor] = useState<any>(null);
+  // Closing a line the opening count already holds (no entry): the line
+  const [coverFor, setCoverFor] = useState<any>(null);
+  const coverable = (row: any) => coverableLine(count, row);
+  const coverLine = (line: any, input: { note: string; happenedOn?: string }) =>
+    runInRow(line._id, () => acc.post(`bank/lines/${line._id}/cover`, input), () => 'أُغلق السطر بدون قيد: حصلت قبل الجرد.');
   // "Are you sure?" before ignoring, deleting or undoing a line
   const [confirmBox, setConfirmBox] = useState<any>(null);
   const [confirming, setConfirming] = useState(false);
@@ -134,6 +154,13 @@ const BankReconciliation = () => {
   // Several lines for one purchase typed on an order (spec v8)
   const [group, setGroup] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  // The helpers (suggestions, rules, partner hints) failed while the lines loaded: the page still opens
+  const [hintsError, setHintsError] = useState('');
+  // A statement being read or imported in the background (the dimmed progress screen)
+  const [importProgress, setImportProgress] = useState<ImportProgressState | null>(null);
+  const importJobId = useRef<string | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
   const account = banks.find((a) => a._id === accountId);
   // A partner's current account holding money for us (Wasl): its own matching helpers
   const partnerAccount = (account as any)?.cashKind === 'current' && account?.type === 'asset';
@@ -149,14 +176,20 @@ const BankReconciliation = () => {
     return candidates.filter(b => !b.hasNonExpenseTargets && b.expenseAccountIds?.includes(counterAccountId));
   };
 
-  const load = async () => {
+  // quiet: refreshed in place after an action on one line (the table stays, no scroll jump)
+  const load = async (options?: { quiet?: boolean }) => {
+    const quiet = options?.quiet === true;
     const version = ++loadVersion.current;
     if (!accountId) { setData(null); setIsLoading(false); return; }
     if (from && to && from > to) { setData(null); setIsLoading(false); return; }
     try {
-      setIsLoading(true);
-      setData(null);
-      const [lines, hints, ruleList, partner, transfers, yuan] = await Promise.all([
+      if (!quiet) {
+        setIsLoading(true);
+        setData(null);
+      }
+      // Only the lines are required. A helper that fails or times out (a 503 from a slow
+      // suggestions request) must not hide the whole statement; it is reported instead.
+      const [lines, hints, ruleList, partner, transfers, yuan] = await Promise.allSettled([
         acc.get('bank/lines', { accountId, lineStatus: filter || undefined, linkage: linkage || undefined, direction: direction || undefined, from: from || undefined, to: to || undefined, search: searchQuery || undefined }),
         acc.get('bank/suggestions', { accountId, matchingSettings: JSON.stringify(matchingSettings) }),
         acc.get('bank/rules', { accountId }),
@@ -165,12 +198,16 @@ const BankReconciliation = () => {
         matchingEnabled('yuan') ? acc.get('bank/yuan-lines', { accountId }) : Promise.resolve({ data: {} }),
       ]);
       if (version !== loadVersion.current) return;
-      setData(lines.data);
-      setSuggested(hints.data);
-      setPartnerHints(partner.data || {});
-      setTransferHints(transfers.data || {});
-      setYuanHints(yuan.data || {});
-      setRules(ruleList.data.results);
+      if (lines.status === 'rejected') throw lines.reason;
+      const value = (result: PromiseSettledResult<any>, fallback: any) => (result.status === 'fulfilled' ? result.value?.data || fallback : fallback);
+      setData(lines.value.data);
+      setSuggested(value(hints, {}));
+      setPartnerHints(value(partner, {}));
+      setTransferHints(value(transfers, {}));
+      setYuanHints(value(yuan, {}));
+      setRules(value(ruleList, { results: [] }).results || []);
+      const failed = [hints, ruleList, partner, transfers, yuan].find((result) => result.status === 'rejected') as PromiseRejectedResult | undefined;
+      setHintsError(failed ? `تعذر تحميل اقتراحات المطابقة (${errorText(failed.reason)}). السطور ظاهرة ويمكنك العمل عليها يدويًا، أو أعد المحاولة.` : '');
     } catch (err) {
       if (version !== loadVersion.current) return;
       setMessage({ type: 'error', text: errorText(err) });
@@ -180,6 +217,54 @@ const BankReconciliation = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [accountId, filter, linkage, direction, from, to, searchQuery, matchingSettings]);
 
+  // Approvals and closings of lines run on the server one after another, in the order given: the
+  // review closes at once and the person moves on to the next line while each row shows its turn
+  const [rowJobs, setRowJobs] = useState<Record<string, 'waiting' | 'running'>>({});
+  const [doneLines, setDoneLines] = useState<Record<string, string>>({});
+  // A queued approval the server refused: the error stays on its row, with the review to reopen
+  const [failedLines, setFailedLines] = useState<Record<string, { text: string; reopen?: () => void }>>({});
+  const rowQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const queuedLines = useRef(new Set<string>());
+  const finishedLines = useRef<string[]>([]);
+  // The page's filters may change while the queue runs: the reload uses the current ones
+  const loadRef = useRef(load);
+  loadRef.current = load;
+  const withoutKey = <T,>(record: Record<string, T>, key: string) => { const next = { ...record }; delete next[key]; return next; };
+  const rowLocked = (row: any) => !!rowJobs[row._id] || !!doneLines[row._id];
+  const runInRow = (lineId: string, action: () => Promise<any>, text: (res: any) => string, reopen?: (err: any) => void): Promise<boolean> => {
+    if (queuedLines.current.has(lineId)) return Promise.resolve(false);
+    queuedLines.current.add(lineId);
+    setRowJobs((current) => ({ ...current, [lineId]: 'waiting' }));
+    setFailedLines((current) => withoutKey(current, lineId));
+    const job = rowQueue.current.then(async () => {
+      if (!mounted.current) return false;
+      setRowJobs((current) => ({ ...current, [lineId]: 'running' }));
+      let ok = false;
+      try {
+        const res = await action();
+        setDoneLines((current) => ({ ...current, [lineId]: text(res.data) }));
+        finishedLines.current.push(lineId);
+        ok = true;
+      } catch (err: any) {
+        setMessage({ type: 'error', text: errorText(err) });
+        setFailedLines((current) => ({ ...current, [lineId]: { text: errorText(err), reopen: reopen && (() => reopen(err)) } }));
+      }
+      queuedLines.current.delete(lineId);
+      setRowJobs((current) => withoutKey(current, lineId));
+      // Reloaded once the queue is empty, not after each line (the suggestions are slow), and without
+      // holding the next approval back
+      if (!queuedLines.current.size && mounted.current) {
+        const finished = finishedLines.current.splice(0);
+        loadRef.current({ quiet: true }).then(() => {
+          setTimeout(() => setDoneLines((current) => finished.reduce((next, id) => withoutKey(next, id), current)), 6000);
+        });
+      }
+      return ok;
+    });
+    rowQueue.current = job;
+    return job;
+  };
+  const queueSize = Object.keys(rowJobs).length;
   const run = async (action: () => Promise<any>, text: (res: any) => string, onError?: (err: any) => void) => {
     try {
       const res = await action();
@@ -198,6 +283,7 @@ const BankReconciliation = () => {
   const openFile = async (file?: File) => {
     if (!file) return;
     setMessage(null);
+    setImportProgress({ status: 'reading', startedAt: Date.now(), lastChange: Date.now(), fileName: file.name });
     try {
       if (/\.pdf$/i.test(file.name)) {
         const form = new FormData();
@@ -222,10 +308,20 @@ const BankReconciliation = () => {
         const { headerRow, mapping } = detect(cells);
         const alipay = alipayRows(cells, headerRow);
         if (alipay && currency !== 'CNY') throw new Error('هذا كشف Alipay باليوان؛ اختر حساب Alipay بعملة CNY أولاً');
-        setPreview({ fileName: file.name, kind: 'sheet', cells, headerRow, mapping, rows: alipay?.rows || rowsFrom(cells, headerRow, mapping), alipay: !!alipay, excluded: alipay?.excluded, skip: new Set(), flip: new Set(), creditCard: false, flipAll: false, choices: {} });
+        // A Kuveyt Türk card export: signs from the kind of line. Its days already on this account (read
+        // from the PDF statement, worded differently) are left out so they are not counted twice.
+        const kuveytCard = !alipay && kuveytCardRows(cells);
+        if (kuveytCard && (account?.type !== 'liability' || currency !== 'TRY')) throw new Error('هذا كشف بطاقة كويت ترك بالليرة؛ اختر حساب البطاقة نفسها (التزام بالليرة) أولاً');
+        const rows = kuveytCard ? kuveytCard.rows : alipay?.rows || rowsFrom(cells, headerRow, mapping);
+        const covered = kuveytCard ? (await acc.get('bank/statement-range', { accountId })).data : null;
+        const skip = new Set<number>(covered?.from ? rows.map((row, index) => (row.day >= covered.from && row.day <= covered.to ? index : -1)).filter(index => index >= 0) : []);
+        setPreview({ fileName: file.name, kind: 'sheet', cells, headerRow, mapping, rows, alipay: !!alipay, excluded: alipay?.excluded, skip, flip: new Set(), creditCard: false, flipAll: false, choices: {},
+          ...(kuveytCard && { kuveyt: true, cardNumber: kuveytCard.cardNumber, coveredRange: covered?.from ? covered : null }) });
       }
     } catch (err: any) {
       setMessage({ type: 'error', text: err?.response ? errorText(err) : `تعذّرت قراءة الملف: ${err.message}` });
+    } finally {
+      setImportProgress((current) => (current?.status === 'reading' ? null : current));
     }
   };
 
@@ -242,29 +338,27 @@ const BankReconciliation = () => {
   });
 
   // The rows are classified again whenever what would be imported changes (signs, columns)
-  const signature = preview ? JSON.stringify(edited(preview).map((r) => [r.day, r.amount, r.reference, r.description, r.originalAmount, r.originalCurrency, r.movementKind, r.settlementUsd, r.walletImpact])) : '';
+  const rowKeys = preview ? edited(preview).map((r) => JSON.stringify([r.day, r.amount, r.reference, r.description, r.originalAmount, r.originalCurrency, r.movementKind, r.settlementUsd, r.walletImpact])) : [];
+  const signature = rowKeys.length ? `[${rowKeys.join(',')}]` : '';
+  // What each row looked like when it was last classified (same file and account): only the rows
+  // that changed since then lose the person's choices
+  const classifiedRows = useRef<{ file?: string, accountId: string, keys: string[] } | null>(null);
   useEffect(() => {
     if (!preview || !accountId || !preview.rows.length) { setClasses(null); return undefined; }
     setClasses(null);
     let stale = false;
+    const keys = rowKeys;
     const timer = window.setTimeout(() => {
       acc.post('bank/classify', { accountId, rows: edited(preview), matchingSettings })
         .then((res: any) => {
           if (stale) return;
           setClasses(res.data.results);
-          // The suggested accounts fill the rows the person has not set by hand
-          setPreview((current) => {
-            if (!current) return current;
-            const choices = { ...current.choices };
-            res.data.results.forEach((item: any, index: number) => {
-              if (choices[index]?.byHand) {
-                choices[index] = { ...choices[index], billAccepted: false, purchaseMatch: undefined, purchaseSelection: undefined };
-                return;
-              }
-              choices[index] = item.status === 'new' && item.account ? { accountId: item.account._id, office: item.office || undefined, link: item.link || undefined, vendorName: item.vendorName || undefined, billId: item.billId || undefined } : {};
-            });
-            return { ...current, choices };
-          });
+          const last = classifiedRows.current;
+          const sameSource = !!last && last.file === preview.fileName && last.accountId === accountId;
+          const changed = new Set<number>(keys.map((key, index) => (sameSource && last!.keys[index] === key ? -1 : index)).filter((index) => index >= 0));
+          classifiedRows.current = { file: preview.fileName, accountId, keys };
+          // The suggested accounts fill the rows the person has not set by hand; unchanged rows keep their choices
+          setPreview((current) => (current ? { ...current, choices: mergeClassifiedChoices(current.choices, res.data.results, changed) } : current));
         })
         .catch((err: any) => { if (!stale) setMessage({ type: 'error', text: errorText(err) }); });
     }, 350);
@@ -280,7 +374,7 @@ const BankReconciliation = () => {
     if (accountIdChosen && key) {
       current.rows.forEach((row, other) => {
         const status = classes?.[other]?.status;
-        if (other !== index && !choices[other]?.accountId && !choices[other]?.purchaseMatch && ['new', undefined].includes(status) && keywordOf(row.description).toLowerCase() === key) {
+        if (other !== index && !classes?.[other]?.holdForMatching && !choices[other]?.accountId && !choices[other]?.purchaseMatch && ['new', undefined].includes(status) && keywordOf(row.description).toLowerCase() === key) {
           choices[other] = { ...choices[other], accountId: accountIdChosen, byHand: true, link: undefined };
         }
       });
@@ -295,6 +389,8 @@ const BankReconciliation = () => {
   // A row is posted on import when it has an account, is new, and (if it may be in the books) was confirmed as different
   const willPost = (index: number) => {
     if (preview?.rows[index]?.walletImpact === 'unknown') return false;
+    // Alipay transfers from a partner's current account, or the total of operations already recorded: matched after import
+    if (classes?.[index]?.holdForMatching) return false;
     const status = classes?.[index]?.status;
     const choice = preview?.choices[index];
     if (classes?.[index]?.source === 'order' && choice?.link && !choice?.purchaseMatch) return false;
@@ -319,14 +415,80 @@ const BankReconciliation = () => {
       };
     });
     if (!rows.length) return setMessage({ type: 'error', text: 'لا سطور للاستيراد.' });
-    const ok = await run(() => acc.post('bank/import', { accountId, rows, matchingSettings }), (d) => [
-      `استُورد ${d.count} سطراً`,
-      d.skipped ? `تُجوهل ${d.skipped} مستورداً من قبل` : '',
-      d.matched ? `طُوبق ${d.matched} مع ما في الدفاتر` : '',
-      d.posted ? `رُحِّل ${d.posted} على حساباتها` : '',
-      d.notPosted?.length ? `لم يُرحَّل ${d.notPosted.length}: ${d.notPosted.slice(0, 3).map((n: any) => `${n.description} (${n.reason})`).join('؛ ')}` : '',
-    ].filter(Boolean).join('، ') + '.');
-    if (ok) { setPreview(null); setClasses(null); }
+    if (importProgress && !['failed', 'lost'].includes(importProgress.status)) return; // already importing
+    const fileName = preview?.fileName;
+    const startedAt = Date.now();
+    setImportProgress({ status: 'starting', startedAt, lastChange: startedAt, rows: rows.length, fileName });
+    try {
+      // Runs in the background on the server: a large file outlasts the hosting request timeout
+      const res = await acc.post('bank/import', { accountId, rows, matchingSettings, background: true });
+      importJobId.current = res.data.jobId;
+      await followImport(res.data, { startedAt, fileName, joined: !!res.data.alreadyRunning });
+    } catch (err) {
+      if (mounted.current) setImportProgress({ status: 'failed', startedAt, lastChange: Date.now(), error: errorText(err), fileName });
+    }
+  };
+
+  const importSummary = (d: any) => [
+    `استُورد ${d.count} سطراً`,
+    d.skipped ? `تُجوهل ${d.skipped} مستورداً من قبل` : '',
+    d.matched ? `طُوبق ${d.matched} مع ما في الدفاتر` : '',
+    d.posted ? `رُحِّل ${d.posted} على حساباتها` : '',
+    d.notPosted?.length ? `لم يُرحَّل ${d.notPosted.length}: ${d.notPosted.slice(0, 3).map((n: any) => `${n.description} (${n.reason})`).join('؛ ')}` : '',
+  ].filter(Boolean).join('، ') + '.';
+
+  // Asks the server every second how far the import is, until it is done, fails, or cannot be reached
+  const followImport = async (first: any, { startedAt, fileName, joined }: { startedAt: number, fileName?: string, joined?: boolean }) => {
+    let job = first;
+    let lastKey = '';
+    let lastChange = Date.now();
+    let misses = 0;
+    while (mounted.current && importJobId.current === job.jobId) {
+      const key = `${job.status}:${job.phase}:${job.done}:${job.total}`;
+      if (key !== lastKey) { lastKey = key; lastChange = Date.now(); }
+      if (job.status === 'done') {
+        importJobId.current = null;
+        setImportProgress(null);
+        setPreview(null);
+        setClasses(null);
+        setMessage({ type: job.result?.notPosted?.length ? 'warning' : 'success', text: importSummary(job.result || {}) });
+        await load();
+        return;
+      }
+      if (job.status === 'failed') {
+        importJobId.current = null;
+        setImportProgress({ status: 'failed', phase: job.phase, startedAt, lastChange, error: job.error, fileName });
+        await load();
+        return;
+      }
+      setImportProgress({ status: 'running', phase: job.phase, done: job.done, total: job.total, rows: job.rows, startedAt, lastChange, joined, fileName });
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      try {
+        job = (await acc.get(`bank/import/${job.jobId}`)).data;
+        misses = 0;
+      } catch (err: any) {
+        // The server no longer knows the job (restarted): say so rather than wait forever
+        if (err?.response?.status === 404 || ++misses >= 5) {
+          if (mounted.current) setImportProgress({ status: 'lost', phase: job.phase, done: job.done, total: job.total, startedAt, lastChange, error: errorText(err), fileName, joined });
+          return;
+        }
+      }
+    }
+  };
+
+  const keepWaiting = () => {
+    const jobId = importJobId.current;
+    if (!jobId || !importProgress) return;
+    const { startedAt, fileName, joined } = importProgress;
+    setImportProgress({ ...importProgress, status: 'running', lastChange: Date.now() });
+    acc.get(`bank/import/${jobId}`).then((res: any) => followImport(res.data, { startedAt, fileName, joined }))
+      .catch((err: any) => setImportProgress((current) => current && { ...current, status: 'lost', error: errorText(err) }));
+  };
+
+  const closeImportProgress = () => {
+    importJobId.current = null;
+    setImportProgress(null);
+    load();
   };
 
   // ---- Posting ----
@@ -340,24 +502,26 @@ const BankReconciliation = () => {
     onDone: load,
     actions: [
       {
-        key: 'exact', label: 'ترحيل المطابق بالمبلغ والتاريخ', done: 'اعتُمد',
+        key: 'exact', label: 'اعتماد المطابق تمامًا', done: 'اعتُمد', group: 'post',
         applies: (row) => row.lineStatus === 'unmatched' && !!suggested[row._id]?.exactMatch,
         run: (row) => acc.post(`bank/lines/${row._id}/exact-match`, { expected: suggested[row._id].exactMatch }),
         confirm: (count) => `سيُعتمد ${count} سطرًا بمقترح وحيد يطابق المبلغ والعملة والتاريخ تمامًا. يُربط القيد أو الفاتورة الموجودة، وتُستبعد الحالات المتعددة والاستردادات التي تحتاج مراجعة. يُعاد التحقق قبل تنفيذ كل سطر.`,
       },
+      // «ترحيل على الحساب المقترح» was replaced by «مراجعة وترحيل المحدد» (the same posting, after a review)
       {
-        key: 'post', label: 'ترحيل على الحساب المقترح', done: 'رُحِّل',
-        applies: (row) => row.lineStatus === 'unmatched' && !!suggested[row._id]?.account && !suggested[row._id]?.requiresConfirmation && !suggested[row._id]?.duplicates?.length && !beforeCountCost(row, suggested[row._id]?.account?._id),
-        run: (row) => postLine(row, { counterAccountId: suggested[row._id].account._id, office: suggested[row._id].office || account?.office || undefined, link: suggested[row._id].link || undefined, vendorName: suggested[row._id].vendorName || undefined, billId: suggested[row._id].billId || undefined }),
-        confirm: (count) => `سيُرحَّل ${count} سطراً كلٌ على حسابه المقترح. السطور التي قد تكون مسجلة في الدفاتر لا تُرحَّل.`,
+        // Closing lines the opening count already holds, with one note for all (owner's request 2026-11-13)
+        key: 'cover', label: 'حصلت قبل الجرد', done: 'أُغلق', group: 'close', needsReason: true, reasonLabel: 'ما كانت هذه العمليات (تُكتب على كل سطر)',
+        applies: (row) => row.lineStatus === 'unmatched' && !!count && isBeforeCount(count, row.day),
+        run: (row, note) => acc.post(`bank/lines/${row._id}/cover`, { note }),
+        confirm: (n) => `سيُغلق ${n} سطرًا بدون قيد: رصيد الجرد يوم ${count?.day || ''} يشمل هذا المال. تُحفظ الملاحظة على كل سطر وفي سجل التدقيق، ويمكن التراجع لاحقًا.`,
       },
       {
-        key: 'ignore', label: 'تجاهل', done: 'تُجوهل', applies: (row) => row.lineStatus === 'unmatched',
+        key: 'ignore', label: 'تجاهل', done: 'تُجوهل', group: 'close', applies: (row) => row.lineStatus === 'unmatched',
         run: (row) => acc.post(`bank/lines/${row._id}/ignore`),
         confirm: (count) => `سيُعلَّم ${count} سطراً كمُتجاهَل فلا يظهر ضمن غير المطابق. يمكن التراجع لاحقاً.`,
       },
       {
-        key: 'unignore', label: 'إرجاع لغير مطابق', done: 'أُعيد', applies: (row) => ['matched', 'ignored'].includes(row.lineStatus),
+        key: 'unignore', label: 'إرجاع لغير مطابق', done: 'أُعيد', group: 'close', applies: (row) => ['matched', 'ignored'].includes(row.lineStatus),
         run: (row) => acc.post(`bank/lines/${row._id}/unignore`),
         confirm: (count) => `سيعود ${count} سطراً إلى «غير مطابق»، وتُفك مطابقة ما كان مطابقاً منها.`,
       },
@@ -367,14 +531,15 @@ const BankReconciliation = () => {
   const openEntry = (row: any, hints = suggested, source = data) => {
     const hint = hints[row._id];
     const previous = new Set(row.historyEntryIds || []);
-    const possible = (source?.unmatchedMovements || []).filter((movement: any) => !previous.has(movement._id) && hint?.duplicates?.some((candidate: any) => candidate._id === movement._id))
+    const possible = (source?.unmatchedMovements || []).filter((movement: any) => !previous.has(movement._id) && hint?.duplicates?.some((candidate: any) => candidate._id === movement._id && !candidate.difference))
       .sort((a: any, b: any) => Math.abs(Date.parse(a.day) - Date.parse(row.day)) - Math.abs(Date.parse(b.day) - Date.parse(row.day)) || String(a._id).localeCompare(String(b._id)));
     setEntryFor({
-      mode: row.amount > 0 && (hint?.isRefund || row.movementKind === 'purchase_refund') ? 'refund' : row.amount < 0 && (hint?.tripCandidates?.length || hint?.billCandidates?.length || hint?.link) ? 'purchase' : possible.length ? 'ledger' : row.sourceProvider === 'alipay' && row.amount > 0 ? 'ledger' : 'new',
+      mode: row.amount > 0 && (hint?.isRefund || row.movementKind === 'purchase_refund') ? 'refund' : hint?.combinations?.length && !hint?.tripCandidates?.length ? 'combos' : row.amount < 0 && (hint?.tripCandidates?.length || hint?.billCandidates?.length || hint?.link) ? 'purchase' : row.amount < 0 && hint?.vendorBills ? 'pay_bills' : possible.length ? 'ledger' : row.sourceProvider === 'alipay' && row.amount > 0 ? 'ledger' : 'new',
       selected: possible.length && !(row.sourceProvider === 'alipay' && possible.length > 1) ? [possible[0]._id] : [],
       changeLedger: !possible.length || (row.sourceProvider === 'alipay' && possible.length > 1),
       line: row, counterAccountId: hint?.account?._id || '', office: hint?.office || account?.office || '', description: row.description, link: hint?.link || undefined, vendorName: hint?.vendorName || '', billId: hint?.tripCandidates?.[0]?.billId || hint?.suggestedBillId || hint?.billId || '', refundId: hint?.suggestedRefundId || '', billAccepted: false, confirmNewBill: false,
       remember: false, keyword: keywordOf(row.description), confirmNotDuplicate: !!row.postingAttempt,
+      choice: hint?.combinations?.length === 1 ? 0 : null,
     });
   };
 
@@ -391,26 +556,39 @@ const BankReconciliation = () => {
       setEntryFor({ ...entryFor, error: 'راجع الفاتورة الموجودة، أو أكد أنها عملية مستقلة مع سبب واضح من 10 أحرف على الأقل.' });
       return;
     }
-    setEntryFor({ ...entryFor, error: '' });
-    setReviewSaving(true);
-    try {
-    const ok = await run(() => postLine(line, { ...input, ...routed,
+    const review = { ...entryFor, error: '' };
+    setEntryFor(null);
+    runInRow(line._id, () => postLine(line, { ...input, ...routed,
       billId: input.billAccepted ? input.billId : undefined,
       ...(input.billAccepted && { counterAccountId: undefined, link: undefined }),
-      ...(entryFor.costDuplicatePreview && entryFor.independentCost && { duplicateDecision: 'independent', duplicateReason: entryFor.duplicateReason.trim(), duplicateFingerprint: entryFor.costDuplicatePreview.fingerprint }),
+      ...(review.costDuplicatePreview && review.independentCost && { duplicateDecision: 'independent', duplicateReason: review.duplicateReason.trim(), duplicateFingerprint: review.costDuplicatePreview.fingerprint }),
       office: input.office || undefined }), () => input.billAccepted ? 'سُجّل السداد على الفاتورة الأصلية دون إنشاء فاتورة جديدة.' : 'أُنشئ القيد.',
-      (err: any) => setEntryFor((current: any) => ({ ...current, error: errorText(err),
-        ...(err.response?.data?.costDuplicatePreview && { costDuplicatePreview: err.response.data.costDuplicatePreview, independentCost: false, duplicateReason: '' }) })));
-    if (ok) setEntryFor(null);
-    } finally { setReviewSaving(false); }
+      (err: any) => setEntryFor({ ...review, error: errorText(err),
+        ...(err.response?.data?.costDuplicatePreview && { costDuplicatePreview: err.response.data.costDuplicatePreview, independentCost: false, duplicateReason: '' }) }));
   };
+  // The review of a line closes at once and its approval waits its turn in the queue; a refusal
+  // reopens the same review with the server's message
+  const queueReview = (action: () => Promise<any>, text: (res: any) => string, reopenWith: (err: any) => any = () => ({})) => {
+    const review = { ...entryFor, error: '' };
+    setEntryFor(null);
+    runInRow(review.line._id, action, text, (err: any) => setEntryFor({ ...review, error: errorText(err), ...reopenWith(err) }));
+  };
+  // A purchase or refund review reopened on the same choice, with the earlier costs the server listed
+  const pickerRetry = (selected: any, err: any) => ({
+    ...(selected?.billId && { billId: selected.billId }),
+    ...(selected?.itemId && { itemId: selected.itemId }),
+    ...(selected?.refundId && { refundId: selected.refundId }),
+    retryDuplicate: err.response?.data?.costDuplicatePreview ? { preview: err.response.data.costDuplicatePreview, selectedId: selected?._id } : undefined,
+  });
 
   const money = (value: number) => <Money value={value} currency={currency} decimals={decimals} />;
 
   const applyPartnerDeposit = (row: any, proposal: any) => {
     const far = proposal.daysApart > 3;
-    if (far && !window.confirm(`التاريخ في الكشف ${row.day} والإيداع ${proposal.day} (فرق ${proposal.daysApart} يوماً). هل هي نفس العملية؟`)) return;
-    run(() => acc.post(`bank/lines/${row._id}/partner-deposit`, { statementId: proposal.statementId, confirmDifference: far }),
+    const diff = proposal.difference ? `فرق المبلغ ${(proposal.difference / 100).toFixed(2)}$${proposal.beforeCount ? ' (قبل الجرد: لا قيد له)' : ' (يُسجل على حساب فروق التقريب)'}` : '';
+    const reasons = [far && `التاريخ في الكشف ${row.day} والإيداع ${proposal.day} (فرق ${proposal.daysApart} يوماً)`, diff].filter(Boolean).join(' و');
+    if (reasons && !window.confirm(`${reasons}. هل هي نفس العملية؟`)) return;
+    runInRow(row._id, () => acc.post(`bank/lines/${row._id}/partner-deposit`, { statementId: proposal.statementId, confirmDifference: !!reasons }),
       () => proposal.beforeCount ? 'رُبط السطر بإيداع المحفظة للمتابعة فقط: قبل الجرد، فلا قيد ولا تغيير في الأرصدة.'
         : proposal.onAccount ? 'رُبط السطر بإيداع المحفظة.' : `نُقل الإيداع إلى ${account?.name || 'الحساب الجاري'} ورُبط بالسطر. المحفظة لم تتغير.`);
   };
@@ -420,13 +598,26 @@ const BankReconciliation = () => {
     if (row.duplicateReviewPending) return <Alert severity="warning">قد يكون هذا السطر مستوردًا سابقًا ببيان مختلف.
       <Button onClick={() => setReferenceReview(row)}>مراجعة التكرار</Button></Alert>;
     const hint = suggested[row._id];
+    // A recorded payment a few cents or days off the line: a typing slip, corrected to the statement then matched
+    const slips = (hint?.duplicates || []).filter((d: any) => d.difference);
+    if (slips.length) return <div className="acc-suggest acc-suggest--class">
+      {slips.slice(0, 2).map((d: any) => <div key={d._id} className="acc-suggest__row">
+        <span>⚠ <b>قيد مسجل قريب جدًا:</b> <Ltr>{d.number}</Ltr> · <Ltr>{d.day}</Ltr> · بفرق <Ltr>{(d.difference / 10 ** decimals).toLocaleString('en-US', { maximumFractionDigits: decimals })} {currency}</Ltr> — غالبًا رقم أو تاريخ مكتوب خطأ</span>
+        <Button size="small" variant="contained" color="success" onClick={() => {
+          if (!window.confirm(`يُصحَّح ${d.number} (المبلغ والتاريخ، ومع فاتورته إن كانت مدفوعة فورًا) ليطابق الكشف، ثم يُربط به هذا السطر. متابعة؟`)) return;
+          runInRow(row._id, () => acc.post(`bank/lines/${row._id}/near-correct`, { entryId: d._id, reason: 'رقم أو تاريخ مكتوب خطأ؛ التصحيح حسب الكشف' }), () => `صُحح ${d.number} ليطابق الكشف ورُبط السطر به.`);
+        }}>تصحيح حسب الكشف ومطابقة</Button>
+      </div>)}
+      <div className="acc-suggest__row"><span>إن كانت عملية مختلفة فعلًا: سجّلها وأكّد أنها ليست تكرارًا.</span>
+        <Button size="small" onClick={() => openEntry(row)}>عملية مختلفة</Button></div>
+    </div>;
     const partner = partnerHints[row._id] || [];
     const transfers = transferHints[row._id];
     const yuan = yuanHints[row._id];
     if (yuan) {
       if (yuan.beforeCount) return <div className="acc-suggest acc-suggest--found">
         <span>✓ <b>شراء يوان من {yuan.broker.name} قبل الجرد:</b> رصيد Alipay المجرود يشمله، فلا قيد له</span>
-        <Button size="small" variant="contained" color="success" onClick={() => run(() => acc.post(`bank/lines/${row._id}/cover`, { note: `شراء يوان من ${yuan.broker.name}` }), () => 'أُغلق السطر: مغطى بالجرد دون قيد.')}>ربط (مغطى بالجرد)</Button>
+        <Button size="small" variant="contained" color="success" onClick={() => runInRow(row._id, () => acc.post(`bank/lines/${row._id}/cover`, { note: `شراء يوان من ${yuan.broker.name}` }), () => 'أُغلق السطر بدون قيد: حصلت قبل الجرد.')}>إغلاق: حصلت قبل الجرد</Button>
       </div>;
       return <div className="acc-suggest acc-suggest--found">
         {yuan.existing.slice(0, 2).map((p: any) => <div key={p._id} className="acc-suggest__row">
@@ -440,14 +631,16 @@ const BankReconciliation = () => {
       </div>;
     }
     const pick = partnerAccount && row.amount > 0 && <Button size="small" onClick={() => setPicker({ kind: 'deposits', line: row })}>اختيار إيداعات بنفسي</Button>;
-    if (transfers) {
-      const found = transfers.parts.filter((p: any) => p.bill);
+    // Transfers paid already (their dollar payments are in the books): the operations adding up to the line come first
+    if (transfers && (transfers.complete || !hint?.combinations?.length)) {
+      const found = transfers.parts.filter((p: any) => p.choice);
+      const reason = transfers.splitError || (found.length === transfers.parts.length && !transfers.broker && transfers.parts.some((p: any) => p.choice === 'new') ? 'حدد الوسيط الذي باع اليوان' : '');
       return <div className={`acc-suggest ${transfers.complete ? 'acc-suggest--found' : 'acc-suggest--class'}`}>
-        <span>{transfers.complete ? '✓' : '⚠'} <b>{transfers.complete ? 'مطابقة مقترحة' : `وُجد ${found.length} من ${transfers.parts.length}`}:</b> حوالات Alipay {transfers.parts.map((p: any, i: number) => <span key={i}>{i > 0 && ' + '}<Ltr>{p.amount.toLocaleString('en-US')}¥</Ltr>{p.bill ? <> ← <Ltr>{p.bill.number}</Ltr>{p.bill.orders.length > 0 && <> (طلبية <Ltr>{p.bill.orders.join('، ')}</Ltr>)</>}</> : <b> ← لا توجد فاتورة</b>}</span>)}
-          {!transfers.complete && ' · أضف مشتريات الطلبية الناقصة باليوان، أو اختر الفواتير بنفسك'}</span>
+        <span>{transfers.complete ? '✓' : '⚠'} <b>{transfers.complete ? 'مطابقة مقترحة' : `وُجد ${found.length} من ${transfers.parts.length}`}:</b> حوالات Alipay {transfers.parts.map((p: any, i: number) => <span key={i}>{i > 0 && ' + '}<Ltr>{p.amount.toLocaleString('en-US')}¥</Ltr> ← {partLabel(p)}{p.usd !== undefined && <> = <b><Ltr>{p.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })}$</Ltr></b></>}</span>)}
+          {!transfers.complete && ` · ${reason || 'أضف مشتريات الطلبية الناقصة باليوان، أو حدد في «تفكيك السطر» أن الجزء شراء يوان'}`}</span>
         <span className="d-flex gap-1 flex-wrap">
-          {transfers.complete && <Button size="small" variant="contained" color="success" onClick={() => run(() => acc.post(`bank/lines/${row._id}/partner-transfers`, { billIds: transfers.parts.map((p: any) => p.bill.billId) }), () => `سُددت ${transfers.parts.length} فواتير حوالات من السطر دون تكرار التكلفة.`)}>اعتماد وسداد الفواتير</Button>}
-          <Button size="small" onClick={() => setPicker({ kind: 'transfers', line: row, preset: found.map((p: any) => String(p.bill.billId)) })}>اختيار الفواتير بنفسي</Button>
+          {transfers.complete && <Button size="small" variant="contained" color="success" onClick={() => run(() => acc.post(`bank/lines/${row._id}/partner-transfers`, { parts: proposedParts(transfers) }), () => `طوبق السطر وقُسّم دولاره على ${transfers.parts.length} أجزاء دون تكرار التكلفة.`)}>اعتماد ومطابقة</Button>}
+          <Button size="small" onClick={() => setPicker({ kind: 'grouped', line: row, proposal: transfers })}>تفكيك السطر</Button>
         </span>
       </div>;
     }
@@ -457,7 +650,7 @@ const BankReconciliation = () => {
           {p.daysApart ? ` (فرق ${p.daysApart} يوماً)` : ' (نفس اليوم)'}{p.difference !== 0 && <> · <b>فرق المبلغ <Ltr>{(p.difference / 100).toFixed(2)}$</Ltr></b></>}{p.note && ` · ${p.note}`}
           {p.beforeCount ? <> · <b>قبل الجرد</b>: رصيد الجرد يشمله، يُربط للمتابعة دون قيد</>
             : !p.onAccount && <> · مسجل على «{p.recordedOn || 'خزينة'}» وسيُنقل إلى {account?.name}</>}</span>
-        <Button size="small" variant="contained" color="success" onClick={() => applyPartnerDeposit(row, p)}>{p.beforeCount ? 'ربط (مغطى بالجرد)' : p.onAccount ? 'اعتماد المطابقة' : 'نقل ومطابقة'}</Button>
+        <Button size="small" variant="contained" color="success" onClick={() => applyPartnerDeposit(row, p)}>{p.beforeCount ? 'إغلاق: حصلت قبل الجرد' : p.onAccount ? 'اعتماد المطابقة' : 'نقل ومطابقة'}</Button>
       </div>)}
       {partner.length > 3 && <Sub>و{partner.length - 3} إيداعات أخرى قريبة المبلغ؛ الأقرب أولاً.</Sub>}
       {pick}
@@ -472,6 +665,22 @@ const BankReconciliation = () => {
         <Button size="small" variant="outlined" onClick={() => openEntry(row)}>مراجعة تكلفة الرحلة</Button>
       </div>;
     }
+    // Operations in the books adding up to the line (one alone, or two or three together): every
+    // possibility is listed, the person approves the right one or says it is none of them
+    if (hint?.combinations?.length) {
+      const amountText = (minor: number) => `${(Math.abs(minor) / 10 ** decimals).toLocaleString('en-US', { maximumFractionDigits: decimals })} ${currency}`;
+      const options = [...(hint.duplicates || []).map((d: any) => ({ entries: [{ ...d, amount: row.amount }] })), ...hint.combinations];
+      return <div className="acc-suggest acc-suggest--found">
+        <span>✓ <b>{options.length === 1 ? 'مطابقة محتملة' : `${options.length} احتمالات`}:</b> قيود مسجلة مجموعها مبلغ السطر · اعتمد الصحيح، أو «ليس أي منها»</span>
+        {options.map((option: any, i: number) => <div key={i} className="acc-suggest__row">
+          <span>{option.strong && <><Badge tone="ok">نفس رقم العملية</Badge> </>}{option.entries.map((e: any, j: number) => <span key={e._id}>{j > 0 && ' + '}{e.original?.currency && e.original.currency !== currency && e.original.amount != null && <><Ltr>{Number(e.original.amount).toLocaleString('en-US')} {e.original.currency}</Ltr> = </>}<b><Ltr>{amountText(e.amount)}</Ltr></b> {e.original?.party ? `${e.original.kind === 'salary' ? 'راتب' : e.original.kind === 'yuan' ? 'شراء يوان' : 'دفعة'} ${e.original.party}` : e.description} (<Ltr>{e.number}</Ltr> · <Ltr>{e.day}</Ltr>)</span>)}</span>
+          <Button size="small" variant={i === 0 ? 'contained' : 'outlined'} color="success" onClick={() => runInRow(row._id, () => acc.post(`bank/lines/${row._id}/match`, { entryIds: option.entries.map((e: any) => e._id) }),
+            () => (option.entries.length === 1 ? 'طوبق السطر مع القيد.' : `طوبق السطر مع ${option.entries.length} قيود معًا.`))}>اعتماد هذا</Button>
+        </div>)}
+        {hint.moreCombinations > 0 && <Sub>و{hint.moreCombinations} احتمالات أخرى أبعد تاريخًا؛ استعمل المطابقة اليدوية إن لم يكن الصحيح هنا.</Sub>}
+        <span><Button size="small" onClick={() => run(() => acc.post(`bank/lines/${row._id}/combinations-dismiss`, { dismissed: true }), () => 'لن تُقترح هذه القيود لهذا السطر بعد الآن.')}>ليس أي منها</Button></span>
+      </div>;
+    }
     if (hint?.duplicates?.length) return <div className="acc-suggest acc-suggest--found"><span>✓ <b>مطابقة مقترحة:</b> قيد مسجل بنفس المبلغ {hint.duplicates.slice(0, 2).map((d: any) => <Ltr key={d._id}>{d.number} ({d.day}) </Ltr>)}{hint.duplicates.length > 1 && ' · أكثر من قيد محتمل'}</span>
       <Button size="small" variant="contained" color="success" onClick={() => openEntry(row)}>مراجعة واعتماد</Button></div>;
     if (hint?.billCandidates?.length) {
@@ -479,10 +688,16 @@ const BankReconciliation = () => {
       return <div className="acc-suggest acc-suggest--found"><span>✓ <b>فاتورة مقترحة:</b> {billLabel(bill)}{hint.billCandidates.length > 1 && ` · ${hint.billCandidates.length} فواتير محتملة`}</span>
         <Button size="small" variant="contained" color="success" onClick={() => openEntry(row)}>مراجعة واعتماد</Button></div>;
     }
+    // The line's vendor has unpaid bills: paying them comes before any proposal of a new cost
+    if (hint?.vendorBills && row.amount < 0) return <div className="acc-suggest acc-suggest--found">
+      <span>✓ <b>فواتير غير مسددة للمورد {hint.vendorBills.vendorName}:</b> {hint.vendorBills.count === 1 ? 'فاتورة واحدة' : `${hint.vendorBills.count} فواتير`} · المتبقي عليها{' '}
+        {hint.vendorBills.currency && hint.vendorBills.total !== null ? <Amount value={hint.vendorBills.total} currency={hint.vendorBills.currency} /> : <Money value={hint.vendorBills.totalUsd} />}
+        {' '}· سدّدها من هذا السطر بدل تسجيل تكلفة جديدة</span>
+      <Button size="small" variant="contained" color="success" onClick={() => openEntry(row)}>سداد الفواتير</Button></div>;
     const counter = hint?.account && accounts.find((a) => a._id === hint.account._id);
     if (counter?.isCash && isBeforeCount(count, row.day)) return <div className="acc-suggest acc-suggest--found">
       <span>✓ <b>قبل الجرد:</b> {row.amount > 0 ? 'وارد من' : 'صادر إلى'} {counter.name} · الحسابان مجرودان ورصيد الجرد يشمل الحركة، فلا قيد لها</span>
-      <Button size="small" variant="contained" color="success" onClick={() => run(() => acc.post(`bank/lines/${row._id}/cover`, { note: `${row.amount > 0 ? 'تحويل من' : 'تحويل إلى'} ${counter.name}` }), () => 'أُغلق السطر: مغطى بالجرد دون قيد.')}>ربط (مغطى بالجرد)</Button>
+      <Button size="small" variant="contained" color="success" onClick={() => runInRow(row._id, () => acc.post(`bank/lines/${row._id}/cover`, { note: `${row.amount > 0 ? 'تحويل من' : 'تحويل إلى'} ${counter.name}` }), () => 'أُغلق السطر بدون قيد: حصلت قبل الجرد.')}>إغلاق: حصلت قبل الجرد</Button>
     </div>;
     if (hint?.account) return <div className="acc-suggest acc-suggest--class"><span>• <b>لا توجد مطابقة</b> · تصنيف مقترح كعملية جديدة: {hint.account.code} · {hint.account.name} <Badge tone={hint.source === 'history' ? 'info' : 'accent'}>{sourceText(hint)}</Badge>{hint.link && <> <Open to={`/invoice/${hint.link.orderId}/edit`}>طلبية <Ltr>{hint.link.orderNumber}</Ltr></Open></>}</span></div>;
     return <div className="acc-suggest acc-suggest--none"><span>✗ <b>لا توجد مطابقة مقترحة</b> · راجعها يدوياً، أو «لا أعرف بعد» إن لم تُعرف</span>{pick}</div>;
@@ -523,7 +738,7 @@ const BankReconciliation = () => {
   const unmatchedCount = (data?.lines || []).filter((l: any) => l.lineStatus === 'unmatched').length;
   const readyCount = (data?.lines || []).filter((l: any) => l.lineStatus === 'unmatched' && (suggested[l._id]?.exactMatch || (suggested[l._id]?.account && !suggested[l._id]?.requiresConfirmation && !suggested[l._id]?.duplicates?.length))).length;
   const doubtCount = (data?.lines || []).filter((l: any) => l.lineStatus === 'unmatched' && suggested[l._id]?.duplicates?.length).length;
-  const proposedCount = (data?.lines || []).filter((l: any) => l.lineStatus === 'unmatched' && (partnerHints[l._id]?.length || transferHints[l._id]?.complete || yuanHints[l._id]?.existing?.length || suggested[l._id]?.duplicates?.length || suggested[l._id]?.billCandidates?.length || suggested[l._id]?.tripCandidates?.length)).length;
+  const proposedCount = (data?.lines || []).filter((l: any) => l.lineStatus === 'unmatched' && (partnerHints[l._id]?.length || transferHints[l._id]?.complete || yuanHints[l._id]?.existing?.length || suggested[l._id]?.duplicates?.length || suggested[l._id]?.combinations?.length || suggested[l._id]?.billCandidates?.length || suggested[l._id]?.tripCandidates?.length)).length;
 
   return (
     <>
@@ -531,7 +746,7 @@ const BankReconciliation = () => {
         onClose={() => setReferenceReview(null)} onDone={async () => { setReferenceReview(null); await load(); }} />}
       {groupMatchLines && <BankGroupMatch lines={groupMatchLines} movements={data?.unmatchedMovements || []} currency={currency}
         onClose={() => setGroupMatchLines(null)} onDone={async () => { setGroupMatchLines(null); await load(); }} />}
-      {integrityOpen && <BankIntegrityDialog accountId={accountId} currency={currency} onClose={() => setIntegrityOpen(false)} onDone={load} />}
+      {integrityOpen && <BankIntegrityDialog accountId={accountId} currency={currency} onClose={() => setIntegrityOpen(false)} onDone={() => load()} />}
       {settingsDraft && <BankMatchingSettings value={settingsDraft} accountName={account?.name || ''} onChange={setSettingsDraft} onClose={() => setSettingsDraft(null)} onSave={() => {
         try {
           localStorage.setItem(`acc-bank-matching:${accountId}`, JSON.stringify(settingsDraft));
@@ -557,12 +772,24 @@ const BankReconciliation = () => {
           }}>{confirming ? 'جارٍ التنفيذ…' : confirmBox?.label}</Button>
         </DialogActions>
       </Dialog>
+      {payBillsLines && <BankBillsPayPicker lines={payBillsLines} onClose={() => setPayBillsLines(null)}
+        onDone={async (text) => { setPayBillsLines(null); bulk.selection.onChange(new Set()); setMessage({ type: 'success', text }); await load({ quiet: true }); }} />}
+      {bulkPostLines && <BankBulkPost lines={bulkPostLines} hints={suggested} accounts={detailAccounts} currency={currency} decimals={decimals} office={account?.office || undefined}
+        isBeforeCountCost={(line, id) => beforeCountCost(line, id)} onClose={() => setBulkPostLines(null)}
+        onDone={async () => { bulk.selection.onChange(new Set()); await load({ quiet: true }); }} />}
       {picker?.kind === 'yuan' && <YuanPurchaseDialog lines={picker.lines} hints={yuanHints} accounts={accounts} onClose={() => setPicker(null)} onDone={(text) => { setPicker(null); bulk.selection.onChange(new Set()); setMessage({ type: 'success', text }); load(); }} />}
       {picker?.kind === 'deposits' && <DepositPicker line={picker.line} accountName={account?.name} onClose={() => setPicker(null)} onDone={(text) => { setPicker(null); setMessage({ type: 'success', text }); load(); }} />}
-      {picker?.kind === 'transfers' && <TransferPicker line={picker.line} preset={picker.preset} onClose={() => setPicker(null)} onDone={(text) => { setPicker(null); setMessage({ type: 'success', text }); load(); }} />}
+      {picker?.kind === 'grouped' && <GroupedLineDialog line={picker.line} proposal={picker.proposal} accounts={accounts} onClose={() => setPicker(null)} onDone={(text) => { setPicker(null); setMessage({ type: 'success', text }); load(); }} />}
+      {coverFor && count && <Dialog open onClose={() => setCoverFor(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>حصلت قبل الجرد</DialogTitle>
+        <DialogContent>
+          <CoverBeforeCount line={coverFor} count={count} amount={money(Math.abs(coverFor.amount))} onCancel={() => setCoverFor(null)}
+            onSubmit={(input) => { const line = coverFor; setCoverFor(null); coverLine(line, input); }} />
+        </DialogContent>
+      </Dialog>}
       {parkFor && <UnidentifiedPark line={parkFor} currency={currency} decimals={decimals} liability={account?.type === 'liability'} maybeDuplicate={!!suggested[parkFor._id]?.duplicates?.length}
         onClose={() => setParkFor(null)} onDone={() => { setParkFor(null); setMessage({ type: 'success', text: 'سُجّلت الحركة قيد التحديد. تابعها من «حركات قيد التحديد».' }); load(); }} />}
-      {detailsId && <BankLineDetails key={detailsId} id={detailsId} onClose={() => setDetailsId(null)} onChanged={load} onReview={async (line) => {
+      {detailsId && <BankLineDetails key={detailsId} id={detailsId} onClose={() => setDetailsId(null)} onChanged={() => load()} onReview={async (line) => {
         try {
           const [hints, lines] = await Promise.all([acc.get('bank/suggestions', { accountId }), acc.get('bank/lines', { accountId })]);
           setSuggested(hints.data); setDetailsId(null); openEntry(line, hints.data, lines.data);
@@ -573,6 +800,10 @@ const BankReconciliation = () => {
         subtitle="ارفع كشف الحساب Excel أو PDF. ما هو مسجل في الدفاتر يُطابق تلقائياً، والباقي يُرحَّل إلى حسابه. السطر المستورد من قبل لا يُستورد مرتين، والسطر الذي أدخلته يدوياً لا يُسجَّل مرة ثانية."
       />
       {message && <Alert severity={message.type} className="mb-3" onClose={() => setMessage(null)}>{message.text}</Alert>}
+      {queueSize > 0 && <Alert severity="info" className="mb-3">
+        {queueSize === 1 ? 'يُعتمد سطر واحد الآن' : `${queueSize} سطور تُعتمد بالتسلسل`}. تابع مراجعة السطور الأخرى؛ تُحدَّث الصفحة عند انتهائها.</Alert>}
+      {hintsError && <Alert severity="warning" className="mb-3" action={<Button color="inherit" size="small" disabled={isLoading} onClick={() => load()}>إعادة المحاولة</Button>}>{hintsError}</Alert>}
+      <BankImportProgress state={importProgress} onClose={closeImportProgress} onKeepWaiting={keepWaiting} />
       {settlingDuplicates && accountId && <BankDuplicateSettlement key={accountId} accountId={accountId} onClose={() => setSettlingDuplicates(false)} onDone={text => { setSettlingDuplicates(false); setMessage({ type: 'success', text }); load(); }} />}
       {data?.bankTrialRunId && <Alert severity="info" className="mb-3">
         تجربة كشف ضمن التشغيل <Ltr>{data.bankTrialRunId}</Ltr>: الترحيل يؤثر على التقارير الآن. الإلغاء يزيل آثار التجربة ويُبقي السطور للمراجعة؛ الاعتماد يحفظ النتائج.
@@ -622,8 +853,8 @@ const BankReconciliation = () => {
             <TextField select size="small" label="اتجاه الحركة" value={direction} onChange={e => setDirection(e.target.value)}>
               <MenuItem value="">وارد وصادر</MenuItem><MenuItem value="in">وارد</MenuItem><MenuItem value="out">صادر</MenuItem>
             </TextField>
-            <TextField size="small" type="date" label="من تاريخ" value={from} onChange={e => setFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
-            <TextField size="small" type="date" label="إلى تاريخ" value={to} onChange={e => setTo(e.target.value)} InputLabelProps={{ shrink: true }} error={!!(from && to && from > to)} />
+            <DayField size="small" label="من تاريخ" value={from} onChange={e => setFrom(e.target.value)} InputLabelProps={{ shrink: true }} />
+            <DayField size="small" label="إلى تاريخ" value={to} onChange={e => setTo(e.target.value)} InputLabelProps={{ shrink: true }} error={!!(from && to && from > to)} />
           </div>
           <div className="acc-bank-filter-note"><Sub>الاقتراح لا يُعتبر مطابقة معتمدة. يمكنك تصفية حالة الترحيل والربط بالمستند كلًّا على حدة.</Sub></div>
           {from && to && from > to && <Alert severity="warning" className="mt-2">تاريخ البداية يجب أن يكون قبل تاريخ النهاية أو مساويًا له.</Alert>}
@@ -635,19 +866,49 @@ const BankReconciliation = () => {
         هذا الحساب مرتبط بمحفظة العميل <Ltr>{(account as any)?.walletCustomerCode || 'N999'}</Ltr>. عند رفع الكشف تُطابق الإيداعات تلقائيًا إذا تطابق المبلغ والتاريخ وكان هناك احتمال واحد فقط. الفروق والحالات المتشابهة تبقى للمراجعة، ولا تُضاف قيمة جديدة للمحفظة.
       </Alert>}
 
-      {accountId && data && (
+      {accountId && data && (() => {
+        // A guarantee the bank counts inside this balance (linked by the owner): the statement is
+        // compared with the bank plus the guarantee; the bank's own balance stays what can be spent
+        const held = data.heldAccount;
+        const heldNow = held ? held.balance.foreign : 0;
+        const heldAtStatement = held ? (held.atStatement || held.balance).foreign : 0;
+        const booksAtStatement = (data.bookBalanceAtStatement || data.bookBalance).foreign + heldAtStatement;
+        const differs = data.statementBalance != null && Math.abs(data.statementBalance - booksAtStatement) >= 0.005;
+        return (
         <StatGrid>
-          <Stat label="الرصيد الحالي في الدفاتر" value={money(data.bookBalance.foreign)} tone="accent" hint={data.bookBalanceAtStatement && data.bookBalanceAtStatement.foreign !== data.bookBalance.foreign
-            ? <>بتاريخ الكشف {data.statementBalanceDay}: {money(data.bookBalanceAtStatement.foreign)}</> : undefined} />
-          <Stat label="الرصيد حسب الكشف" value={data.statementBalance == null ? '-' : money(data.statementBalance)} tone={data.statementBalanceStatus === 'ambiguous' || (data.statementBalance != null && data.statementBalance !== (data.bookBalanceAtStatement || data.bookBalance).foreign) ? 'warn' : undefined}
-            hint={data.statementBalanceStatus === 'ambiguous' ? 'تسلسل أرصدة آخر يوم غير مكتمل أو متعارض؛ راجع الكشف.' : data.statementBalance != null ? <>
-              حتى {data.statementBalanceDay || 'آخر كشف'} · {data.statementBalance !== (data.bookBalanceAtStatement || data.bookBalance).foreign
-                ? <>فرق الدفاتر بنفس التاريخ: {money(data.statementBalance - (data.bookBalanceAtStatement || data.bookBalance).foreign)}</> : 'مطابق للدفاتر بنفس التاريخ'}
-            </> : 'الكشف لا يحتوي رصيدًا ختاميًا يمكن التحقق منه'} />
+          <Stat label="الرصيد الحالي في الدفاتر" value={money(data.bookBalance.foreign)} tone="accent" hint={<>
+            {data.bookBalanceAtStatement && data.bookBalanceAtStatement.foreign !== data.bookBalance.foreign && <>بتاريخ الكشف {data.statementBalanceDay}: {money(data.bookBalanceAtStatement.foreign)}</>}
+            {held && <Sub>+ ضمان <Ltr>{held.code}</Ltr>: {money(heldNow)} = {money(data.bookBalance.foreign + heldNow)}</Sub>}
+          </>} />
+          <Stat label="الرصيد حسب الكشف" value={data.statementBalance == null ? '-' : money(data.statementBalance)} tone={data.statementBalanceStatus === 'ambiguous' || differs ? 'warn' : undefined}
+            hint={<>
+              {data.statementBalanceStatus === 'ambiguous' ? 'تسلسل أرصدة آخر يوم غير مكتمل أو متعارض؛ راجع الكشف.' : data.statementBalance != null ? <>
+                حتى {data.statementBalanceDay || 'آخر كشف'} · {differs
+                  ? <>فرق الدفاتر{held ? ' مع الضمان' : ''} بنفس التاريخ: {money(data.statementBalance - booksAtStatement)}</> : held ? 'مطابق للدفاتر مع الضمان' : 'مطابق للدفاتر بنفس التاريخ'}
+              </> : 'الكشف لا يحتوي رصيدًا ختاميًا يمكن التحقق منه'}
+              <Sub>
+                <button type="button" className="acc-link-button acc-link" onClick={() => setHeldOpen(true)}>
+                  {held ? <>يشمل ضمان <Ltr>{held.code}</Ltr> {held.name} · تغيير</> : 'البنك يحتسب ضمانًا داخل الرصيد؟ اربطه'}
+                </button>
+              </Sub>
+            </>} />
           <Stat label="جاهز للترحيل" value={filter === 'unmatched' ? readyCount : '-'} hint={filter === 'unmatched' ? `من ${unmatchedCount} غير مطابق` : 'اعرض غير المطابق'} />
           <Stat label="لها مطابقة مقترحة" value={filter === 'unmatched' ? proposedCount : '-'} tone={proposedCount ? 'accent' : undefined} hint="✓ في سطورها أدناه" />
           <Stat label="قد يكون مكرراً" value={filter === 'unmatched' ? doubtCount : '-'} tone={doubtCount ? 'warn' : undefined} hint="له قيد بنفس المبلغ في الدفاتر" />
         </StatGrid>
+        );
+      })()}
+      {accountId && <HeldAccountLink accountId={accountId} open={heldOpen} onClose={() => setHeldOpen(false)} onSaved={() => load({ quiet: true })} />}
+      {/* Movements missing from inside the statement: where its running balance jumps with no line */}
+      {accountId && data?.statementTrail?.status === 'gaps' && (
+        <Alert severity="warning" className="mb-3">
+          <strong>الكشف ناقص: {data.statementTrail.gapCount === 1 ? 'فجوة واحدة' : `${data.statementTrail.gapCount} فجوات`} في تسلسل الرصيد.</strong> رصيد الكشف ينتقل فيها دون حركة مسجلة هنا: صفحة أو أيام لم تُرفع، أو سطر استُبعد عند الاستيراد. ارفع كشف تلك الأيام حتى لا تضيع تكلفتها.
+          {data.statementTrail.gaps.slice().reverse().slice(0, 5).map((gap: any, index: number) => (
+            <Sub key={index}>• {gap.afterDay === gap.beforeDay ? <>في يوم <Ltr>{gap.afterDay}</Ltr></> : <>بين <Ltr>{gap.afterDay}</Ltr> و <Ltr>{gap.beforeDay}</Ltr></>}
+              : حركات ناقصة مجموعها {money(gap.missing)} · الرصيد {money(gap.expected)} ثم {money(gap.found)}</Sub>
+          ))}
+          {data.statementTrail.gapCount > 5 && <Sub>… و{data.statementTrail.gapCount - 5} فجوات أقدم.</Sub>}
+        </Alert>
       )}
 
       {accountId && (
@@ -655,41 +916,35 @@ const BankReconciliation = () => {
         <StatementCoverage onPick={(id) => setAccountId(id)} />
         <Panel flush title="سطور الكشف" subtitle={data ? `عرض ${data.lines.length} من ${data.total ?? data.lines.length} سطر حسب الفلاتر · حدّد السطور أو عالج كل سطر وحده.` : 'حدّد السطور أو عالج كل سطر وحده.'}>
           {data?.hasMore && <Alert severity="info" className="mx-3 mb-2">يوجد أكثر من 500 نتيجة؛ ضيّق نطاق التاريخ أو البحث لعرض السطور المطلوبة. الفلترة تُطبّق على كامل الكشف.</Alert>}
-          {bulk.bar}
-          {bulk.selection.selected.size > 0 && <div className="px-3 pb-2">
-            <Button variant="outlined" disabled={!(data?.lines || []).some((l: any) => bulk.selection.selected.has(l._id) && l.lineStatus === 'unmatched')}
-              onClick={() => setGroupMatchLines((data?.lines || []).filter((l: any) => bulk.selection.selected.has(l._id) && l.lineStatus === 'unmatched'))}>مطابقة المحدد مع دفعة أو مجموعة قيود</Button>
-            <Button size="small" variant="outlined" disabled={!!translationProgress} onClick={async () => {
-              const picked = (data?.lines || []).filter((row: any) => bulk.selection.selected.has(row._id) && canTranslateDescription(row)
-                && row.descriptionTranslation?.original !== row.description);
+          {(() => {
+            // One bar for the selection: post · match · close, then "cancel selection" at the end
+            const picked = (data?.lines || []).filter((l: any) => bulk.selection.selected.has(l._id));
+            const open = picked.filter((l: any) => l.lineStatus === 'unmatched');
+            const outgoing = open.filter((l: any) => l.amount < 0);
+            const yuanPicked = open.filter((l: any) => yuanHints[l._id] && !yuanHints[l._id].beforeCount);
+            const toTranslate = picked.filter((row: any) => canTranslateDescription(row) && row.descriptionTranslation?.original !== row.description);
+            const translate = async () => {
               let completed = 0; const failures: string[] = [];
-              for (let index = 0; index < picked.length; index++) {
-                setTranslationProgress({ done: index, total: picked.length });
-                try { await acc.post(`bank/lines/${picked[index]._id}/translate`); completed++; }
-                catch (err: any) { failures.push(`${picked[index].day}: ${errorText(err)}`); break; }
+              for (let index = 0; index < toTranslate.length; index++) {
+                setTranslationProgress({ done: index, total: toTranslate.length });
+                try { await acc.post(`bank/lines/${toTranslate[index]._id}/translate`); completed++; }
+                catch (err: any) { failures.push(`${toTranslate[index].day}: ${errorText(err)}`); break; }
               }
               setTranslationProgress(null);
-              setMessage({ type: failures.length ? 'error' : 'success', text: `تُرجم ${completed} من ${picked.length} بيان. ${failures.join(' · ')}` });
+              setMessage({ type: failures.length ? 'error' : 'success', text: `تُرجم ${completed} من ${toTranslate.length} بيان. ${failures.join(' · ')}` });
               await load();
-            }}>{translationProgress ? `جارٍ الترجمة ${translationProgress.done}/${translationProgress.total}` : 'ترجمة بيانات المحدد للعربية'}</Button>
-          </div>}
-          {(() => {
-            const picked = (data?.lines || []).filter((l: any) => bulk.selection.selected.has(l._id) && l.lineStatus === 'unmatched' && l.amount < 0);
-            const yuanPicked = (data?.lines || []).filter((l: any) => bulk.selection.selected.has(l._id) && l.lineStatus === 'unmatched' && yuanHints[l._id] && !yuanHints[l._id].beforeCount);
-            if (yuanPicked.length) return (
-              <div className="px-3 pb-2">
-                <Button size="small" variant="contained" color="success" onClick={() => setPicker({ kind: 'yuan', lines: yuanPicked })}>
-                  تسجيل شراء يوان للمحدد ({yuanPicked.length})
-                </Button>
-              </div>
-            );
-            return picked.length > 0 && (
-              <div className="px-3 pb-2">
-                <Button size="small" variant="outlined" onClick={() => setGroup({ lines: picked, order: null, items: [], itemId: '', confirmDifference: false })}>
-                  ربط المحدد ({picked.length}) بمشتريات طلب واحدة
-                </Button>
-              </div>
-            );
+            };
+            const lead = open.length > 0 && <>
+              <Button size="small" variant="contained" color="success" disableElevation onClick={() => setBulkPostLines(open)}>مراجعة وترحيل ({open.length})</Button>
+              {yuanPicked.length > 0 && <Button size="small" variant="contained" color="success" disableElevation onClick={() => setPicker({ kind: 'yuan', lines: yuanPicked })}>تسجيل شراء يوان ({yuanPicked.length})</Button>}
+            </>;
+            const extra = (open.length > 0 || toTranslate.length > 0) && <>
+              {open.length > 0 && <Button size="small" variant="text" onClick={() => setGroupMatchLines(open)}>مطابقة مع دفعة أو قيود</Button>}
+              {outgoing.length > 0 && outgoing.length === open.length && <Button size="small" variant="text" onClick={() => setPayBillsLines(outgoing)}>تسوية مع فواتير ({outgoing.length})</Button>}
+              {!yuanPicked.length && outgoing.length > 0 && <Button size="small" variant="text" onClick={() => setGroup({ lines: outgoing, order: null, items: [], itemId: '', confirmDifference: false })}>ربط بمشتريات طلب ({outgoing.length})</Button>}
+              {toTranslate.length > 0 && <Button size="small" variant="text" disabled={!!translationProgress} onClick={translate}>{translationProgress ? `جارٍ الترجمة ${translationProgress.done}/${translationProgress.total}` : 'ترجمة للعربية'}</Button>}
+            </>;
+            return bulk.barWith(lead || undefined, extra || undefined);
           })()}
           <DataTable
             selection={{ ...bulk.selection, selectable: (row: any) => localBankResetHost() || bulk.selection.selectable(row) }}
@@ -716,8 +971,8 @@ const BankReconciliation = () => {
                       {row.unidentified?.status === 'decided' && <Sub><Badge tone="muted">صُنّفت بقرار المالك</Badge></Sub>}
                       {row.pendingRefund && <Sub><Badge tone="warn">استرداد مرحّل قيد التحديد</Badge>يُربط لاحقاً من تبويب الريفاند داخل الطلبية؛ البنك استلم المبلغ بالفعل.</Sub>}
                       {row.historicalSettlementPaymentId && <Sub><Badge tone="info">تسوية سداد تاريخي — دون تكلفة جديدة</Badge><Ltr>{row.historicalSettlementPaymentId.number}</Ltr> · المعلّق: <Ltr>{(row.historicalSettlementUsd / 100).toFixed(2)} USD</Ltr></Sub>}
-                      {row.partnerStatementIds?.length > 0 && <Sub><Badge tone="ok">مربوط بـ {row.partnerStatementIds.length} إيداع محفظة · مغطى بالجرد</Badge> لا قيد لهذا السطر؛ رصيد الجرد يشمله.</Sub>}
-                      {row.coveredNote && <Sub><Badge tone="ok">مغطى بالجرد</Badge> {row.coveredNote}</Sub>}
+                      {row.partnerStatementIds?.length > 0 && <Sub><Badge tone="ok">مربوط بـ {row.partnerStatementIds.length} إيداع محفظة · حصل قبل الجرد</Badge> لا قيد لهذا السطر؛ رصيد الجرد يشمله.</Sub>}
+                      {row.coveredNote && <Sub><Badge tone="ok">حصل قبل الجرد</Badge> {row.coveredNote}</Sub>}
                       {row.groupPaymentIds?.length > 0 && <Sub><Badge tone="info">سداد حوالات من السطر</Badge> {row.groupPaymentIds.length} دفعة؛ «تراجع» يلغيها وتعود الفواتير غير مسددة.</Sub>}
                       {row.matchedEntryIds?.length > 0 && <Sub>مطابق مع <Ltr>{row.matchedEntryIds.map((e: any) => e.number).join('، ')}</Ltr></Sub>}
                       {row.entryId && <Sub>القيد <Ltr>{row.entryId.number}</Ltr></Sub>}
@@ -728,7 +983,16 @@ const BankReconciliation = () => {
                       {row.counterAmount > 0 && !row.originalAmount && <Sub>الطرف المقابل: <Ltr>{row.counterAmount} {row.counterCurrency}</Ltr>{row.exchangeRate > 0 && <Sub>سعر العملية: <Ltr>{Number(row.exchangeRate).toFixed(6)} {currency === 'TRY' ? `TRY/${row.counterCurrency}` : `${row.counterCurrency}/${currency}`}</Ltr></Sub>}</Sub>}
                       {row.crossRate > 0 && <Sub>السعر المباشر: <Ltr>{Number(row.crossRate).toFixed(6)} {row.rateQuoteCurrency}/{row.rateBaseCurrency}</Ltr></Sub>}
                       {row.settlementUsd > 0 && <Sub>مقابل الدولار في الكشف: <Ltr>{row.settlementUsd} USD</Ltr></Sub>}
-                      {row.lineStatus === 'unmatched' && suggestionLine(row)}
+                      {row.lineStatus === 'unmatched' && <div className={`acc-row-action${rowLocked(row) ? ' acc-row-action--busy' : ''}`} aria-busy={!!rowJobs[row._id]}>
+                        {rowJobs[row._id] === 'running' && <LinearProgress className="acc-row-action__bar" color="success" />}
+                        {suggestionLine(row)}
+                      </div>}
+                      {rowJobs[row._id] && <div className={`acc-row-queue acc-row-queue--${rowJobs[row._id]}`} role="status">
+                        {rowJobs[row._id] === 'running' ? 'جارٍ الاعتماد…' : 'في الطابور: يُعتمد بعد السطور السابقة'}</div>}
+                      {doneLines[row._id] && <div className="acc-row-done" role="status"><Check size={15} strokeWidth={2.4} /> {doneLines[row._id]}</div>}
+                      {failedLines[row._id] && <Alert severity="error" className="mt-2" onClose={() => setFailedLines((current) => withoutKey(current, row._id))}
+                        action={failedLines[row._id].reopen && <Button color="inherit" size="small" onClick={() => { const reopen = failedLines[row._id].reopen; setFailedLines((current) => withoutKey(current, row._id)); reopen?.(); }}>فتح المراجعة</Button>}>
+                        لم يُعتمد: {failedLines[row._id].text}</Alert>}
                       {row.lineStatus === 'unmatched' && !row.duplicateReviewPending && <MatchQuality quality={hint?.matchQuality} />}
                       {row.matchGroupId && <Sub>مطابقة مجموعة — فك الربط يعيد المجموعة كاملة للمراجعة</Sub>}
                       {row.duplicateResolvedToId && <Button size="small" onClick={() => setDetailsId(row.duplicateResolvedToId)}>نسخة مكررة — فتح السطر الأصلي</Button>}
@@ -747,28 +1011,32 @@ const BankReconciliation = () => {
               } },
               {
                 key: 'actions', header: '', align: 'end', render: (row: any) => (
-                  <span className="d-inline-flex gap-1 flex-wrap justify-content-end">
-                    <Button size="small" onClick={() => setDetailsId(row._id)}>التفاصيل والتعديل</Button>
-                    {row.lineStatus === 'unmatched' && <>
-                      <Button size="small" variant="outlined" onClick={() => row.walletImpact === 'unknown' ? setDetailsId(row._id) : openEntry(row)}>{row.walletImpact === 'unknown' ? 'تأكيد حساب الاستلام' : 'مراجعة واعتماد'}</Button>
-                      {row.walletImpact !== 'unknown' && <Tooltip title="سجّل المبلغ الآن في حساب انتظار حتى تعرف الطلبية أو الرحلة أو صاحب المال"><Button size="small" color="warning" onClick={() => setParkFor(row)}>لا أعرف بعد</Button></Tooltip>}
-                      <Button size="small" onClick={() => setConfirmBox({ title: 'تجاهل سطر الكشف؟', line: row, label: 'نعم، تجاهله',
+                  <div className="acc-row-actions">
+                    {row.lineStatus === 'unmatched' && <Button size="small" variant="contained" disableElevation className="acc-row-actions__main" disabled={rowLocked(row)}
+                      onClick={() => row.walletImpact === 'unknown' ? setDetailsId(row._id) : openEntry(row)}>{row.walletImpact === 'unknown' ? 'تأكيد حساب الاستلام' : 'مراجعة واعتماد'}</Button>}
+                    {row.lineStatus === 'unmatched' && (row.walletImpact !== 'unknown' || coverable(row)) && <div className="acc-row-actions__group">
+                      {row.walletImpact !== 'unknown' && <Tooltip title="سجّل المبلغ الآن في حساب انتظار حتى تعرف الطلبية أو الرحلة أو صاحب المال"><span><Button size="small" color="warning" disabled={rowLocked(row)} onClick={() => setParkFor(row)}>لا أعرف بعد</Button></span></Tooltip>}
+                      {coverable(row) && <Tooltip title="المال تحرك قبل الجرد ورصيد الجرد يشمله: يُغلق السطر بدون قيد"><span><Button size="small" disabled={rowLocked(row)} onClick={() => setCoverFor(row)}>حصلت قبل الجرد</Button></span></Tooltip>}
+                    </div>}
+                    <div className="acc-row-actions__group acc-row-actions__group--quiet">
+                      <Button size="small" color="inherit" onClick={() => setDetailsId(row._id)}>التفاصيل</Button>
+                      {row.lineStatus === 'unmatched' && <Button size="small" color="inherit" onClick={() => setConfirmBox({ title: 'تجاهل سطر الكشف؟', line: row, label: 'نعم، تجاهله',
                         text: 'لن يُرحَّل السطر ولن يُطابق، ولن يظهر ضمن «غير مطابق». لا يتغير أي رصيد. يمكنك إرجاعه لاحقاً بزر «تراجع».',
-                        action: () => run(() => acc.post(`bank/lines/${row._id}/ignore`), () => 'تم تجاهل السطر.') })}>تجاهل</Button>
-                    </>}
-                    {['matched', 'ignored'].includes(row.lineStatus) && <Button size="small" onClick={() => setConfirmBox({ title: row.lineStatus === 'matched' ? 'فك مطابقة السطر؟' : 'إرجاع السطر لغير مطابق؟', line: row, label: 'نعم، تراجع',
-                      text: row.groupPaymentIds?.length ? `سيعود السطر غير مطابق، وتُلغى ${row.groupPaymentIds.length} دفعة سددها للحوالات فتعود فواتيرها غير مسددة.`
-                        : row.lineStatus === 'matched' ? 'سيعود السطر غير مطابق ويُفك ربطه بالقيد. القيد نفسه يبقى؛ وإن سُجّل فرق إيداع عند المطابقة فيُعكس.'
-                          : 'سيعود السطر إلى «غير مطابق» لتعالجه من جديد.',
-                      action: () => run(() => acc.post(`bank/lines/${row._id}/unignore`), () => 'أُعيد السطر لغير مطابق.') })}>تراجع</Button>}
-                    {['unmatched', 'ignored'].includes(row.lineStatus) && (
-                      <Tooltip title="حذف السطر من الكشف (استُورد خطأً)">
-                        <IconButton size="small" color="error" onClick={() => setConfirmBox({ title: 'حذف السطر من الكشف؟', line: row, label: 'نعم، احذفه', danger: true,
-                          text: 'يُحذف السطر نهائياً من الكشف المستورد (لا قيد له). استعمله فقط لسطر استُورد خطأً؛ إن رفعت الملف نفسه مرة أخرى سيُستورد السطر من جديد.',
-                          action: () => run(() => acc.delete(`bank/lines/${row._id}`), () => 'حُذف السطر.') })}><Trash2 size={15} /></IconButton>
-                      </Tooltip>
-                    )}
-                  </span>
+                        action: () => run(() => acc.post(`bank/lines/${row._id}/ignore`), () => 'تم تجاهل السطر.') })}>تجاهل</Button>}
+                      {['matched', 'ignored'].includes(row.lineStatus) && <Button size="small" color="inherit" onClick={() => setConfirmBox({ title: row.lineStatus === 'matched' ? 'فك مطابقة السطر؟' : 'إرجاع السطر لغير مطابق؟', line: row, label: 'نعم، تراجع',
+                        text: row.groupPaymentIds?.length ? `سيعود السطر غير مطابق، وتُلغى ${row.groupPaymentIds.length} دفعة سددها السطر فتعود فواتيرها غير مسددة.`
+                          : row.lineStatus === 'matched' ? 'سيعود السطر غير مطابق ويُفك ربطه بالقيد. القيد نفسه يبقى؛ وإن سُجّل فرق إيداع عند المطابقة فيُعكس.'
+                            : 'سيعود السطر إلى «غير مطابق» لتعالجه من جديد.',
+                        action: () => run(() => acc.post(`bank/lines/${row._id}/unignore`), () => 'أُعيد السطر لغير مطابق.') })}>تراجع</Button>}
+                      {['unmatched', 'ignored'].includes(row.lineStatus) && (
+                        <Tooltip title="حذف السطر من الكشف (استُورد خطأً)">
+                          <IconButton size="small" aria-label="حذف السطر" className="acc-row-actions__delete" onClick={() => setConfirmBox({ title: 'حذف السطر من الكشف؟', line: row, label: 'نعم، احذفه', danger: true,
+                            text: 'يُحذف السطر نهائياً من الكشف المستورد (لا قيد له). استعمله فقط لسطر استُورد خطأً؛ إن رفعت الملف نفسه مرة أخرى سيُستورد السطر من جديد.',
+                            action: () => run(() => acc.delete(`bank/lines/${row._id}`), () => 'حُذف السطر.') })}><Trash2 size={15} /></IconButton>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </div>
                 ),
               },
             ]}
@@ -835,9 +1103,10 @@ const BankReconciliation = () => {
             {preview.creditCard && <Alert severity="warning" className="mb-3">هذا كشف بطاقة ائتمان: المشتريات فيه موجبة والسداد سالب، فعُكست الإشارات لتصبح المشتريات صادرة (سالبة) وسداد البطاقة وارداً (موجباً). اختر في الحساب أعلاه حساب البطاقة نفسها.</Alert>}
             {preview.statementCurrency && account?.currency !== preview.statementCurrency && <Alert severity="error" className="mb-3">عملة الكشف {preview.statementCurrency}، بينما الحساب المحدد {account?.currency || 'غير محدد'}. اختر حساب Garanti بالعملة المطابقة قبل الاستيراد؛ لا تخلط رصيد الدولار والليرة في حساب واحد.</Alert>}
             {preview.creditCard && preview.statementCurrency && account?.currency === preview.statementCurrency && <Alert severity="info" className="mb-3">كشف Garanti للبطاقة المنتهية بـ {preview.cardNumber?.slice(-4) || '—'} بعملة التسوية {preview.statementCurrency}. ستُراجع المشتريات والريفاندات مع الفواتير وإشعاراتها الدائنة قبل اعتماد الترحيل.</Alert>}
-            {!preview.alipay && <FormControlLabel className="mb-2" control={<Checkbox size="small" checked={preview.flipAll} onChange={(e) => { setPurchaseReview(null); setPreview({ ...preview, flipAll: e.target.checked, choices: {} }); }} />} label="عكس إشارة كل السطور (كشوف بطاقات الائتمان)" />}
+            {!preview.alipay && !preview.kuveyt && <FormControlLabel className="mb-2" control={<Checkbox size="small" checked={preview.flipAll} onChange={(e) => { setPurchaseReview(null); setPreview({ ...preview, flipAll: e.target.checked, choices: {} }); }} />} label="عكس إشارة كل السطور (كشوف بطاقات الائتمان)" />}
             {preview.kind === 'pdf' && <Alert severity="info" className="mb-3">قُرئ الكشف من ملف PDF. راجع الإشارات: الوارد موجب والصادر سالب. غيّر إشارة أي سطر بزر السهم، واستبعد ما ليس حركة.</Alert>}
-            {preview.kind === 'sheet' && !preview.alipay && (
+            {preview.kuveyt && <Alert severity="info" className="mb-3">كشف بطاقة كويت ترك (Excel) للبطاقة المنتهية بـ <Ltr>{preview.cardNumber?.slice(-4)}</Ltr>. المبالغ فيه كلها موجبة، فحُددت الإشارة من نوع السطر: المشتريات صادرة، و«Kredi Kartı Borç Ödeme» سداد وارد، والاسترداد (أميال سالبة) وارد. {preview.coveredRange ? <>الأيام من <Ltr>{preview.coveredRange.from}</Ltr> إلى <Ltr>{preview.coveredRange.to}</Ltr> مرفوعة مسبقاً لهذا الحساب فاستُبعدت سطورها ({preview.skip.size}) حتى لا تتكرر.</> : null}</Alert>}
+            {preview.kind === 'sheet' && !preview.alipay && !preview.kuveyt && (
               <div className="acc-bank-map">
                 <TextField select size="small" label="صف العناوين" value={preview.headerRow} onChange={(e) => remap({ headerRow: Number(e.target.value), mapping: detect(preview.cells!.slice(Number(e.target.value))).mapping })}>
                   {preview.cells!.slice(0, 30).map((row, index) => <MenuItem key={index} value={index}>{index + 1}: {row.filter(Boolean).slice(0, 4).join(' | ')}</MenuItem>)}
@@ -887,8 +1156,8 @@ const BankReconciliation = () => {
               <TextField select size="small" label="اتجاه الحركة" value={previewFilters.direction} onChange={e => setPreviewFilters(current => ({ ...current, direction: e.target.value }))} style={{ minWidth: 130 }}>
                 <MenuItem value="">وارد وصادر</MenuItem><MenuItem value="in">وارد</MenuItem><MenuItem value="out">صادر</MenuItem>
               </TextField>
-              <TextField size="small" type="date" label="من تاريخ" value={previewFilters.from} onChange={e => setPreviewFilters(current => ({ ...current, from: e.target.value }))} InputLabelProps={{ shrink: true }} />
-              <TextField size="small" type="date" label="إلى تاريخ" value={previewFilters.to} onChange={e => setPreviewFilters(current => ({ ...current, to: e.target.value }))} InputLabelProps={{ shrink: true }} error={!!(previewFilters.from && previewFilters.to && previewFilters.from > previewFilters.to)} />
+              <DayField size="small" label="من تاريخ" value={previewFilters.from} onChange={e => setPreviewFilters(current => ({ ...current, from: e.target.value }))} InputLabelProps={{ shrink: true }} />
+              <DayField size="small" label="إلى تاريخ" value={previewFilters.to} onChange={e => setPreviewFilters(current => ({ ...current, to: e.target.value }))} InputLabelProps={{ shrink: true }} error={!!(previewFilters.from && previewFilters.to && previewFilters.from > previewFilters.to)} />
               <Button onClick={() => setPreviewFilters({ view: '', search: '', direction: '', from: '', to: '' })}>مسح فلاتر المراجعة</Button>
             </FilterBar>
             <Sub>يظهر {visiblePreviewRows.length} من {preview.rows.length} سطر. الفلاتر للعرض فقط؛ الاستيراد يشمل كل السطور غير المستبعدة ({previewRows.length})، وتبقى اختياراتك محفوظة عند تغيير الفلتر.</Sub>
@@ -927,6 +1196,7 @@ const BankReconciliation = () => {
                         {item.reason && <Sub>{item.reason}{item.source === 'yuan' && <Sub><Open to="/accounting/alipay">فتح شراء اليوان في Alipay</Open></Sub>}</Sub>}
                         {row.sourceReviewReason && <><Sub>{row.sourceReviewReason}</Sub><FormControlLabel control={<Checkbox size="small" checked={row.walletImpact === 'confirmed'} onChange={e => setPreview(current => current ? { ...current, rows: current.rows.map((r, i) => i === row.index ? { ...r, walletImpact: e.target.checked ? 'confirmed' : 'unknown' } : r) } : current)} />}
                           label="تأكدت أن المبلغ دخل رصيد Alipay" /></>}
+                        {item.status === 'maybeDuplicate' && item.entry?.difference > 0 && <Sub>⚠ قريب جدًا من <Ltr>{item.entry.number}</Ltr> (<Ltr>{item.entry.day}</Ltr>) بفرق <Ltr>{(item.entry.difference / 10 ** decimals).toLocaleString('en-US', { maximumFractionDigits: decimals })} {currency}</Ltr>: غالبًا رقم مكتوب خطأ. اتركه دون ترحيل، ثم صحّحه من صفحة المطابقة.</Sub>}
                         {item.status === 'maybeDuplicate' && (
                           <FormControlLabel className="acc-sub" control={<Checkbox size="small" checked={!!preview.choices[row.index]?.notDuplicate} onChange={(e) => markNotDuplicate(row.index, e.target.checked)} />} label="مختلف، رحّله" />
                         )}
@@ -939,6 +1209,11 @@ const BankReconciliation = () => {
                     const item = classes?.[row.index];
                     if (preview.skip.has(row.index) || preview.choices[row.index]?.ignore) return <span className="acc-sub">{preview.skip.has(row.index) ? '—' : 'يُستورد ولا يُرحَّل'}</span>;
                     if (!item || !['new', 'maybeDuplicate'].includes(item.status)) return <span className="acc-sub">{item?.status === 'match' ? 'يُطابق مع القيد' : item?.status === 'imported' ? 'لا شيء' : ''}</span>;
+                    if (item.holdForMatching) return <>
+                      <Badge tone="info">يُحفظ للمطابقة بعد الرفع</Badge>
+                      <Sub>لن يُرحّل ولن تُنشأ فاتورة؛ اربطه من صفحة المطابقة.</Sub>
+                      {item.combinations?.map((set: any[], i: number) => <Sub key={i}>محتمل: {set.map((e: any) => e.number).join(' + ')}</Sub>)}
+                    </>;
                     const choice = preview.choices[row.index] || {};
                     const selectedBillId = choice.billId || item.suggestedBillId || '';
                     const selectedBill = item.billCandidates?.find((bill: any) => bill._id === selectedBillId);
@@ -1005,7 +1280,7 @@ const BankReconciliation = () => {
         <DialogActions>
           <span className="acc-sub me-auto ps-2">المستورد من قبل يُتجاهل، والمسجل في الدفاتر يُطابق، والجديد الذي له حساب يُرحَّل. الباقي يبقى في «غير مطابق».</span>
           <Button onClick={() => setPreview(null)}>إلغاء</Button>
-          <Button variant="contained" onClick={importPreview} disabled={!previewRows.length}>استيراد {previewRows.length} سطراً</Button>
+          <Button variant="contained" onClick={importPreview} disabled={!previewRows.length || (!!importProgress && !['failed', 'lost'].includes(importProgress.status))}>استيراد {previewRows.length} سطراً</Button>
         </DialogActions>
       </Dialog>
 
@@ -1017,23 +1292,31 @@ const BankReconciliation = () => {
             {entryFor.error && <Alert severity="error" className="mb-3">{entryFor.error}</Alert>}
             <TextField select disabled={reviewSaving} size="small" fullWidth className="mb-3" label="طريقة الاعتماد" value={entryFor.mode} onChange={e => setEntryFor({ ...entryFor, mode: e.target.value })}>
               {entryFor.line.amount < 0 && <MenuItem value="purchase">سداد مشتريات / تكلفة طلب على الفاتورة الأصلية</MenuItem>}
+              {entryFor.line.amount < 0 && <MenuItem value="pay_bills">سداد فواتير موردين — فاتورة أو عدة فواتير من هذا السطر</MenuItem>}
               {entryFor.line.amount < 0 && <MenuItem value="historical_settlement">تسوية سداد تاريخي</MenuItem>}
               {entryFor.line.amount > 0 && <MenuItem value="refund">استرداد مشتريات / ربط ريفاند الطلبية</MenuItem>}
               {entryFor.line.amount > 0 && entryFor.line.movementKind !== 'card_payment' && <MenuItem value="pending_refund">ترحيل استرداد قيد التحديد — الطلبية غير معروفة</MenuItem>}
+              {entryFor.line.amount < 0 && <MenuItem value="split">تقسيم السطر — على عدة حسابات مصروف أو عدة أشهر</MenuItem>}
+              {suggested[entryFor.line._id]?.combinations?.length > 0 && <MenuItem value="combos">عمليات مسجلة مجموعها مبلغ السطر</MenuItem>}
               <MenuItem value="ledger">مطابقة مع قيد مسجل سابقًا</MenuItem>
+              {coverableLine(count, entryFor.line) && <MenuItem value="cover">حصلت قبل الجرد: إغلاق بدون قيد</MenuItem>}
               <MenuItem value="new">ترحيل عملية جديدة</MenuItem>
               <MenuItem value="financial_operation">تسوية حوالة أو تأمين أو مستحق مسجل</MenuItem>
             </TextField>
+            {entryFor.mode === 'new' && entryFor.line.amount < 0 && suggested[entryFor.line._id]?.vendorBills && <Alert severity="warning" className="mb-3"
+              action={<Button color="inherit" size="small" onClick={() => setEntryFor({ ...entryFor, mode: 'pay_bills' })}>سداد الفواتير</Button>}>
+              {suggested[entryFor.line._id].reason} ترحيله كعملية جديدة يسجّل التكلفة مرة ثانية إن كان هذا السطر سدادًا لتلك الفواتير.
+            </Alert>}
+            {entryFor.mode === 'pay_bills' && <BankBillsPayPicker embedded line={entryFor.line} initialVendorId={suggested[entryFor.line._id]?.vendorBills?.vendorId} onBusyChange={setReviewSaving} onClose={() => setEntryFor(null)}
+              onDone={(text) => { setEntryFor(null); setMessage({ type: 'success', text }); load(); }} />}
+            {entryFor.mode === 'split' && <BankLineSplit line={entryFor.line} currency={currency} hint={suggested[entryFor.line._id]} onBusyChange={setReviewSaving} onClose={() => setEntryFor(null)}
+              onDone={(text) => { setEntryFor(null); setMessage({ type: 'success', text }); load(); }} />}
             {entryFor.mode === 'financial_operation' && <BankFinancialOperation line={entryFor.line} currency={currency} onDone={() => { setEntryFor(null); load(); }} />}
             {entryFor.mode === 'pending_refund' && <>
               <Alert severity="info">سيُسجل استلام البنك مقابل حساب 219100 «استردادات موردين قيد التحديد». عند تحديد الطلبية، اختر هذا المبلغ من نموذج الريفاند لتسوية المعلّق وإضافة مبلغ العميل دون استلام البنك مرة ثانية.</Alert>
-              <Button className="mt-3" variant="contained" disabled={reviewSaving} onClick={async () => {
-                setReviewSaving(true);
-                try {
-                  await acc.post(`bank/lines/${entryFor.line._id}/entry`, { pendingRefund: true });
-                  setEntryFor(null); await load();
-                } catch (err) { setEntryFor({ ...entryFor, error: errorText(err) }); }
-                finally { setReviewSaving(false); }
+              <Button className="mt-3" variant="contained" disabled={reviewSaving} onClick={() => {
+                const lineId = entryFor.line._id;
+                queueReview(() => acc.post(`bank/lines/${lineId}/entry`, { pendingRefund: true }), () => 'رُحّل إلى الاستردادات قيد التحديد.');
               }}>ترحيل إلى الاستردادات قيد التحديد</Button>
             </>}
             {entryFor.mode === 'refund' && <PurchaseMatchPicker embedded open refund accountId={accountId} line={entryFor.line}
@@ -1041,21 +1324,37 @@ const BankReconciliation = () => {
               suggestedRefundId={entryFor.refundId || suggested[entryFor.line._id]?.suggestedRefundId}
               suggestedRefundLineId={suggested[entryFor.line._id]?.suggestedRefundLineId}
               paid={Math.abs(entryFor.line.amount) / 10 ** decimals} currency={currency} bankName={account?.name} onBusyChange={setReviewSaving}
-              onClose={() => setEntryFor(null)} onConfirm={async (selected: any, options: any) => {
-                await acc.post(`bank/lines/${entryFor.line._id}/refund-match`, { ...options, kind: selected.kind, billId: selected.billId, refundId: selected.refundId });
-                setEntryFor(null); setMessage({ type: 'success', text: selected.kind === 'legacy_wallet_link' ? WALLET_REFUND_LINK_MESSAGE : 'اعتُمد الاسترداد وربط بالعملية الأصلية دون تكرار.' }); await load();
+              retryDuplicate={entryFor.retryDuplicate}
+              onClose={() => setEntryFor(null)} onConfirm={(selected: any, options: any) => {
+                const lineId = entryFor.line._id;
+                queueReview(() => acc.post(`bank/lines/${lineId}/refund-match`, { ...options, kind: selected.kind, billId: selected.billId, refundId: selected.refundId }),
+                  () => selected.kind === 'legacy_wallet_link' ? WALLET_REFUND_LINK_MESSAGE : 'اعتُمد الاسترداد وربط بالعملية الأصلية دون تكرار.',
+                  (err: any) => pickerRetry(selected, err));
               }} />}
             {['purchase', 'historical_settlement'].includes(entryFor.mode) && <PurchaseMatchPicker embedded open settlementOnly={entryFor.mode === 'historical_settlement'} accountId={accountId} line={entryFor.line}
               paid={Math.abs(entryFor.line.amount) / 10 ** decimals} currency={currency}
               bankName={account?.name}
               suggestedBillId={entryFor.mode === 'historical_settlement' ? undefined : entryFor.billId || suggested[entryFor.line._id]?.billCandidates?.[0]?._id}
-              suggestedItemId={entryFor.mode === 'historical_settlement' ? undefined : suggested[entryFor.line._id]?.link?.itemId} onBusyChange={setReviewSaving}
-              onClose={() => setEntryFor(null)} onConfirm={async (selected: any, options: any) => {
-                await acc.post(`bank/lines/${entryFor.line._id}/purchase-match`, { ...options, kind: selected.kind, billId: selected.billId,
+              suggestedItemId={entryFor.mode === 'historical_settlement' ? undefined : entryFor.itemId || suggested[entryFor.line._id]?.link?.itemId} onBusyChange={setReviewSaving}
+              retryDuplicate={entryFor.retryDuplicate}
+              onClose={() => setEntryFor(null)} onConfirm={(selected: any, options: any) => {
+                const lineId = entryFor.line._id;
+                queueReview(() => acc.post(`bank/lines/${lineId}/purchase-match`, { ...options, kind: selected.kind, billId: selected.billId,
                   orderId: selected.orderId, itemId: selected.itemId, confirmDifference: !!options.confirmDifference, confirmMerchant: !!options.confirmMerchant,
-                  historicalSettlement: !!options.historicalSettlement, confirmHistoricalSettlement: !!options.confirmHistoricalSettlement, confirmTripDifference: !!options.confirmTripDifference });
-                setEntryFor(null); setMessage({ type: 'success', text: 'اعتُمدت المطابقة وسُجّل السداد دون تكرار التكلفة.' }); await load();
+                  historicalSettlement: !!options.historicalSettlement, confirmHistoricalSettlement: !!options.confirmHistoricalSettlement, confirmTripDifference: !!options.confirmTripDifference }),
+                () => 'اعتُمدت المطابقة وسُجّل السداد دون تكرار التكلفة.', (err: any) => pickerRetry(selected, err));
               }} />}
+            {entryFor.mode === 'cover' && count && <Box sx={{ maxWidth: 520 }}>
+              <CoverBeforeCount line={entryFor.line} count={count} amount={money(Math.abs(entryFor.line.amount))} onCancel={() => setEntryFor(null)}
+                onSubmit={(input) => { const line = entryFor.line; setEntryFor(null); coverLine(line, input); }} />
+            </Box>}
+            {entryFor.mode === 'combos' && <BankReviewComparison line={entryFor.line} currency={currency} bankName={account?.name} paid={Math.abs(entryFor.line.amount) / 10 ** decimals}
+              leftTitle="العمليات المسجلة المقترحة"
+              original={suggested[entryFor.line._id]?.statementOriginal ? { known: true, ...suggested[entryFor.line._id].statementOriginal } : undefined}>
+              <MatchChoices line={entryFor.line} options={suggested[entryFor.line._id]?.combinations || []} currency={currency} decimals={decimals}
+                statementOriginal={suggested[entryFor.line._id]?.statementOriginal}
+                selected={entryFor.choice} onSelect={(choice) => setEntryFor({ ...entryFor, choice, error: '' })} />
+            </BankReviewComparison>}
             {entryFor.mode === 'ledger' && <BankReviewComparison line={entryFor.line} currency={currency} bankName={account?.name} paid={Math.abs(entryFor.line.amount) / 10 ** decimals}
               leftTitle="القيد المقترح من الدفاتر"
               reasons={['نفس حساب البنك وعملته', ...((data?.unmatchedMovements || []).filter((m: any) => entryFor.selected.includes(m._id)).reduce((sum: number, m: any) => sum + m.amount, 0) === entryFor.line.amount ? ['مبلغ القيد يساوي مبلغ الكشف'] : []),
@@ -1161,15 +1460,27 @@ const BankReconciliation = () => {
             {entryFor?.billAccepted ? 'قبول المطابقة وتسجيل السداد' : 'ترحيل'}
           </Button>
         </DialogActions>}
+        {entryFor?.mode === 'combos' && <DialogActions sx={{ justifyContent: 'space-between' }}>
+          <Button disabled={reviewSaving} color="inherit" onClick={async () => {
+            if (await run(() => acc.post(`bank/lines/${entryFor.line._id}/combinations-dismiss`, { dismissed: true }), () => 'لن تُقترح هذه العمليات لهذا السطر بعد الآن.')) setEntryFor(null);
+          }}>ليست أي منها</Button>
+          <span>
+            <Button disabled={reviewSaving} onClick={() => setEntryFor(null)}>إلغاء</Button>
+            <Button variant="contained" disabled={reviewSaving || entryFor.choice == null} onClick={() => {
+              const option = suggested[entryFor.line._id]?.combinations?.[entryFor.choice];
+              if (reviewSaving || !option) return;
+              const lineId = entryFor.line._id;
+              queueReview(() => acc.post(`bank/lines/${lineId}/match`, { entryIds: option.entries.map((e: any) => e._id) }), () => `طوبق السطر مع ${option.entries.length} عمليات دون إنشاء قيد جديد.`);
+            }}>اعتماد المطابقة</Button>
+          </span>
+        </DialogActions>}
         {entryFor?.mode === 'ledger' && <DialogActions>
           <Button disabled={reviewSaving} onClick={() => setEntryFor(null)}>إلغاء</Button>
           <Button variant="contained" disabled={reviewSaving || !entryFor.selected.length || (data?.unmatchedMovements || []).filter((m: any) => entryFor.selected.includes(m._id)).reduce((sum: number, m: any) => sum + m.amount, 0) !== entryFor.line.amount} onClick={async () => {
             if (reviewSaving) return;
-            setReviewSaving(true);
-            try {
-              if (await run(() => acc.post(`bank/lines/${entryFor.line._id}/match`, { entryIds: entryFor.selected }), () => 'تمت المطابقة دون إنشاء قيد جديد.',
-                (err: any) => setEntryFor((current: any) => ({ ...current, error: errorText(err) })))) setEntryFor(null);
-            } finally { setReviewSaving(false); }
+            const lineId = entryFor.line._id;
+            const entryIds = entryFor.selected;
+            queueReview(() => acc.post(`bank/lines/${lineId}/match`, { entryIds }), () => 'تمت المطابقة دون إنشاء قيد جديد.');
           }}>موافقة على المطابقة</Button>
         </DialogActions>}
       </Dialog>

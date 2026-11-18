@@ -100,3 +100,26 @@
   .cw-debt-list > li > button { justify-self: end; }
   .cw-debt-balances { padding-block: 14px; }
 }
+// The customer's loyalty points: a third balance after the dinar, same type and spacing as the money,
+// told apart by the coin's gold badge and "نقطة" (gold tokens come from the loyalty stylesheet)
+.cw-balances.has-points { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cw-balance-points {
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+  &:hover { background: linear-gradient(to left, rgba(183, 121, 31, 0.06), transparent 85%); }
+  &:focus-visible { outline: 2px solid var(--lp-coin); outline-offset: 4px; }
+  &:active dd { opacity: 0.8; }
+}
+.cw-currency--points { display: inline-grid; place-items: center; padding: 2px 4px; border-color: #ecd9b4; color: var(--lp-coin); font-size: 14px; line-height: 1; }
+.cw-balance-points__sub { margin-top: 0 !important; font: 400 13px/1.5 'IBM Plex Sans Arabic', 'Segoe UI', sans-serif !important; color: var(--cw-muted) !important; }
+.cw-balance-points__sub bdi { font-variant-numeric: tabular-nums; }
+.cw-balance-points__soon { color: var(--lp-coin-ink); font-weight: 600; }
+// Too narrow for three: the points take their own row under the two currencies
+@media (max-width: 900px) {
+  .cw-balances.has-points { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cw-balances.has-points > .cw-balance-points { grid-column: 1 / -1; padding-inline-start: 0; padding-top: 14px; border-inline-start: 0; border-top: 1px solid var(--cw-line); border-radius: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cw-balance-points { transition: none; }
+}

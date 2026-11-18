@@ -13,7 +13,7 @@ import { PackageCompensationPanel } from './PackageCompensation';
 import { Badge, DataTable, Ltr, Money, Open, Panel, Stat, StatGrid, StatusBadge, Sub } from './ui';
 // @ts-ignore
 import './Accounting.scss';
-
+import DayField from './DayField';
 // The accounting view of an order, a trip or a customer, shown inside their own pages (spec 7).
 // What shows depends on the accounting permissions the owner gave (the figures need "reports",
 // recording a supplier bill needs "purchases"); everything opens in a new tab so the page being
@@ -220,7 +220,7 @@ const QuickOrderBill = ({ orderId, orderNumber, onSaved }: { orderId: string, or
           </TextField>
         )}
         {currency !== 'USD' && <TextField type="number" label={payAccount ? 'السعر (فارغ = متوسط سعر الحساب الدافع)' : 'السعر (فارغ = سعر ذلك اليوم)'} value={form.rate} onChange={(e) => setForm({ ...form, rate: e.target.value })} inputProps={{ min: 0, step: 'any' }} />}
-        <TextField type="date" label="التاريخ" InputLabelProps={{ shrink: true }} value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
+        <DayField label="التاريخ" InputLabelProps={{ shrink: true }} value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
       </div>
       <div className="d-flex justify-content-end align-items-center gap-3 mt-3 flex-wrap">
         <Open to={`/accounting/bills/new?orderId=${orderId}&orderNumber=${encodeURIComponent(orderNumber)}`}>فاتورة بعدة سطور أو مرفقات</Open>
@@ -391,7 +391,7 @@ const CustomerRefundPanel = ({ orderId, onSaved }: { orderId: string; onSaved: (
             {account?.currency !== 'USD' && <TextField disabled={!!existingRefundId} type="number" label="القيمة الفعلية بالدولار (إن ذكرها البنك)" value={form.usdValue} onChange={e => { setPendingBankLineId(''); setForm({ ...form, usdValue: e.target.value }); }} helperText="اختياري؛ استخدم مقابل الدولار المطبوع في الكشف، وإلا يُستخدم تقييم المنظومة." />}
             <TextField disabled={!!legacyChoice.legacyWalletStatementId} type="number" label="يُضاف لمحفظة العميل ($)" value={form.walletUsd} onChange={(e) => setForm({ ...form, walletUsd: e.target.value })}
               helperText={account?.currency === 'USD' && usd > 0 ? <>مثلاً <Ltr>{Math.max(usd - 1, 0).toFixed(2)}</Ltr> (هامش حماية 1$)</> : 'ما يُضاف لمحفظة العميل بالدولار'} />
-            <TextField type="date" label="التاريخ" InputLabelProps={{ shrink: true }} value={form.day} onChange={(e) => { setPendingBankLineId(''); setForm({ ...form, day: e.target.value }); }} />
+            <DayField label="التاريخ" InputLabelProps={{ shrink: true }} value={form.day} onChange={(e) => { setPendingBankLineId(''); setForm({ ...form, day: e.target.value }); }} />
             <TextField label="ملاحظة" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
           </div>
           {open && <PreviousWalletRefundPicker key={existingRefundId || 'new'} orderId={orderId} day={form.day} walletUsd={form.walletUsd} onChange={setLegacyChoice} />}
@@ -478,7 +478,7 @@ const AbandonedPanel = ({ orderId, onChanged }: { orderId: string; onChanged: ()
             </TextField>
             <TextField type="number" label={amountLabel(account?.currency)} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
             {account && account.currency !== 'USD' && <TextField type="number" label="قيمته بالدولار (فارغ = سعر تاريخ العملية)" value={form.usdValue} onChange={(e) => setForm({ ...form, usdValue: e.target.value })} />}
-            <TextField type="date" label="التاريخ" InputLabelProps={{ shrink: true }} value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
+            <DayField label="التاريخ" InputLabelProps={{ shrink: true }} value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
           </div>
         </DialogContent>
         <DialogActions>
@@ -516,7 +516,7 @@ const WriteOffDialog = ({ claim, onClose, onDone }: { claim: any; onClose: () =>
         {error && <Alert severity="error" className="mb-2">{error}</Alert>}
         <div className="acc-form-grid">
           <TextField type="number" label="المبلغ المشطوب ($)" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
-          <TextField type="date" label="التاريخ" InputLabelProps={{ shrink: true }} value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
+          <DayField label="التاريخ" InputLabelProps={{ shrink: true }} value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
         </div>
         <TextField className="mt-3" fullWidth label="السبب" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
       </DialogContent>
@@ -531,6 +531,7 @@ const WriteOffDialog = ({ claim, onClose, onDone }: { claim: any; onClose: () =>
 export const OrderCosts = ({ orderId, orderNumber, legacyPurchases = [] }: { orderId: string; orderNumber?: string; legacyPurchases?: any[] }) => {
   const { canSee, data, error, reload } = useSummary(`summary/order/${orderId}`);
   return <Frame title="إضافة التكاليف" error={error} loading={false}>
+    <AlipaySendPanel orderId={orderId} onSent={reload} />
     <QuickOrderBill orderId={orderId} orderNumber={orderNumber || ''} onSaved={reload} />
     <LegacyPurchaseCosts orderId={orderId} fallbackRows={legacyPurchases} onSaved={reload} />
     {canSee && data && <BillsTable bills={data.bills} empty="لا فواتير موردين مسجلة على هذه الطلبية" />}
@@ -554,7 +555,7 @@ export const OrderAccounting = ({ orderId, orderNumber, isPayment, separateActio
         {!separateActions && isPayment && <CustomerRefundPanel orderId={orderId} onSaved={() => {}} />}
         <AbandonedPanel orderId={orderId} onChanged={() => {}} />
         <PackageCompensationPanel orderId={orderId} onChanged={() => {}} />
-        {isPayment && <AlipaySendPanel orderId={orderId} />}
+        {!separateActions && isPayment && <AlipaySendPanel orderId={orderId} />}
       </Frame>
     );
   }
@@ -567,7 +568,7 @@ export const OrderAccounting = ({ orderId, orderNumber, isPayment, separateActio
       {!separateActions && (isPayment || data?.order?.isPayment) && <CustomerRefundPanel orderId={orderId} onSaved={reload} />}
       <AbandonedPanel orderId={orderId} onChanged={reload} />
       <PackageCompensationPanel orderId={orderId} onChanged={reload} />
-      {(isPayment || data?.order?.isPayment) && <AlipaySendPanel orderId={orderId} onSent={reload} />}
+      {!separateActions && (isPayment || data?.order?.isPayment) && <AlipaySendPanel orderId={orderId} onSent={reload} />}
       {empty && <NoEntries />}
       {data?.order?.isCanceled && totals?.costInProgress > 0 && <Alert severity="warning" className="mb-3">
         <strong>طلبية ملغاة وتكلفة المورد ما زالت قائمة: <Money value={totals.costInProgress} /></strong>
@@ -652,13 +653,16 @@ export const TripAccounting = ({ tripId }: { tripId?: string }) => {
           {!data.costReview?.complete && <Alert severity="info" className="mb-3">{data.costReview?.changedSinceReview ? 'تغيّرت بيانات تكلفة الرحلة بعد مراجعتها. أعد مراجعة التكاليف من قائمة المراجعة المحاسبية.' : 'راجع اكتمال فواتير الناقل والتكاليف المستحقة من قائمة المراجعة المحاسبية. الربح المعروض يعتمد على التكاليف المسجلة حتى الآن.'}<Open to="/accounting/review"> فتح قائمة المراجعة</Open></Alert>}
           <BillsTable bills={data.bills} empty="لا مصاريف مسجلة على هذه الرحلة" />
           <AccountingFold title="الطرود" summary={`${data.packages.length} طرد`}>
-          <Panel flush title={`الطرود (${data.packages.length})`} subtitle="عند التسليم يُحتسب كامل إيراد الطرد وحصته الكاملة من التكلفة، حتى مع السداد الجزئي. المتبقي دين على العميل، والسداد اللاحق يخفضه دون ربح جديد. تكلفة الطرود غير المسلّمة تبقى قيد التنفيذ.">
+          <Panel flush title={`الطرود (${data.packages.length})`} subtitle="عند التسليم يُحتسب كامل إيراد الطرد وحصته الكاملة من التكلفة، حتى مع السداد الجزئي. المتبقي دين على العميل، والسداد اللاحق يخفضه دون ربح جديد. تكلفة الطرود غير المسلّمة تبقى قيد التنفيذ. الطرد المعوَّض المُقفل أو المتروك لا إيراد له إلا ما دُفع، وحصته من التكلفة تبقى على الرحلة.">
             <DataTable
               dense maxHeight={420} rows={data.packages} rowKey={(row: any) => String(row.packageId)} empty={{ title: 'لا طرود في الرحلة' }}
               rowTone={(row: any) => (row.isCanceled ? 'canceled' : undefined)}
               columns={[
-                { key: 'package', header: 'الطرد', render: (row: any) => <><Ltr>{row.tracking || '-'}</Ltr> {row.delivered && <Badge tone="ok">مسلَّم</Badge>}<Sub>الطلب <Open to={`/invoice/${row.orderId}/edit`}><Ltr>{row.orderNumber}</Ltr></Open> · {row.weight} كغ محتسب{row.volumetric && <> <Badge tone="info">حجمي</Badge> الفعلي {row.actualWeight ?? '-'} كغ</>}</Sub></>, sortValue: (row: any) => row.orderNumber },
-                { key: 'charge', header: 'أجرة الشحن', numeric: true, render: (row: any) => <Money value={row.charge} tone="plain" />, sortValue: (row: any) => row.charge },
+                { key: 'package', header: 'الطرد', render: (row: any) => <><Ltr>{row.tracking || '-'}</Ltr> {row.delivered && <Badge tone="ok">مسلَّم</Badge>}{row.compensation && <Badge tone={row.compensation.closed ? 'danger' : 'warn'}>معوَّض · {row.compensation.type === 'lost' ? 'مفقود' : 'تالف'}{row.compensation.closed && ' · مُقفل'}</Badge>}{row.abandoned && <Badge tone="danger">متروك</Badge>}<Sub>الطلب <Open to={`/invoice/${row.orderId}/edit`}><Ltr>{row.orderNumber}</Ltr></Open> · {row.weight} كغ محتسب{row.volumetric && <> <Badge tone="info">حجمي</Badge> الفعلي {row.actualWeight ?? '-'} كغ</>}</Sub></>, sortValue: (row: any) => row.orderNumber },
+                { key: 'charge', header: 'أجرة الشحن', numeric: true, render: (row: any) => (row.closed
+                  // Closed: never billed beyond what was paid; the price is shown for reference only
+                  ? <span title="طرد مُقفل: لا يُطالَب العميل بأجرة شحنه" style={{ textDecoration: 'line-through', opacity: 0.55 }}><Money value={row.charge} tone="plain" /></span>
+                  : <Money value={row.charge} tone="plain" />), sortValue: (row: any) => row.charge },
                 { key: 'collected', header: 'المحصّل', numeric: true, render: (row: any) => <Money value={row.collected} hideZero tone="plain" />, sortValue: (row: any) => row.collected },
                 { key: 'open', header: 'باقٍ على العميل', numeric: true, render: (row: any) => <Money value={row.open} hideZero />, sortValue: (row: any) => row.open },
                 { key: 'revenue', header: 'إيراد معترف به', numeric: true, render: (row: any) => (row.revenue ? <Money value={row.revenue} /> : row.deferred ? <Badge tone="warn">مؤجل</Badge> : null), sortValue: (row: any) => row.revenue },

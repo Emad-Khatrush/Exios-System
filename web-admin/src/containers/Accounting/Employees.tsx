@@ -9,7 +9,7 @@ import { useReactToPrint } from 'react-to-print';
 import { currentRound, HandoverReceipt, SettlementStatement } from './CustodyPapers';
 import EmployeeDirectory from './EmployeeDirectory';
 import { useAccountingAccess } from './useAccountingAccess';
-
+import DayField from './DayField';
 // Custody (عهدة): money given to a staff member to spend for the company, settled by the expenses
 // they pay from it (the Expenses screen, "from my custody", or recorded here by the accountant) or returned. Loan (سلفة): money lent
 // to them, taken back from their salary or returned. Kept apart, per employee, each in its own
@@ -114,7 +114,10 @@ const Employees = () => {
   const salaryDay = salary?.day;
   const salaryRate = salary?.rate;
   const commissionPayment = salary?.paymentKind === 'commission';
-  const salaryCurrency = salaryCash?.currency || (commissionPayment ? salary?.paymentCurrency : salary?.employee?.salaryCurrency) || 'USD';
+  // A salary is worked out in its own currency even when paid from an account in another one (a yuan
+  // salary sent by a partner from a dollar account): what left the account is typed then
+  const salaryCurrency = (commissionPayment ? salaryCash?.currency || salary?.paymentCurrency : salary?.employee?.salaryCurrency || salaryCash?.currency) || 'USD';
+  const crossSalary = !commissionPayment && !!salaryCash && (salaryCash.currency || 'USD') !== salaryCurrency;
   useEffect(() => {
     setSalaryPreview(null); setSalaryPreviewError('');
     if (!salaryEmployeeId || !salaryMonth) return;
@@ -256,7 +259,7 @@ const Employees = () => {
             {message?.type === 'error' && <Alert severity="error">{message.text}</Alert>}
             <p className="acc-muted">{move.direction === 'give' ? KIND_TEXT[move.kind as Kind].hint : <>الرصيد الحالي <Balances value={move.employee[move.kind]} /></>}</p>
             <p className="acc-muted">يُعطى ويُرجع بنفس العملة: الدولار من خزينة دولار والدينار من خزينة دينار.</p>
-            <TextField type="date" label="التاريخ" InputLabelProps={{ shrink: true }} value={move.day} onChange={(e) => setMove({ ...move, day: e.target.value })} className="mt-2" />
+            <DayField label="التاريخ" InputLabelProps={{ shrink: true }} value={move.day} onChange={(e) => setMove({ ...move, day: e.target.value })} className="mt-2" />
             <TextField select label={move.direction === 'give' ? 'دُفع من' : 'أُرجع إلى'} value={move.cashId} onChange={(e) => setMove({ ...move, cashId: e.target.value })} fullWidth className="mt-3">
               {moveBoxes(move.kind, move.employee, move.direction).map((a) => <MenuItem key={a._id} value={a._id}>{accountLabel(a)}</MenuItem>)}
             </TextField>
@@ -298,7 +301,7 @@ const Employees = () => {
             <TextField select label="المكتب" value={spend.office} onChange={(e) => setSpend({ ...spend, office: e.target.value })} fullWidth className="mt-3">
               {offices.filter((o: any) => o.isActive !== false).map((o: any) => <MenuItem key={o.code} value={o.code}>{o.name}</MenuItem>)}
             </TextField>
-            <TextField type="date" label="التاريخ" InputLabelProps={{ shrink: true }} value={spend.day} onChange={(e) => setSpend({ ...spend, day: e.target.value })} fullWidth className="mt-3" />
+            <DayField label="التاريخ" InputLabelProps={{ shrink: true }} value={spend.day} onChange={(e) => setSpend({ ...spend, day: e.target.value })} fullWidth className="mt-3" />
             <TextField label="البيان" value={spend.note} onChange={(e) => setSpend({ ...spend, note: e.target.value })} fullWidth className="mt-3" />
           </DialogContent>
         )}
@@ -369,8 +372,11 @@ const Employees = () => {
             {!commissionPayment && salaryCash && salaryCurrency !== salary.employee.salaryCurrency && <Alert severity="warning">اختر خزينة بعملة الراتب: {salary.employee.salaryCurrency}.</Alert>}
             <div className="d-flex gap-2 mt-2">
               <TextField type="month" label="الشهر" InputLabelProps={{ shrink: true }} value={salary.month} onChange={(e) => setSalary({ ...salary, month: e.target.value })} />
-              <TextField type="date" label="تاريخ الصرف" InputLabelProps={{ shrink: true }} value={salary.day} onChange={(e) => setSalary({ ...salary, day: e.target.value })} />
+              <DayField label="تاريخ الصرف" InputLabelProps={{ shrink: true }} value={salary.day} onChange={(e) => setSalary({ ...salary, day: e.target.value })} />
             </div>
+            {!commissionPayment && salary.month && salary.day && salary.month < String(salary.day).slice(0, 7) && (
+              <Alert severity="info" className="mt-2">راتب شهر سابق: يُسجَّل مصروفه في آخر يوم من شهر <Ltr>{salary.month}</Ltr> كراتب مستحق، وفي تاريخ الصرف يُسدَّد المستحق من الخزينة فقط.</Alert>
+            )}
             <TextField select label="المكتب" value={salary.office} onChange={(e) => setSalary({ ...salary, office: e.target.value })} fullWidth className="mt-3">
               {offices.filter((o) => o.isActive).map((o) => <MenuItem key={o.code} value={o.code}>{o.name}</MenuItem>)}
             </TextField>
@@ -381,6 +387,9 @@ const Employees = () => {
             <TextField select label="صُرف من" value={salary.paidFromAccountId} onChange={(e) => setSalary({ ...salary, paidFromAccountId: e.target.value })} fullWidth className="mt-3">
               {cashAccounts.filter(a => !commissionPayment || (a.currency || 'USD') === salary.paymentCurrency).map((a) => <MenuItem key={a._id} value={a._id}>{accountLabel(a)}</MenuItem>)}
             </TextField>
+            {!commissionPayment && salaryCash && salaryCash.cashKind !== 'cash' && <TextField label="رقم العملية في كشف الحساب (اختياري)" value={salary.transactionReference || ''}
+              onChange={(e) => setSalary({ ...salary, transactionReference: e.target.value })} fullWidth className="mt-3"
+              helperText="انسخه من البنك أو Alipay. إن دفعت حوالة واحدة لأكثر من عملية (راتب ومصاريف) فاكتب نفس الرقم في كل منها، فتُطابق معًا عند رفع الكشف." />}
             {commissionPayment ? <>
               <TextField type="number" label={`مبلغ العمولة المصروف (${salaryCurrency})`} value={salary.commissionAmount} placeholder={String(salaryPreview?.availableAmount || 0)}
                 onChange={(e) => setSalary({ ...salary, commissionAmount: e.target.value })} fullWidth className="mt-3"
@@ -403,14 +412,20 @@ const Employees = () => {
             <TextField type="number" label="خصم من السلفة" value={salary.advanceDeduction} onChange={(e) => setSalary({ ...salary, advanceDeduction: e.target.value })} fullWidth className="mt-3"
               helperText={<>عليه سلفة <Balances value={salary.employee.loan} />. يُخصم من السلفة بعملة الخزينة فقط (العهدة لا تُخصم من الراتب)</>} />
             </>}
-            {salaryCash?.currency && salaryCash.currency !== 'USD' && <TextField type="number" label="السعر (فارغ = سعر تاريخ العملية)" value={salary.rate} onChange={(e) => setSalary({ ...salary, rate: e.target.value })} fullWidth className="mt-3" />}
+            {crossSalary && <TextField type="number" label={`المبلغ الذي خرج من ${salaryCash.name} (${salaryCash.currency || 'USD'})`} value={salary.paidAmount || ''}
+              onChange={(e) => setSalary({ ...salary, paidAmount: e.target.value })} fullWidth className="mt-3" inputProps={{ min: 0, step: 'any' }}
+              helperText={Number(salary.paidAmount) > 0 && salaryNet > 0 ? <>الصافي {salaryNet} {salaryCurrency} مقابل {salary.paidAmount} {salaryCash.currency || 'USD'}: السعر <Ltr>{(salaryNet / Number(salary.paidAmount)).toFixed(4)}</Ltr>. المصروف = ما خرج فعلاً من الحساب.</>
+                : `الراتب بعملته ${salaryCurrency} والحساب بعملة ${salaryCash.currency || 'USD'}: اكتب ما خرج من الحساب فعلاً (مثلاً من كشف الوسيط).`} />}
+            {!crossSalary && salaryCash?.currency && salaryCash.currency !== 'USD' && <TextField type="number" label="السعر (فارغ = سعر تاريخ العملية)" value={salary.rate} onChange={(e) => setSalary({ ...salary, rate: e.target.value })} fullWidth className="mt-3" />}
             {payBlocked && <Alert severity="warning" className="mt-3">{payBlocked}</Alert>}
           </DialogContent>
         )}
         <DialogActions>
           <Button disabled={posting} onClick={() => setSalary(null)}>إلغاء</Button>
-          <Button variant="contained" disabled={!!payBlocked ||posting || !salaryPreview || !!salaryPreviewError || !salary?.office || !salary?.paidFromAccountId || !Number.isFinite(salaryGross) || !(salaryGross > 0) || (commissionPayment ? salaryGross > Number(salaryPreview?.availableAmount || 0) || (salary?.closeCommissions && !salary?.commissionCloseReason?.trim()) : salaryCurrency !== salary?.employee.salaryCurrency || Number(salary?.advanceDeduction || 0) > salaryGross)} onClick={() => submit('salaries', {
+          <Button variant="contained" disabled={!!payBlocked ||posting || !salaryPreview || !!salaryPreviewError || !salary?.office || !salary?.paidFromAccountId || !Number.isFinite(salaryGross) || !(salaryGross > 0) || (commissionPayment ? salaryGross > Number(salaryPreview?.availableAmount || 0) || (salary?.closeCommissions && !salary?.commissionCloseReason?.trim()) : (crossSalary && !(Number(salary?.paidAmount) > 0)) || Number(salary?.advanceDeduction || 0) > salaryGross)} onClick={() => submit('salaries', {
             employeeId: salary.employee._id, month: salary.month, day: salary.day, office: salary.office, paidFromAccountId: salary.paidFromAccountId,
+            transactionReference: commissionPayment ? undefined : salary.transactionReference?.trim() || undefined,
+            paidAmount: crossSalary ? Number(salary.paidAmount) : undefined,
             paymentKind: commissionPayment ? 'commission' : 'salary', grossAmount: commissionPayment ? salaryGross : undefined,
             expectedCommissionPreview: commissionPayment ? salaryPreview.fingerprint : undefined,
             closeCommissions: commissionPayment && !!salary.closeCommissions, commissionCloseReason: commissionPayment ? salary.commissionCloseReason : undefined,

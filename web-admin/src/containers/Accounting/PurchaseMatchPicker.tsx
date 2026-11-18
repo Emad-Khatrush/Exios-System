@@ -5,7 +5,7 @@ import { DataTable, FilterBar, Ltr, Open, Sub } from './ui';
 import BankReviewComparison, { ReviewField } from './BankReviewComparison';
 import PreviousWalletRefundPicker from './PreviousWalletRefundPicker';
 import UnlinkedWalletRefunds from './UnlinkedWalletRefunds';
-
+import DayField from './DayField';
 const offsetDay = (day: string, offset: number) => {
   const date = new Date(`${day}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() + offset);
@@ -13,7 +13,7 @@ const offsetDay = (day: string, offset: number) => {
 };
 const states: Record<string, string> = { recorded: 'مسجل في فاتورة مورد', historical_settlement: 'سداد تاريخي — متاح للتسوية', recorded_refund: 'ريفاند مسجل؛ مطابقة فقط', recorded_credit: 'إشعار دائن مسجل بانتظار المطابقة', refundable: 'مشتريات أصلية للاسترداد', draft: 'مسودة', open: 'مستحقة', paid: 'مسددة', linked: 'مرتبطة بكشف', unrecorded: 'لم تُسجّل فاتورة لها' };
 
-export default function PurchaseMatchPicker({ open, accountId, line, paid, currency, bankName, onClose, onConfirm, embedded = false, suggestedBillId, suggestedItemId, suggestedRefundId, suggestedRefundLineId, onBusyChange, refund = false, settlementOnly = false }: any) {
+export default function PurchaseMatchPicker({ open, accountId, line, paid, currency, bankName, onClose, onConfirm, embedded = false, suggestedBillId, suggestedItemId, suggestedRefundId, suggestedRefundLineId, onBusyChange, refund = false, settlementOnly = false, retryDuplicate }: any) {
   const [filters, setFilters] = useState({ from: '', to: '', source: 'all', status: 'open', q: '' });
   const [page, setPage] = useState(1);
   const [data, setData] = useState<any>(null);
@@ -37,6 +37,10 @@ export default function PurchaseMatchPicker({ open, accountId, line, paid, curre
   useEffect(() => {
     setDuplicatePreview(null); setIndependentCost(false); setDuplicateReason('');
   }, [open, line?._id, selected?._id]);
+  // Reopened after a queued approval the server refused for earlier costs: the same list, on the same choice
+  useEffect(() => {
+    if (retryDuplicate?.preview && selected && String(selected._id) === String(retryDuplicate.selectedId)) setDuplicatePreview(retryDuplicate.preview);
+  }, [retryDuplicate, selected?._id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [walletUsd, setWalletUsd] = useState('0');
   const [legacyChoice, setLegacyChoice] = useState<any>({});
   const [browsePrevious, setBrowsePrevious] = useState(false);
@@ -203,6 +207,8 @@ export default function PurchaseMatchPicker({ open, accountId, line, paid, curre
           {refund && selected.refundableAmount != null && <ReviewField label={selected.hasUnreceivedCredit ? 'قيمة الإشعار الدائن غير المستلم' : 'المتبقي القابل للاسترداد'}><Ltr>{selected.hasUnreceivedCredit ? selected.amount : selected.refundableAmount} {selected.currency}</Ltr></ReviewField>}
           {refund && selected.kind === 'existing_refund' && <ReviewField label="أُضيف لمحفظة العميل سابقاً"><Ltr>{selected.walletUsd} USD</Ltr></ReviewField>}
           {selected.openUsd != null && <ReviewField label="المتبقي على الفاتورة"><Ltr>{selected.openUsd} USD</Ltr></ReviewField>}
+          {selected.vendorRef && <ReviewField label="مرجع المورد"><Ltr>{selected.vendorRef}</Ltr></ReviewField>}
+          {selected.note && <ReviewField label="ملاحظة الفاتورة"><span style={{ whiteSpace: 'pre-wrap' }}>{selected.note}</span></ReviewField>}
           <div className="acc-sub mt-2">{selected.description}</div>
           {refund && selected.refundLines?.length > 1 && <TextField select fullWidth className="mt-2" label="بند المشتريات المسترد" value={billLineId} onChange={e => setBillLineId(e.target.value)}>{selected.refundLines.map((l: any) => <MenuItem key={l._id} value={l._id}>{l.description} · {l.amount} {selected.currency} {l.orderNumber && `· ${l.orderNumber}`}</MenuItem>)}</TextField>}
           {refund && selected.kind !== 'existing_refund' && !original?.known && <TextField type="number" fullWidth className="mt-2" label={`مبلغ الاسترداد الأصلي (${selected.currency})`} value={refundOriginalAmount} onChange={e => setRefundOriginalAmount(e.target.value)} />}
@@ -222,15 +228,15 @@ export default function PurchaseMatchPicker({ open, accountId, line, paid, curre
       </Stack>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>اختر العملية لعرض بياناتها في المقارنة، ثم راجعها ووافق عليها.</Typography>
       <FilterBar>
-        <TextField size="small" type="date" label="من تاريخ" value={filters.from} InputLabelProps={{ shrink: true }} onChange={e => change({ from: e.target.value })} />
-        <TextField size="small" type="date" label="إلى تاريخ" value={filters.to} InputLabelProps={{ shrink: true }} onChange={e => change({ to: e.target.value })} />
+        <DayField size="small" label="من تاريخ" value={filters.from} InputLabelProps={{ shrink: true }} onChange={e => change({ from: e.target.value })} />
+        <DayField size="small" label="إلى تاريخ" value={filters.to} InputLabelProps={{ shrink: true }} onChange={e => change({ to: e.target.value })} />
         <TextField select size="small" label="مصدر المشتريات" value={filters.source} onChange={e => change({ source: e.target.value })}>
           <MenuItem value="all">جميع التكاليف</MenuItem><MenuItem value="direct">فواتير موردين مباشرة</MenuItem><MenuItem value="order">مشتريات الطلبيات</MenuItem>{!refund && <MenuItem value="trip">تكاليف الرحلات والشحن</MenuItem>}
         </TextField>
         <TextField select size="small" label="حالة المشتريات" value={filters.status} onChange={e => change({ status: e.target.value })}>
           <MenuItem value="open">المتاحة للمطابقة</MenuItem><MenuItem value="all">الكل، بما فيها المسددة</MenuItem>
         </TextField>
-        <TextField size="small" label="بحث برقم الطلبية أو الفاتورة أو المورد" value={filters.q} onChange={e => {
+        <TextField size="small" label="بحث برقم الطلبية أو الفاتورة أو المورد أو الملاحظة" value={filters.q} onChange={e => {
           const q = e.target.value;
           change({ q, ...(/^\s*\d{4}\s*[-–—]?\s*\d{4}\s*$/.test(q) ? { from: '', to: '', source: 'all', status: 'all' } : {}) });
         }} helperText="رقم الطلبية الكامل يبحث في جميع التواريخ والحالات" />
@@ -245,7 +251,7 @@ export default function PurchaseMatchPicker({ open, accountId, line, paid, curre
         { key: 'choose', header: 'اختيار', render: (row: any) => <Button size="small" disabled={!row.canMatch || busy || submitting} onClick={() => { setSelected(row); setBrowsing(false); setConfirmDifference(false); setConfirmHistoricalSettlement(false); setConfirmMerchant(false); setError(''); }}>{selected?._id === row._id ? 'مختارة' : 'اختيار'}</Button> },
         { key: 'day', header: 'التاريخ', render: (row: any) => <Ltr>{row.day}</Ltr> },
         { key: 'source', header: 'المصدر', render: (row: any) => row.source === 'trip' ? 'تكلفة رحلة / شحن' : row.source === 'order' ? 'مشتريات طلبية' : 'فاتورة مورد مباشرة' },
-        { key: 'purchase', header: 'الفاتورة / الطلبية', render: (row: any) => <>{row.billId ? <Open to={`/accounting/bills/${row.billId}`}><Ltr>{row.number}</Ltr></Open> : <Ltr>{row.number}</Ltr>}{row.orders.map((order: any, i: number) => <Sub key={`${order._id}-${i}`}><Open to={`/invoice/${order._id}/edit`}><Ltr>{order.number}</Ltr></Open></Sub>)}<Sub>{row.vendorName} · {row.description}</Sub>{row.merchantMatch && <Sub>المورد مطابق لاسم التاجر في الكشف؛ تأكد من الطلبية والمبلغ قبل الاعتماد.</Sub>}{row.payments?.map((payment: any, i: number) => <Sub key={i}>سداد <Ltr>{payment.number} · {payment.day}</Ltr> من {payment.accountName}{payment.entryId && <> · <Open to={`/accounting/entries/${payment.entryId}`}>فتح قيد السداد</Open></>}</Sub>)}</> },
+        { key: 'purchase', header: 'الفاتورة / الطلبية', render: (row: any) => <>{row.billId ? <Open to={`/accounting/bills/${row.billId}`}><Ltr>{row.number}</Ltr></Open> : <Ltr>{row.number}</Ltr>}{row.orders.map((order: any, i: number) => <Sub key={`${order._id}-${i}`}><Open to={`/invoice/${order._id}/edit`}><Ltr>{order.number}</Ltr></Open></Sub>)}<Sub>{row.vendorName} · {row.description}</Sub>{row.vendorRef && <Sub>مرجع المورد: <Ltr>{row.vendorRef}</Ltr></Sub>}{row.note && <Sub>📝 {row.note}</Sub>}{row.merchantMatch && <Sub>المورد مطابق لاسم التاجر في الكشف؛ تأكد من الطلبية والمبلغ قبل الاعتماد.</Sub>}{row.payments?.map((payment: any, i: number) => <Sub key={i}>سداد <Ltr>{payment.number} · {payment.day}</Ltr> من {payment.accountName}{payment.entryId && <> · <Open to={`/accounting/entries/${payment.entryId}`}>فتح قيد السداد</Open></>}</Sub>)}</> },
         { key: 'amount', header: 'المبلغ الأصلي', render: (row: any) => <Ltr>{row.amount} {row.currency}</Ltr> },
         { key: 'status', header: 'الحالة', render: (row: any) => <>{states[row.status]}{row.matchProblems?.map((problem: string) => <Sub key={problem}>{problem}</Sub>)}{row.openUsd != null && <Sub>المتبقي: <Ltr>{row.openUsd} USD</Ltr></Sub>}{row.status === 'paid' && !row.canMatch && !row.paymentMatchProblem && <Sub>لا يوجد قيد سداد متاح للمطابقة على هذا البنك.</Sub>}</> },
       ]} />

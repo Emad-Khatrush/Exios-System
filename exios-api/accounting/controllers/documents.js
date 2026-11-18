@@ -161,9 +161,14 @@ module.exports.vendorStatement = handle(async (req, res) => {
 async function openBillsFor(vendorId) {
   const bills = await docs.SupplierBill.find({ vendorId, status: 'posted', isCreditNote: { $ne: true } }).sort({ day: 1 }).lean();
   const result = [];
+  const opens = new Map();
+  for (const bill of bills) opens.set(String(bill._id), await payables.apBalance(payables.billKey(bill._id)));
+  // What is left in the bill's own currency, by what was really paid in it (not the dollar cents read back)
+  const native = await require('../services/billNativeOpen').nativeOpenMap(bills, opens);
   for (const bill of bills) {
-    const open = await payables.apBalance(payables.billKey(bill._id));
-    if (open !== 0) result.push({ _id: bill._id, number: bill.number, day: bill.day, currency: bill.currency, total: bill.total, totalUsd: bill.totalUsd, open, vendorRef: bill.vendorRef,
+    const open = opens.get(String(bill._id));
+    if (open !== 0) result.push({ _id: bill._id, number: bill.number, day: bill.day, currency: bill.currency, total: bill.total, totalUsd: bill.totalUsd, open, openNative: native.get(String(bill._id)), vendorRef: bill.vendorRef,
+      reminder: bill.reminder?.active && bill.reminder.note ? bill.reminder.note : undefined,
       orderOnly: !!bill.lines.length && bill.lines.every(line => line.target === 'order' && line.orderId),
       orderIds: [...new Set(bill.lines.filter(line => line.orderId).map(line => String(line.orderId)))] });
   }
@@ -198,6 +203,21 @@ async function billsOpen(billIds) {
   return new Map(rows.map((row) => [row._id.slice('BILL:'.length), row.open]));
 }
 
+// A reminder on a bill, any time (also after posting): no entry, nothing in the books changes. An
+// empty note removes it; switched off it is kept (owner's request 2026-11-10)
+module.exports.setBillReminder = handle(async (req, res) => {
+  if (!isObjectId(req.params.id)) throw badRequest('الفاتورة غير صالحة');
+  const note = String(req.body?.note || '').trim().slice(0, 2000);
+  const before = await docs.SupplierBill.findById(req.params.id).select('reminder').lean();
+  if (!before) throw notFound('الفاتورة غير موجودة');
+  const update = note
+    ? { $set: { reminder: { note, active: req.body?.active !== false, updatedAt: new Date(), updatedBy: req.user?._id } } }
+    : { $unset: { reminder: 1 } };
+  const bill = await docs.SupplierBill.findByIdAndUpdate(req.params.id, update, { new: true }).select('reminder').lean();
+  await require('../services/audit').logAudit({ req, action: 'bill.reminder', model: 'AccountingSupplierBill', docId: bill._id, before: before.reminder, after: bill.reminder });
+  res.json(bill);
+});
+
 // A cent or two left by rounding counts as paid
 const paymentStatusOf = (bill, open) => (open <= 2 ? 'paid' : open >= (bill.totalUsd || 0) - 2 ? 'unpaid' : 'partial');
 
@@ -209,11 +229,14 @@ module.exports.listBills = handle(async (req, res) => {
   if (req.query.quick === 'true') query.isQuickExpense = true;
   if (req.query.search) {
     const pattern = new RegExp(escapeRegex(req.query.search), 'i');
-    query.$or = [{ number: pattern }, { vendorRef: pattern }, { 'lines.description': pattern }];
+    query.$or = [{ number: pattern }, { vendorRef: pattern }, { 'lines.description': pattern }, { 'reminder.note': pattern }];
   }
   if (isObjectId(req.query.expenseTypeId)) query.expenseTypeId = oid(req.query.expenseTypeId);
   if (req.query.office) query.office = req.query.office;
   if (req.query.target) query['lines.target'] = req.query.target;
+  // Bills with a reminder still needed (active) or one switched off (inactive)
+  if (req.query.reminder === 'active') Object.assign(query, { 'reminder.active': true, 'reminder.note': { $nin: ['', null] } });
+  if (req.query.reminder === 'inactive') Object.assign(query, { 'reminder.active': { $ne: true }, 'reminder.note': { $nin: ['', null] } });
   // Paid, partly paid or unpaid (owner's request 2026-10-04): what is still owed on each posted bill
   if (['paid', 'partial', 'unpaid'].includes(req.query.payment)) {
     const posted = await docs.SupplierBill.find({ ...query, status: 'posted', isCreditNote: { $ne: true } }).select('_id totalUsd').lean();
@@ -258,7 +281,9 @@ module.exports.getBill = handle(async (req, res) => {
   const { settings } = await getConfig();
   const editLock = bill.status !== 'posted' ? '' : settings?.lockDate && bill.day <= settings.lockDate ? `الفترة مقفلة حتى ${settings.lockDate}`
     : settings?.migrationGuardDay && bill.day <= settings.migrationGuardDay ? 'الفاتورة ضمن فترة الترحيل قيد المراجعة' : '';
-  res.json({ bill, payments, creditNotes, entries, open, paymentStatus: open === null ? null : paymentStatusOf(bill, open), trips, orders, editLock });
+  // A historical payment marked unpaid by mistake can be put back from the edit screen
+  const restorableHistoricalPayment = await require('../services/billFinancialEdit').restorableHistoricalPayment(bill);
+  res.json({ bill, payments, creditNotes, entries, open, paymentStatus: open === null ? null : paymentStatusOf(bill, open), trips, orders, editLock, restorableHistoricalPayment });
 });
 
 module.exports.createBill = handle(async (req, res) => {
@@ -297,6 +322,8 @@ const LISTS = {
 module.exports.listDocuments = (kind) => handle(async (req, res) => {
   const { Model, populate } = LISTS[kind];
   const extra = {};
+  // The page asking whether its request was saved, after an answer that never arrived (a timeout)
+  if (req.query.idempotencyKey) extra.idempotencyKey = String(req.query.idempotencyKey);
   if (isObjectId(req.query.vendorId)) extra.vendorId = req.query.vendorId;
   if (isObjectId(req.query.employeeId)) extra.employeeId = req.query.employeeId;
   if (isObjectId(req.query.accountId)) extra.$or = [{ accountId: oid(req.query.accountId) }, { fromAccountId: oid(req.query.accountId) }, { toAccountId: oid(req.query.accountId) }];
@@ -311,7 +338,9 @@ module.exports.listDocuments = (kind) => handle(async (req, res) => {
 });
 
 const CREATORS = {
-  payments: payables.createPayment,
+  // A payment typed by hand from a bank: tied to its statement line when the statement already holds it
+  payments: require('../services/posting/statementTwins').guarded(payables.createPayment,
+    input => input.fromAdvance || !input.fromAccountId ? null : { accountId: input.fromAccountId, amount: -Number(input.amount) }),
   receipts: payables.createReceipt,
   'customer-refunds': (input, context) => require('../services/posting/customerRefund').createCustomerRefund(input, context),
   'yuan-purchases': (input, context) => require('../services/posting/alipay').createYuanPurchase(input, context),
@@ -472,15 +501,31 @@ module.exports.listBankLines = handle(async (req, res) => {
   const balance = await getBalance(req.query.accountId);
   const statement = await require('../services/posting/statementClosingBalance').statementClosingBalance(req.query.accountId);
   const bookAtStatement = statement.day ? await getBalance(req.query.accountId, { upToDay: statement.day }) : null;
+  // Movements missing from inside the statement, by the breaks of its running balance
+  const trail = await require('../services/posting/statementGaps').forAccount(req.query.accountId);
   const trial = process.env.EXIOS_QA === '1' ? await MigrationRun.findOne({ status: 'review', bankTrialEnabled: true }).select('runId').lean() : null;
+  // Money the bank shows inside this balance and the books keep apart (a card guarantee)
+  const heldAccount = await require('../services/posting/statementHeld').balances(await Account.findById(req.query.accountId).select('statementHeldAccountId').lean(), statement.day);
   res.json({ lines, total, hasMore: total > lines.length, unmatchedMovements: movements.filter(m => !m.balanceAdjustment),
     balanceAdjustments: movements.filter(m => m.balanceAdjustment), bookBalance: balance,
     statementBalance: statement.balance, statementBalanceDay: statement.day, statementBalanceStatus: statement.status,
-    bookBalanceAtStatement: bookAtStatement, bankTrialRunId: trial?.runId || null });
+    bookBalanceAtStatement: bookAtStatement, heldAccount, bankTrialRunId: trial?.runId || null,
+    statementTrail: { status: trail.status, checked: trail.checked, withoutBalance: trail.withoutBalance, gaps: trail.gaps.slice(-20), gapCount: trail.gaps.length } });
 });
 
 module.exports.importBankLines = handle(async (req, res) => {
+  // background: the page follows the progress at GET bank/import/:jobId (large files outlast the request timeout)
+  if (req.body.background === true) {
+    if (!isObjectId(req.body.accountId)) throw badRequest('اختر الحساب');
+    if (!Array.isArray(req.body.rows) || !req.body.rows.length) throw badRequest('لا سطور للاستيراد');
+    return res.status(202).json(require('../services/posting/bankImportJobs').start(req.body.accountId, req.body.rows, { req, matchingSettings: req.body.matchingSettings }));
+  }
   res.json(await bank.importStatement(req.body.accountId, req.body.rows, { req, matchingSettings: req.body.matchingSettings }));
+});
+module.exports.bankImportStatus = handle(async (req, res) => {
+  const job = require('../services/posting/bankImportJobs').status(req.params.jobId);
+  if (!job) return res.status(404).json({ message: 'لم تعد عملية الاستيراد موجودة على الخادم (ربما أُعيد تشغيله). حدّث الصفحة وراجع سطور الكشف؛ إعادة استيراد نفس الملف لا تكرر السطور.' });
+  res.json(job);
 });
 module.exports.bankLineDetails = handle(async (req, res) => {
   res.json(await require('../services/posting/bankLineDetails').details(req.params.id));

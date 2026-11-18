@@ -1,10 +1,20 @@
 import { Package, PackageDetails } from "../models";
-import { generateMessageForAirShipping, generateMessageForSeaShipping } from "./aiMethods";
+
+export function convertGoogleStorageUrl(url: string) {
+  const oldBase = "https://storage.googleapis.com";
+  const newBase = "https://storage.googleapis.com";
+
+  if (url.startsWith(oldBase)) {
+    return url.replace(oldBase, newBase);
+  }
+
+  return url;
+}
 
 export const getOrderStatusLabels = (order: Package) => {
   const orderStatusIndex = order.orderStatus;
   let orderStatusText = 'تحت التجهيز';
-  if (order.isPayment && !order.isShipment && orderStatusIndex === 1) {
+  if (order.isPayment && !order.isShipment && orderStatusIndex >= 1) {
     return 'تم شراء بنجاح';
   }
   switch (orderStatusIndex) {
@@ -64,7 +74,8 @@ export const getStatusOfPackage = (packageDetails: PackageDetails) => {
   if (status.arrived) {
     return {
       statusIndex: 1,
-      lastActivity: generateMessageOfDeliveredPackage(packageDetails)
+      // lastActivity: generateMessageOfDeliveredPackage(packageDetails)
+      lastActivity: 'وصلت البضائع الى مخزننا الخارجية، والان في طريقها الى ليبيا'
     }
   }
   return {
@@ -73,22 +84,22 @@ export const getStatusOfPackage = (packageDetails: PackageDetails) => {
   }
 }
 
-const generateMessageOfDeliveredPackage = (packageDetails: PackageDetails) => {
-  const { deliveredPackages } = packageDetails;
-  const shippingMethod = deliveredPackages.shipmentMethod;
-  if (shippingMethod) {
-    const arrivedDate = new Date(deliveredPackages.arrivedAt);
-    const todayDate = new Date();
-    // Calculate the time difference in milliseconds
-    const timeDifference = todayDate.getTime() - arrivedDate.getTime();
-    // Convert the time difference to days
-    const passedDays = Math.ceil(timeDifference / (1000 * 60 * 60 * 24));
+// const generateMessageOfDeliveredPackage = (packageDetails: PackageDetails) => {
+//   const { deliveredPackages } = packageDetails;
+//   const shippingMethod = deliveredPackages.shipmentMethod;
+//   if (shippingMethod) {
+//     const arrivedDate = new Date(deliveredPackages.arrivedAt);
+//     const todayDate = new Date();
+//     // Calculate the time difference in milliseconds
+//     const timeDifference = todayDate.getTime() - arrivedDate.getTime();
+//     // Convert the time difference to days
+//     const passedDays = Math.ceil(timeDifference / (1000 * 60 * 60 * 24));
 
-    if (shippingMethod === 'air') {
-      return generateMessageForAirShipping(passedDays);
-    } else if (shippingMethod === 'sea') {
-      return generateMessageForSeaShipping(passedDays);
-    }
-  }
-  return 'وصلت البضائع الى مخزننا الخارجية، والان في طريقها الى ليبيا';
-}
+//     if (shippingMethod === 'air') {
+//       return generateMessageForAirShipping(passedDays);
+//     } else if (shippingMethod === 'sea') {
+//       return generateMessageForSeaShipping(passedDays);
+//     }
+//   }
+//   return 'وصلت البضائع الى مخزننا الخارجية، والان في طريقها الى ليبيا';
+// }

@@ -3,7 +3,7 @@
 import { forwardRef } from 'react';
 import moment from 'moment';
 import { User } from '../../models';
-import { invoiceDeliverySummary } from './invoiceDeliverySummary';
+import { POINTS_PER_USD, invoiceDeliverySummary, invoiceMoney, invoicePoints, packageRefund } from './invoiceDeliverySummary';
 // @ts-ignore
 import './InvoicePDFPreview.scss';
 
@@ -14,15 +14,18 @@ type Invoice = {
   category: 'invoice' | 'shipment';
   rate: number;
   list: any[];
+  // Loyalty points that paid the shipping before the delivery, in dollars (total is the rest)
+  pointsUsd?: number;
   note?: string;
   createdAt: string;
   referenceId: number;
   amountUSD?: number;
   amountLYD?: number;
   partialDelivery?: boolean;
-  settlement?: { paidUSD: number; paidLYD: number; remainingUSD: number; paymentStatus: string };
+  settlement?: { paidUSD: number; paidLYD: number; paidEquivalentUSD?: number; remainingUSD: number; paymentStatus: string };
   customer: User
   isCanceled?: boolean;
+  cancellation?: { refundedUSD?: number; refundedLYD?: number; packages?: any[] };
 };
 
 type Props = {
@@ -32,12 +35,22 @@ type Props = {
 const money = (value: number) =>
   Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+
 const InvoicePDFPreview = forwardRef<HTMLDivElement, Props>(({ invoice }, ref) => {
   const list = invoice.list || [];
-  const paidUSD = invoice.partialDelivery ? invoice.settlement?.paidUSD || 0 : invoice.amountUSD || 0;
-  const paidLYD = invoice.partialDelivery ? invoice.settlement?.paidLYD || 0 : invoice.amountLYD || 0;
+  // The printed invoice shows what is left after cancelled packages, and never the exchange rate
+  const sums = invoiceMoney(invoice);
+  const partlyCanceled = !invoice.isCanceled && sums.hasCancellation;
+  const paidUSD = partlyCanceled ? sums.netUSD : sums.paidUSD;
+  const paidLYD = partlyCanceled ? sums.netLYD : sums.paidLYD;
+  const refundText = (item: any) => {
+    const back = packageRefund(invoice, item);
+    return [back.USD ? `${money(back.USD)} USD` : '', back.LYD ? `${money(back.LYD)} LYD` : ''].filter(Boolean).join(' + ') || '0.00 USD';
+  };
   const fullName = `${invoice.customer?.firstName || ''} ${invoice.customer?.lastName || ''}`.trim();
   const delivery = invoiceDeliverySummary(invoice);
+  const points = invoicePoints(invoice);
+  const pointsCount = (usd: number) => Math.round(usd * POINTS_PER_USD).toLocaleString('en-US');
 
   return (
     <div ref={ref} className={`invoice-doc ${invoice.isCanceled ? 'is-canceled' : ''}`}>
@@ -71,7 +84,7 @@ const InvoicePDFPreview = forwardRef<HTMLDivElement, Props>(({ invoice }, ref) =
           <p className="invoice-doc__muted">Client code <span className="invoice-doc__mono">{invoice.customer?.customerId || '-'}</span></p>
         </div>
         <div>
-          <p className="invoice-doc__label">Paid from wallet</p>
+          <p className="invoice-doc__label">{partlyCanceled ? 'Paid after cancelling' : 'Paid from wallet'}</p>
           <p className="invoice-doc__strong">
             {money(paidUSD)} USD
             {paidLYD > 0 && <span className="invoice-doc__plus"> + {money(paidLYD)} LYD</span>}
@@ -96,10 +109,13 @@ const InvoicePDFPreview = forwardRef<HTMLDivElement, Props>(({ invoice }, ref) =
               <tr key={item.packageId || index} style={item.canceledAt && !invoice.isCanceled ? { textDecoration: 'line-through', opacity: 0.55 } : undefined}>
                 <td className="invoice-doc__muted">{index + 1}</td>
                 <td className="invoice-doc__mono">{item.orderId || '-'}</td>
-                <td className="invoice-doc__mono">{item.trackingNumber || 'N/A'}{item.canceledAt && !invoice.isCanceled ? ' · ملغى' : ''}</td>
+                <td className="invoice-doc__mono">
+                  {item.trackingNumber || 'N/A'}{item.canceledAt && !invoice.isCanceled ? ' · ملغى' : ''}
+                  {item.canceledAt && !invoice.isCanceled && <div style={{ textDecoration: 'none', fontSize: '0.85em' }}>Refunded / مسترجع: {refundText(item)}</div>}
+                </td>
                 <td className="is-num">{item.weight?.total ?? '-'} {item.weight?.measureUnit || ''}</td>
                 <td className="is-num">{item.boxesCount || '-'}</td>
-                <td className="is-num invoice-doc__strong">{money(item.cost)} {invoice.currency}</td>
+                <td className="is-num invoice-doc__strong">{money(Number(item.cost || 0) + Math.max(Number(item.pointsUsd) || 0, 0))} {invoice.currency}</td>
               </tr>
             ))}
           </tbody>
@@ -121,7 +137,14 @@ const InvoicePDFPreview = forwardRef<HTMLDivElement, Props>(({ invoice }, ref) =
           <div><dt>Delivered packages</dt><dd>{delivery.packages}</dd></div>
           <div><dt>Delivered boxes</dt><dd>{delivery.boxes}</dd></div>
           {delivery.canceledPackages > 0 && <div><dt>Cancelled packages</dt><dd>{delivery.canceledPackages}</dd></div>}
-          <div className="is-total"><dt>Total</dt><dd>{money(invoice.total)} {invoice.currency}</dd></div>
+          {partlyCanceled && <div><dt>Total before cancelling</dt><dd>{money(invoice.total)} {invoice.currency}</dd></div>}
+          {partlyCanceled && <div><dt>Cancelled</dt><dd>− {money(sums.canceledTotal)} {invoice.currency}</dd></div>}
+          {partlyCanceled && sums.paidUSD > 0 && <div><dt>Refunded USD</dt><dd>{money(sums.refundedUSD)} USD</dd></div>}
+          {partlyCanceled && sums.paidLYD > 0 && <div><dt>Refunded LYD</dt><dd>{money(sums.refundedLYD)} LYD</dd></div>}
+          {points.usd > 0 && <div><dt>Subtotal</dt><dd>{money(points.before)} {invoice.currency}</dd></div>}
+          {points.usd > 0 && <div><dt>Points ({pointsCount(points.usd)})</dt><dd>− {money(points.usd)} {invoice.currency}</dd></div>}
+          <div className="is-total"><dt>Total</dt><dd>{money(partlyCanceled ? sums.totalAfter : invoice.total)} {invoice.currency}</dd></div>
+          {partlyCanceled && <div className="is-total"><dt>Paid / المدفوع</dt><dd>{[paidUSD > 0 || !paidLYD ? `${money(paidUSD)} USD` : '', paidLYD > 0 ? `${money(paidLYD)} LYD` : ''].filter(Boolean).join(' + ')}</dd></div>}
           {invoice.partialDelivery && <div className="is-total"><dt>Remaining / المتبقي</dt><dd>{money(invoice.settlement?.remainingUSD || 0)} USD</dd></div>}
         </dl>
       </section>

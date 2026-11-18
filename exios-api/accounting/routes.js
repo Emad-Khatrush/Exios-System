@@ -68,6 +68,7 @@ router.put('/access/staff/:userId', ownerOnly, handle(async (req, res) => res.js
 const backup = () => require('./services/backup');
 router.get('/backups', ownerOnly, handle(async (req, res) => res.json(await backup().overview())));
 router.post('/backups', ownerOnly, handle(async (req, res) => res.json(await backup().startManual(req.user))));
+router.post('/backups/cancel', ownerOnly, handle(async (req, res) => res.json(await backup().cancelRunning(req.user))));
 router.post('/backups/download', ownerOnly, handle(async (req, res) => {
   const url = await backup().downloadUrl(req.body?.name);
   await require('./services/audit').logAudit({ req, action: 'backup.download', model: 'SystemBackup', after: { name: req.body?.name } });
@@ -161,6 +162,7 @@ router.get('/shipping-recognition/review', P.reports, handle(async (req, res) =>
 router.post('/shipping-recognition/apply', ownerOnly, handle(async (req, res) => res.json(await require('./services/shippingRecognition').apply(req.body, req))));
 router.get('/free-shipping/review', P.reports, handle(async (req, res) => res.json(await require('./services/freeShippingOffers').review({ orderId: req.query.orderId }))));
 router.post('/free-shipping/apply', ownerOnly, handle(async (req, res) => res.json(await require('./services/freeShippingOffers').apply(req.body, req))));
+router.post('/free-shipping/cancel', ownerOnly, handle(async (req, res) => res.json(await require('./services/freeShippingOffers').cancel(req.body, req))));
 router.get('/reports/purchases', P.reports, statements.purchases);
 router.get('/reports/receivables', P.reports, statements.receivables);
 router.get('/reports/customer-statement/:id', P.reports, statements.customerStatement);
@@ -272,6 +274,8 @@ router.post('/bills/:id/edit-preview', P.purchases, handle(async (req, res) => r
 router.post('/bills/:id/edit-posted', P.purchases, handle(async (req, res) => res.json(await reviewTx(session =>
   require('./services/billFinancialEdit').apply(req.params.id, req.body || {}, { session, req })))));
 router.post('/bills/:id/post', P.purchases, documents.postDraftBill);
+// A reminder on the bill, any time (also after posting): no entry, nothing in the books changes
+router.put('/bills/:id/reminder', can('purchases', 'payments'), documents.setBillReminder);
 
 // Each kind of document belongs to one kind of work
 router.post('/payments/batch-trial', P.payments, (req, res, next) => req.body?.excessPurpose === 'alipay' ? P.treasury(req, res, next) : next(),
@@ -335,12 +339,28 @@ router.post('/bank/trip-cost-settlements/:id/cancel', P.purchases, P.treasury, P
 router.get('/balances/:id', can('treasury', 'payments', 'purchases', 'payroll', 'reports'), documents.accountBalance);
 
 router.get('/bank/lines', P.treasury, documents.listBankLines);
+// The first and last day this account's statement already holds: an export of the same account
+// worded differently (the Kuveyt card Excel next to its PDF) leaves those days out on import
+router.get('/bank/statement-range', P.treasury, handle(async (req, res) => {
+  const mongoose = require('mongoose');
+  if (!mongoose.isValidObjectId(req.query.accountId)) return res.json({ from: null, to: null });
+  const { BankStatementLine } = require('./models/documents');
+  const accountId = new mongoose.Types.ObjectId(String(req.query.accountId));
+  const [range] = await BankStatementLine.aggregate([{ $match: { accountId } }, { $group: { _id: null, from: { $min: '$day' }, to: { $max: '$day' } } }]);
+  res.json({ from: range?.from || null, to: range?.to || null });
+}));
+// A guarantee the bank counts inside an account's statement balance (display only, no entries)
+router.get('/bank/held-account', P.treasury, handle(async (req, res) => res.json(await require('./services/posting/statementHeld').options(req.query.accountId))));
+router.put('/bank/held-account', P.treasury, handle(async (req, res) => res.json(await require('./services/transaction').runInTransaction(session =>
+  require('./services/posting/statementHeld').set(req.body?.accountId, req.body?.heldAccountId || null, { session, req })))));
 router.get('/bank/duplicate-settlement', P.treasury, P.payments, P.purchases, handle(async (req, res) => res.json(await require('./services/posting/bankDuplicateSettlement').preview(req.query.accountId))));
 router.post('/bank/duplicate-settlement', P.treasury, P.payments, P.purchases, P.cancel, handle(async (req, res) => res.json(await require('./services/transaction').runInTransaction(session => require('./services/posting/bankDuplicateSettlement').apply(req.body || {}, { session, req })))));
 router.get('/bank/lines/:id', P.treasury, documents.bankLineDetails);
 router.post('/bank/lines/:id/translate', P.treasury, handle(async (req, res) => res.json(await require('./services/statementTranslation').translateLine(req.params.id, req))));
 router.patch('/bank/lines/:id', P.treasury, documents.editBankLine);
 router.get('/bank/suggestions', P.treasury, documents.bankSuggestions);
+router.get('/bank/statement-twins', can('treasury', 'payments', 'purchases'), handle(async (req, res) => res.json({
+  results: await require('./services/posting/statementTwins').find(req.query.accountId, Number(req.query.amount), String(req.query.day || '')) })));
 router.get('/bank/purchases', P.treasury, handle(async (req, res) => res.json(await require('./services/posting/bankPurchaseReview').listPurchases(req.query))));
 router.get('/bank/purchase-reconciliation', can('treasury', 'reports'), handle(async (req, res) => res.json(await require('./services/posting/purchaseReconciliation').list(req.query))));
 router.get('/bank/purchase-reconciliation/candidates', P.treasury, handle(async (req, res) => res.json(await require('./services/posting/purchaseReconciliation').statementCandidates(req.query))));
@@ -358,6 +378,7 @@ router.route('/bank/rules').get(P.treasury, documents.listBankRules).post(P.trea
 router.delete('/bank/rules/:id', P.treasury, documents.deleteBankRule);
 router.post('/bank/parse-pdf', P.treasury, upload.single('file'), documents.parseBankPdf);
 router.post('/bank/import', P.treasury, documents.importBankLines);
+router.get('/bank/import/:jobId', P.treasury, documents.bankImportStatus);
 router.post('/bank/auto-match', P.treasury, documents.autoMatchBank);
 router.get('/bank/local-reset/available', P.treasury, P.cancel, handle(async (req, res) => res.json({ available: require('./services/posting/localBankReset').available(req) })));
 router.post('/bank/local-reset/preview', P.treasury, P.cancel, handle(async (req, res) => res.json(await require('./services/posting/localBankReset').preview(req.body || {}, { req }))));
@@ -369,6 +390,15 @@ router.get('/bank/late-expense', P.treasury, handle(async (req, res) => res.json
 router.get('/bank/integrity', P.treasury, handle(async (req, res) => res.json(await require('./services/posting/bankReviewTools').integrity(req.query.accountId))));
 router.post('/bank/integrity/release', P.treasury, handle(async (req, res) => res.json(await require('./services/transaction').runInTransaction(session => require('./services/posting/bankReviewTools').releaseInvalid(req.body || {}, { session, req })))));
 router.post('/bank/lines/:id/match', P.treasury, documents.matchBankLine);
+// None of the proposed sets of operations is this line: stop proposing them (or propose them again)
+router.post('/bank/lines/:id/combinations-dismiss', P.treasury, handle(async (req, res) => {
+  const { BankStatementLine } = require('./models/documents');
+  const line = await BankStatementLine.findOneAndUpdate({ _id: req.params.id, lineStatus: 'unmatched' },
+    { $set: { combinationsDismissed: req.body?.dismissed !== false } }, { new: true }).lean();
+  if (!line) throw require('./services/posting/common').fail('سطر الكشف غير متاح؛ حدّث الصفحة');
+  await require('./services/audit').logAudit({ req, action: 'bank.combinationsDismissed', model: 'AccountingBankStatementLine', docId: line._id, after: { dismissed: line.combinationsDismissed } });
+  res.json(line);
+}));
 router.post('/bank/lines/:id/entry', P.treasury, documents.bankLineEntry);
 // Several lines for one purchase typed on an order (spec v8)
 router.get('/bank/order-items/:orderId', P.treasury, require('./controllers/util').handle(async (req, res) => res.json(await require('./services/posting/bank').orderPurchaseItems(req.params.orderId))));
@@ -388,7 +418,14 @@ router.post('/bank/yuan-lines', P.treasury, handle(async (req, res) => res.json(
 router.post('/bank/lines/:id/yuan-match', P.treasury, handle(async (req, res) => res.json(await require('./services/transaction').runInTransaction((session) => require('./services/posting/yuanLines').matchExisting(req.params.id, req.body || {}, { session, req })))));
 router.get('/bank/partner-transfers', P.treasury, handle(async (req, res) => res.json(await require('./services/posting/partnerTransfers').suggestions(req.query.accountId))));
 router.get('/bank/lines/:id/partner-transfer-options', P.treasury, handle(async (req, res) => res.json(await require('./services/posting/partnerTransfers').options(req.params.id, req.query))));
-router.post('/bank/lines/:id/partner-transfers', P.treasury, handle(async (req, res) => res.json(await require('./services/transaction').runInTransaction((session) => require('./services/posting/partnerTransfers').apply(req.params.id, req.body || {}, { session, req })))));
+router.get('/bank/lines/:id/bill-options', P.treasury, handle(async (req, res) => res.json(await require('./services/posting/bankBillsPay').options(req.params.id, req.query))));
+router.post('/bank/lines/:id/pay-bills', P.treasury, handle(async (req, res) => res.json(await require('./services/transaction').runInTransaction((session) => require('./services/posting/bankBillsPay').apply(req.params.id, req.body || {}, { session, req })))));
+// A line a few cents or days off a supplier payment: the payment is corrected to the statement, then matched
+router.post('/bank/lines/:id/near-correct', P.treasury, handle(async (req, res) => res.json(await require('./services/transaction').runInTransaction((session) => require('./services/posting/bankNearCorrection').correct(req.params.id, req.body || {}, { session, req })))));
+// Several outgoing lines settling one bill or several, the lines paying the bills in order
+router.post('/bank/pay-bills', P.treasury, handle(async (req, res) => res.json(await require('./services/transaction').runInTransaction((session) => require('./services/posting/bankBillsPay').applyMany(req.body || {}, { session, req })))));
+router.post('/bank/lines/:id/split', P.treasury, P.purchases, handle(async (req, res) => res.json(await require('./services/transaction').runInTransaction((session) => require('./services/posting/bankSplit').apply(req.params.id, req.body || {}, { session, req })))));
+router.post('/bank/lines/:id/partner-transfers',P.treasury, handle(async (req, res) => res.json(await require('./services/transaction').runInTransaction((session) => require('./services/posting/partnerTransfers').apply(req.params.id, req.body || {}, { session, req })))));
 router.post('/bank/lines/:id/partner-deposit', P.treasury, handle(async (req, res) => res.json(await require('./services/transaction').runInTransaction((session) => require('./services/posting/partnerDeposits').apply(req.params.id, req.body || {}, { session, req })))));
 // Lines nobody can explain yet: parked on a clearing account, decided by the owner after their wait
 router.get('/bank/unidentified', can('treasury', 'reports'), handle(async (req, res) => res.json(await require('./services/posting/unidentified').list(req.query))));

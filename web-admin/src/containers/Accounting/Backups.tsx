@@ -50,6 +50,23 @@ const Backups = () => {
     }
   };
 
+  // Stops the run in progress (or one left hanging): a backup only reads the database, so
+  // nothing is lost; a new one can be started right after
+  const cancelRunning = async () => {
+    if (!window.confirm('إلغاء النسخة الجارية؟ لا تتأثر أي بيانات، ويمكنك بدء نسخة جديدة بعدها مباشرة.')) return;
+    setIsBusy(true);
+    setMessage(null);
+    try {
+      await acc.post('backups/cancel');
+      setMessage({ type: 'info', text: 'أُلغيت النسخة الجارية. يمكنك الضغط على «نسخة الآن».' });
+      await load();
+    } catch (err) {
+      setMessage({ type: 'error', text: errorText(err) });
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const download = async (name: string) => {
     try {
       const res = await acc.post('backups/download', { name });
@@ -68,7 +85,10 @@ const Backups = () => {
       <PageHeader
         title="النسخ الاحتياطي"
         subtitle="نسخة كاملة من قاعدة البيانات كل يوم في مخزن Google خاص. تصلح لاسترجاع البيانات إلى Atlas جديد أو إلى جهازك إن حدثت مشكلة."
-        actions={<Button variant="contained" disabled={isBusy || running || !data?.configured} onClick={backupNow}>نسخة الآن</Button>}
+        actions={<>
+          {running && <Button variant="outlined" color="error" disabled={isBusy} onClick={cancelRunning} sx={{ ml: 1 }}>إلغاء النسخة الجارية</Button>}
+          <Button variant="contained" disabled={isBusy || running || !data?.configured} onClick={backupNow}>نسخة الآن</Button>
+        </>}
       />
       <Notice message={message} onClose={() => setMessage(null)} />
       {data && !data.configured && (
@@ -80,7 +100,7 @@ const Backups = () => {
       <StatGrid>
         <Stat label="آخر نسخة ناجحة" value={lastDone ? when(lastDone.finishedAt) : 'لا توجد'} hint={lastDone ? size(lastDone.bytes) : undefined} tone={!lastDone || moment().diff(lastDone.finishedAt, 'hours') > 48 ? 'danger' : undefined} />
         <Stat label="النسخ المحفوظة" value={files.length} hint={`كل يوم لمدة ${data?.keepDays ?? 30} يوماً، وأول نسخة من كل شهر لمدة سنة`} />
-        <Stat label="موعد النسخة اليومية" value={<Ltr>{`${String(data?.hour ?? 3).padStart(2, '0')}:00`}</Ltr>} hint="بتوقيت ليبيا" />
+        <Stat label="مواعيد النسخ اليومية" value={<Ltr>{[data?.times?.midday ?? 14, data?.times?.night ?? 23].map((h: number) => `${String(h).padStart(2, '0')}:00`).join(' · ')}</Ltr>} hint="بتوقيت ليبيا. نسخة الليل تحل محل نسخة الظهر من نفس اليوم" />
         <Stat label="المخزن" value={<Ltr>{data?.bucket || '—'}</Ltr>} />
       </StatGrid>
 
@@ -108,11 +128,28 @@ const Backups = () => {
           empty={{ title: 'لم تُنفَّذ أي نسخة بعد' }}
           columns={[
             { key: 'startedAt', header: 'البدء', render: (row: any) => when(row.startedAt) },
-            { key: 'trigger', header: 'النوع', render: (row: any) => (row.trigger === 'daily' ? 'يومية' : 'يدوية') },
+            { key: 'trigger', header: 'النوع', render: (row: any) => (row.trigger !== 'daily' ? 'يدوية' : row.slot === 'midday' ? 'يومية (الظهر)' : row.slot === 'night' ? 'يومية (الليل)' : 'يومية') },
             { key: 'status', header: 'الحالة', render: (row: any) => <Badge tone={STATUS[row.status]?.tone}>{STATUS[row.status]?.label || row.status}</Badge> },
-            { key: 'detail', header: 'التفاصيل', render: (row: any) => (row.status === 'failed'
-              ? <Sub>{row.error}</Sub>
-              : row.status === 'done' ? <Sub>{`${row.collections} جدولاً، ${row.documents} سجلاً، ${size(row.bytes)}`}</Sub> : null) },
+            { key: 'detail', header: 'التفاصيل', render: (row: any) => {
+              const t = row.timing;
+              const secs = (ms: number) => `${Math.round((ms || 0) / 1000)} ث`;
+              // How long it took, and whether the snapshot of one instant held
+              const timing = t?.dumpMs !== undefined
+                ? ` · القراءة ${secs(t.dumpMs)}، الرفع ${secs(t.uploadMs)}${t.snapshotFailed ? ` · انتهت اللقطة بعد ${secs(t.snapshotMs)} فأُعيدت القراءة جدولاً جدولاً` : ''}`
+                : '';
+              if (row.status === 'failed') return <Sub>{row.error}</Sub>;
+              if (row.status === 'done') return <Sub>{`${row.collections} جدولاً، ${row.documents} سجلاً، ${size(row.bytes)}${timing}${row.replacedAt ? ' · حُذف ملفها بعد نجاح نسخة الليل' : ''}`}</Sub>;
+              // Live (refreshed every 30 seconds by the server): where the run is now
+              const p = row.progress;
+              if (row.status === 'running' && p?.phase) {
+                const ago = p.at ? Math.round((Date.now() - new Date(p.at).getTime()) / 1000) : null;
+                const now = p.phase === 'dump' ? 'يقرأ قاعدة البيانات'
+                  : p.phase === 'upload' ? `يرفع إلى Google: ${size(p.uploadedBytes)} من ${size(p.totalBytes)} (القراءة انتهت في ${secs(t?.dumpMs)})`
+                    : 'يفحص المخزن ويحذف النسخ القديمة';
+                return <Sub>{`${now}${ago !== null ? ` · آخر تحديث قبل ${ago} ث` : ''}`}</Sub>;
+              }
+              return null;
+            } },
           ]}
         />
       </Panel>

@@ -3,13 +3,15 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Alert, Autocomplete, Button, Checkbox, FormControlLabel, MenuItem, TextField } from '@mui/material';
 import { Plus } from 'lucide-react';
 import { acc, errorText, newKey } from './accountingApi';
+import { createDocument } from './documentSave';
 import { accountLabel, useAccountingData } from './useAccountingData';
 import { CancelDialog, today, useVendors } from './shared';
 import CustodyHolderPicker, { custodyExceeded } from './CustodyHolderPicker';
+import StatementTwinNotice, { twinPayload, useStatementTwins } from './StatementTwinNotice';
 import { useBulk } from './bulk';
-import { AccountRef, Amount, DataTable, Ltr, Money, PageHeader, Panel, StatusBadge, Sub } from './ui';
+import { AccountRef, Amount, Badge, DataTable, Ltr, Money, PageHeader, Panel, StatusBadge, Sub } from './ui';
 import { ListFilters, queryOf, recentFrom } from './ListFilters';
-
+import DayField from './DayField';
 const PAYMENT_FILTERS = { vendorId: '', accountId: '', status: '', from: recentFrom(), to: '', search: '' };
 
 export const PaymentsList = () => {
@@ -89,7 +91,11 @@ export const PaymentsList = () => {
                 : <Money value={row.allocations.reduce((s: number, a: any) => s + a.amountUsd, 0)} />),
             },
             { key: 'status', header: 'الحالة', render: (row: any) => <StatusBadge status={row.status} /> },
-            { key: 'actions', header: '', align: 'end', render: (row: any) => (row.status === 'posted' && !row.autoFromBillId ? <Button size="small" color="error" onClick={(e) => { e.stopPropagation(); setCancel(row); }}>إلغاء</Button> : null) },
+            { key: 'actions', header: '', align: 'end', render: (row: any) => (row.status !== 'posted' ? null : !row.autoFromBillId
+              ? <Button size="small" color="error" onClick={(e) => { e.stopPropagation(); setCancel(row); }}>إلغاء</Button>
+              // Paid on the spot with its bill: corrected or canceled from the bill, which carries the payment with it
+              : <Button size="small" title="دُفعت مع الفاتورة: عدّل قيمة الفاتورة أو تاريخها فتتعدل الدفعة معها، أو ألغِ الفاتورة فتُلغى معها"
+                onClick={(e) => { e.stopPropagation(); navigate(`/accounting/bills/${row.autoFromBillId._id || row.autoFromBillId}`); }}>تعديل من الفاتورة</Button>) },
           ]}
         />
       </Panel>
@@ -151,6 +157,8 @@ export const ReceiptForm = () => {
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  // The server gave no answer in time: the page is checking whether the operation was saved
+  const [waiting, setWaiting] = useState(false);
   const idempotencyKey = useRef(newKey());
   const toAccounts = useMemo(() => accounts.filter((a) => a.isActive && !a.isGroup && a.isCash), [accounts]);
   const to = toAccounts.find((a) => a._id === form.toAccountId);
@@ -169,15 +177,16 @@ export const ReceiptForm = () => {
     try {
       setIsSaving(true);
       setError('');
-      await acc.post('receipts', {
+      await createDocument('receipts', {
         vendorId, day: form.day, toAccountId: form.toAccountId, amount: Number(form.amount), rate: Number(form.rate) || undefined, note: form.note || undefined,
         allocations: Object.entries(allocations).filter(([, v]) => Number(v) > 0).map(([billId, v]) => ({ billId, amountUsd: Math.round(Number(v) * 100) })),
         idempotencyKey: idempotencyKey.current,
-      });
+      }, () => setWaiting(true));
       navigate('/accounting/payments');
     } catch (err) {
       setError(errorText(err));
     }
+    setWaiting(false);
     setIsSaving(false);
   };
 
@@ -185,12 +194,13 @@ export const ReceiptForm = () => {
     <>
       <PageHeader title="استلام من مورد" subtitle="ما دخل الخزينة أو البنك أو Alipay من مورد، بعملة الحساب. وزّعه على ما عليه لنا من فواتير أُرجعت؛ والباقي يُخصم من دفعتنا المقدمة لديه (أو يبقى رصيداً له)." />
       {error && <Alert severity="error" className="mb-3">{error}</Alert>}
+      {waiting && <Alert severity="info" className="mb-3">العملية تأخذ وقتًا أطول من المعتاد. جارٍ التأكد من تسجيلها؛ لا تغلق الصفحة ولا تُعد الإدخال.</Alert>}
       <Panel title="الاستلام">
         <div className="acc-form-grid">
           <Autocomplete size="small" options={vendors} value={vendors.find((v) => v._id === vendorId) || null}
             getOptionLabel={(v: any) => v.name} isOptionEqualToValue={(a: any, b: any) => a._id === b._id}
             onChange={(_, v: any) => setVendorId(v?._id || '')} renderInput={(p) => <TextField {...p} label="المورد" />} />
-          <TextField type="date" label="التاريخ" InputLabelProps={{ shrink: true }} value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
+          <DayField label="التاريخ" InputLabelProps={{ shrink: true }} value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
           <TextField select label="استُلم في" value={form.toAccountId} onChange={(e) => setForm({ ...form, toAccountId: e.target.value })}>
             {toAccounts.map((a) => <MenuItem key={a._id} value={a._id}>{accountLabel(a)}</MenuItem>)}
           </TextField>
@@ -240,12 +250,19 @@ export const PaymentForm = () => {
   const [advance, setAdvance] = useState(0);
   const [advanceSources, setAdvanceSources] = useState<any[]>([]);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
+  const [typed, setTyped] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  // The server gave no answer in time: the page is checking whether the operation was saved
+  const [waiting, setWaiting] = useState(false);
   const idempotencyKey = useRef(newKey());
 
   const payAccounts = useMemo(() => accounts.filter((a) => a.isActive && !a.isGroup && (a.isCash || a.requires?.includes('employee'))), [accounts]);
   const from = payAccounts.find((a) => a._id === form.fromAccountId);
+  // The bank statement may already hold this payment: it is then tied to its line, not typed a second time
+  const { twins, checking: checkingStatement } = useStatementTwins(form.fromAdvance ? '' : form.fromAccountId, -Number(form.amount), form.day);
+  const [twinChoice, setTwinChoice] = useState('');
+  const twinAnswer = twinChoice === 'other' || twins.some((twin) => twin._id === twinChoice) ? twinChoice : '';
 
   useEffect(() => {
     let active = true;
@@ -275,15 +292,51 @@ export const PaymentForm = () => {
   const currencyName = (currency: string) => ({ LYD: 'دينار ليبي', TRY: 'ليرة تركية', USD: 'دولار أمريكي' }[currency] || currency);
   const settlementCurrency = form.fromAdvance ? advanceSource?.currency : from?.currency || 'USD';
   const nativeRow = (row: any) => settlementCurrency && row.currency === settlementCurrency && row.totalUsd > 0;
-  const nativeAmount = (row: any, usd: number) => row.total * usd / row.totalUsd;
+  // In the bill's currency. All that is left on a bill is what the server counted from the amounts
+  // really paid in that currency (openNative): the dollar cents read back are a few kurus off.
+  const nativeAmount = (row: any, usd: number) => usd === row.open && Number.isFinite(row.openNative) ? row.openNative : row.total * usd / row.totalUsd;
   const sameCurrency = !!settlementCurrency && openBills.some(row => Number(allocations[row._id]) > 0)
     && openBills.filter(row => Number(allocations[row._id]) > 0).every(nativeRow);
-  const setAllocationAmount = (row: any, value: string) => {
+  // The dollar value (as stored in allocations) of what was typed for a row, in the bill's currency when native
+  const allocationOf = (row: any, value: string) => {
+    if (value === '') return '';
     const amount = Number(value);
     const fullNative = nativeAmount(row, row.open);
-    const usd = nativeRow(row) ? Math.abs(amount - fullNative) < 0.005 ? row.open : Math.round(amount * row.totalUsd / row.total) : Math.round(amount * 100);
-    setAllocations(previous => ({ ...previous, [row._id]: value === '' ? '' : (usd / 100).toFixed(2) }));
+    const usd = nativeRow(row) ? Math.abs(amount - fullNative) < 0.005 ? row.open : Math.min(row.open, Math.round(amount * row.totalUsd / row.total)) : Math.round(amount * 100);
+    return (usd / 100).toFixed(2);
   };
+  const setAllocationAmount = (row: any, value: string) => {
+    setTyped(previous => ({ ...previous, [row._id]: value }));
+    setAllocations(previous => ({ ...previous, [row._id]: allocationOf(row, value) }));
+  };
+  // A native amount is kept as typed: converting it to cents and back would rewrite the field
+  // on every keystroke. The typed text is shown only while it still gives the stored allocation
+  // («الكل», a vendor change or a reset replace it).
+  const allocationText = (row: any) => {
+    const stored = allocations[row._id] || '';
+    const text = typed[row._id];
+    if (text !== undefined && allocationOf(row, text) === stored) return text;
+    if (!stored) return '';
+    return nativeRow(row) ? String(Number(nativeAmount(row, Math.round(Number(stored) * 100)).toFixed(2))) : stored;
+  };
+  // Every open bill paid in full at once; an empty amount is filled with their total when it can be
+  // known here (the bills in the paying account's currency, or a dollar account)
+  const payAll = () => {
+    const due = openBills.filter((row: any) => row.open > 0);
+    setTyped({});
+    setAllocations(Object.fromEntries(due.map((row: any) => [row._id, (row.open / 100).toFixed(2)])));
+    if (form.fromAdvance || Number(form.amount) > 0 || !form.fromAccountId) return;
+    const total = due.every(nativeRow) ? due.reduce((sum: number, row: any) => sum + nativeAmount(row, row.open), 0)
+      : (from?.currency || 'USD') === 'USD' ? due.reduce((sum: number, row: any) => sum + row.open, 0) / 100 : null;
+    if (total) setForm((current: any) => ({ ...current, amount: total.toFixed(2) }));
+  };
+  // The same distribution in the bills' own currencies (a lira bill: its lira beside the dollars)
+  const allocatedNative = Object.entries(openBills.reduce((totals: Record<string, number>, row: any) => {
+    const usd = Math.round((Number(allocations[row._id]) || 0) * 100);
+    if (!(usd > 0) || !row.currency || row.currency === 'USD' || !(row.totalUsd > 0)) return totals;
+    totals[row.currency] = (totals[row.currency] || 0) + (nativeRow(row) ? Number(allocationText(row)) || 0 : nativeAmount(row, usd));
+    return totals;
+  }, {}));
   // What the payment is worth in dollars when it can be known here (a dollar box, or a typed rate)
   const paidUsd = !(Number(form.amount) > 0) ? null : (from?.currency || 'USD') === 'USD' ? Math.round(Number(form.amount) * 100) : Number(form.rate) > 0 ? Math.round((Number(form.amount) / Number(form.rate)) * 100) : null;
   const difference = paidUsd === null ? null : paidUsd - allocatedUsd;
@@ -292,20 +345,25 @@ export const PaymentForm = () => {
     try {
       setIsSaving(true);
       setError('');
-      await acc.post('payments', {
+      await createDocument('payments', {
         vendorId, day: form.day, fromAdvance: form.fromAdvance || undefined,
         advancePaymentId: form.fromAdvance ? form.advancePaymentId || undefined : undefined,
         fromAccountId: form.fromAdvance ? undefined : form.fromAccountId,
         employeeId: from?.requires?.includes('employee') ? form.employee?._id : undefined,
         amount: form.fromAdvance ? undefined : Number(form.amount), rate: Number(form.rate) || undefined, note: form.note || undefined,
         differenceTo: form.fromAdvance ? undefined : form.differenceTo,
-        allocations: Object.entries(allocations).filter(([, v]) => Number(v) > 0).map(([billId, v]) => ({ billId, amountUsd: Math.round(Number(v) * 100) })),
+        transactionReference: form.fromAdvance ? undefined : form.transactionReference?.trim() || undefined,
+        // A bill paid in its own currency also carries the amount as typed, so what is left on it stays exact
+        ...(form.fromAdvance ? {} : twinPayload(twinAnswer)),
+        allocations: openBills.filter(row => Number(allocations[row._id]) > 0).map(row => ({ billId: row._id, amountUsd: Math.round(Number(allocations[row._id]) * 100),
+          amount: sameCurrency && nativeRow(row) ? Number(allocationText(row)) : undefined })),
         idempotencyKey: idempotencyKey.current,
-      });
+      }, () => setWaiting(true));
       navigate(vendorId ? `/accounting/vendors/${vendorId}` : '/accounting/payments');
     } catch (err) {
       setError(errorText(err));
     }
+    setWaiting(false);
     setIsSaving(false);
   };
 
@@ -313,12 +371,13 @@ export const PaymentForm = () => {
     <>
       <PageHeader title="دفعة لمورد" subtitle="وزّع السداد على الفواتير. عند تساوي عملة الفاتورة والدفعة يُقفل المبلغ بعملته، ويُسجّل فرق التقييم كفرق صرف." />
       {error && <Alert severity="error" className="mb-3">{error}</Alert>}
+      {waiting && <Alert severity="info" className="mb-3">العملية تأخذ وقتًا أطول من المعتاد. جارٍ التأكد من تسجيلها؛ لا تغلق الصفحة ولا تُعد الإدخال.</Alert>}
       <Panel title="الدفعة">
         <div className="acc-form-grid">
           <Autocomplete size="small" options={vendors} value={vendors.find((v) => v._id === vendorId) || null}
             getOptionLabel={(v: any) => v.name} isOptionEqualToValue={(a: any, b: any) => a._id === b._id}
             onChange={(_, v: any) => setVendorId(v?._id || '')} renderInput={(p) => <TextField {...p} label="المورد" />} />
-          <TextField type="date" label="التاريخ" InputLabelProps={{ shrink: true }} value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
+          <DayField label="التاريخ" InputLabelProps={{ shrink: true }} value={form.day} onChange={(e) => setForm({ ...form, day: e.target.value })} />
           {!form.fromAdvance && <>
             <TextField select label="دُفعت من" value={form.fromAccountId} onChange={(e) => setForm({ ...form, fromAccountId: e.target.value })}>
               {payAccounts.map((a) => <MenuItem key={a._id} value={a._id}>{accountLabel(a)}</MenuItem>)}
@@ -333,8 +392,13 @@ export const PaymentForm = () => {
                 ) : 'وزّع المبلغ على الفواتير ليُقترح السعر الذي يُقفلها على صفر'} />
             )}
             {from?.requires?.includes('employee') && <CustodyHolderPicker inGrid accountId={form.fromAccountId} value={form.employee} amount={Number(form.amount) || 0} onChange={(employee) => setForm((f: any) => ({ ...f, employee }))} />}
+            {from && from.cashKind !== 'cash' && !from.requires?.includes('employee') && <TextField label="رقم العملية في كشف الحساب (اختياري)" value={form.transactionReference || ''}
+              onChange={(e) => setForm({ ...form, transactionReference: e.target.value })}
+              helperText="حوالة واحدة لأكثر من عملية؟ اكتب نفس الرقم في كل منها فتُطابق معًا عند رفع الكشف" />}
           </>}
         </div>
+        {!form.fromAdvance && <StatementTwinNotice twins={twins} currency={from?.currency || 'USD'} value={twinAnswer}
+          onChange={(choice, line) => { setTwinChoice(choice); if (line) setForm((f: any) => ({ ...f, day: line.day })); }} />}
         {!form.fromAdvance && allocatedUsd > 0 && !sameCurrency && (
           <div className="mt-3">
             <TextField select size="small" label="الفرق بين المدفوع والموزَّع" value={form.differenceTo} onChange={(e) => setForm({ ...form, differenceTo: e.target.value })} style={{ minWidth: 320 }}
@@ -367,12 +431,17 @@ export const PaymentForm = () => {
       </Panel>
 
       <Panel flush title="الفواتير المفتوحة" subtitle="يُكتب السداد بعملة الفاتورة إذا كانت نفس عملة الدفع؛ وعند اختلاف العملتين يُوزّع بالدولار. اضغط «الكل» لتسديد المتبقي.">
+        {openBills.some((row: any) => row.open > 0) && <div className="d-flex flex-wrap gap-2 px-3 pb-2">
+          <Button size="small" variant="outlined" onClick={payAll}>سداد كل الفواتير ({openBills.filter((row: any) => row.open > 0).length})</Button>
+          {Object.values(allocations).some(value => Number(value) > 0) && <Button size="small" onClick={() => { setTyped({}); setAllocations({}); }}>مسح التوزيع</Button>}
+        </div>}
         <DataTable
           rows={openBills}
           rowKey={(row: any) => row._id}
           empty={{ title: vendorId ? 'لا توجد فواتير مفتوحة' : 'اختر المورد أولاً', hint: vendorId ? 'الدفعة ستُسجَّل كدفعة مقدمة لدى المورد.' : undefined }}
           columns={[
-            { key: 'number', header: 'الفاتورة', render: (row: any) => <><Ltr>{row.number}</Ltr>{row.vendorRef && <Sub>رقم المورد <Ltr>{row.vendorRef}</Ltr></Sub>}</> },
+            { key: 'number', header: 'الفاتورة', render: (row: any) => <><Ltr>{row.number}</Ltr>{row.vendorRef && <Sub>رقم المورد <Ltr>{row.vendorRef}</Ltr></Sub>}
+              {row.reminder && <div className="mt-1"><Badge tone="warn">ملاحظة</Badge> <span style={{ whiteSpace: 'pre-wrap' }}>{row.reminder}</span></div>}</> },
             { key: 'day', header: 'التاريخ', hideOnMobile: true, render: (row: any) => <Ltr>{row.day}</Ltr> },
             { key: 'total', header: 'الإجمالي', numeric: true, hideOnMobile: true, render: (row: any) => <Amount value={row.total} currency={row.currency} /> },
             { key: 'open', header: 'المتبقي', numeric: true, render: (row: any) => nativeRow(row) ? <Amount value={nativeAmount(row, row.open)} currency={row.currency} /> : <Money value={row.open} strong /> },
@@ -380,14 +449,14 @@ export const PaymentForm = () => {
               key: 'pay', header: 'يُسدَّد الآن', align: 'end', width: 220, render: (row: any) => (
                 <span className="d-inline-flex gap-1">
                   <TextField type="number" inputProps={{ 'aria-label': `سداد ${row.number}`, min: 0 }} helperText={nativeRow(row) ? row.currency : 'USD'}
-                    value={!allocations[row._id] ? '' : nativeRow(row) ? Number(nativeAmount(row, Math.round(Number(allocations[row._id]) * 100)).toFixed(2)) : allocations[row._id]}
+                    value={allocationText(row)}
                     onChange={(e) => setAllocationAmount(row, e.target.value)} style={{ width: 120 }} />
                   <Button size="small" onClick={() => setAllocations({ ...allocations, [row._id]: (row.open / 100).toFixed(2) })}>الكل</Button>
                 </span>
               ),
             },
           ]}
-          footer={openBills.length ? { number: 'الموزَّع على الفواتير', pay: <Money value={allocatedUsd} strong /> } : undefined}
+          footer={openBills.length ? { number: 'الموزَّع على الفواتير', pay: <><Money value={allocatedUsd} strong />{allocatedNative.map(([currency, amount]) => <span key={currency} className="d-block"><b><Amount value={amount} currency={currency} /></b></span>)}</> } : undefined}
         />
       </Panel>
 
@@ -395,7 +464,7 @@ export const PaymentForm = () => {
         <TextField label="ملاحظة" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} fullWidth />
         <div className="d-flex justify-content-end gap-2 mt-3">
           <Button onClick={() => navigate(-1)}>رجوع</Button>
-          <Button variant="contained" disabled={isSaving || !vendorId || (form.fromAdvance ? !allocatedUsd : !(form.fromAccountId && Number(form.amount) > 0))
+          <Button variant="contained" disabled={isSaving || !vendorId || (!form.fromAdvance && (checkingStatement || (twins.length > 0 && !twinAnswer))) || (form.fromAdvance ? !allocatedUsd : !(form.fromAccountId && Number(form.amount) > 0))
             || (!form.fromAdvance && !!from?.requires?.includes('employee') && (!form.employee || custodyExceeded(form.employee, Number(form.amount))))} onClick={save}>ترحيل الدفعة</Button>
         </div>
       </Panel>

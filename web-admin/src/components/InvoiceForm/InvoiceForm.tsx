@@ -20,8 +20,9 @@ import { SpecialPrices, getShippingMode } from '../../utils/specialPrices';
 import Badge from '../Badge/Badge';
 import ImageUploader from '../ImageUploader/ImageUploader';
 import FilesPreviewers from '../FilesPreviewers/FilesPreviewers';
+import NoPointsSwitch from './NoPointsSwitch';
 import SpecialPricePicker from '../SpecialPricePicker/SpecialPricePicker';
-import SwipeableTextMobileStepper from '../SwipeableTextMobileStepper/SwipeableTextMobileStepper';
+import FileViewer from '../FileViewer/FileViewer';
 import PackageDialog, { CLOSED_PACKAGE, PackageDraft, reportPackageField } from './PackageDialog';
 import { LIBYAN_CITIES, ORIGIN_COUNTRIES, OrderKind, PACKAGE_STEPS, PURCHASE_CURRENCIES, SHIPMENT_METHODS, apiErrorMessage, toDate, unitForMethod } from './constants';
 import { Checkpoints, ComboField, NUMBER_INPUT, OrderKindPicker, RemoveRowButton, Section, SelectField, ToggleChip, blurOnWheel, formatMoney, packageFees, packageFigures, packageTotal, PackagesSummary, totalText } from './parts';
@@ -271,7 +272,8 @@ const InvoiceForm = (props: Props) => {
           <TextField name="fullName" required label="Full name" value={invoice?.customerInfo?.fullName || ''} onChange={changeCustomerInfo('fullName')} disabled={isCanceled} />
           <TextField name="phone" required label="Phone" value={invoice?.customerInfo?.phone ?? ''} onChange={changeCustomerInfo('phone')} disabled={isCanceled} />
           <TextField name="email" label="Email" value={invoice?.customerInfo?.email || ''} onChange={changeCustomerInfo('email')} disabled={isCanceled} />
-          <FormControl disabled={isCanceled}>
+          {/* Anyone fills it while empty; once chosen only an admin changes it (the server checks too) */}
+          <FormControl disabled={isCanceled || (!!invoice?._id && !!invoice?.madeBy && !roles.isAdmin)}>
             <InputLabel>Made by</InputLabel>
             <Select className="of-made-by" label="Made by" name="madeBy" defaultValue={invoice?.madeBy?._id || ''} onChange={(event) => handleChange(event)}>
               {(employees || []).map((employee) => (
@@ -323,6 +325,7 @@ const InvoiceForm = (props: Props) => {
           </div>
           {props.shippingRestrictionAction}
         </div>
+        {invoice?._id && <NoPointsSwitch orderId={String(invoice._id)} disabled={isCanceled} />}
       </Section>
 
       <Section title="Shipping and status">
@@ -585,14 +588,7 @@ const InvoiceForm = (props: Props) => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={!!previewImages} onClose={() => setPreviewImages(undefined)}>
-        <DialogContent>
-          <SwipeableTextMobileStepper data={previewImages} />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPreviewImages(undefined)}>Close</Button>
-        </DialogActions>
-      </Dialog>
+      <FileViewer open={!!previewImages} files={previewImages} onClose={() => setPreviewImages(undefined)} />
     </div>
   );
 };

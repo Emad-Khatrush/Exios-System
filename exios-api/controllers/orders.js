@@ -8,7 +8,7 @@ const ErrorHandler = require('../utils/errorHandler');
 const { uploadToGoogleCloud } = require('../utils/googleClould');
 const { errorMessages } = require('../constants/errorTypes');
 const Offices = require('../models/office');
-const { addChangedField, getTapTypeQuery, convertObjDataFromStringToNumberType } = require('../middleware/helper');
+const { addChangedField, getTapTypeQuery, buildClientOrderProjection } = require('../middleware/helper');
 const { orderLabels } = require('../constants/orderLabels');
 const { ORDER_THEME_IDS } = require('../constants/orderThemes');
 const mongoose = require('mongoose');
@@ -27,7 +27,7 @@ const { returnOrderPayments } = require('../utils/orderCancellation');
 const { normalizePackages, guardMeasures, keepDeliveryState } = require('../utils/packageMeasures');
 const roundFee = (n) => Math.round(n * 100) / 100;
 const { payFeesLYD } = require('../utils/helperApi');
-const { cancelInvoicePackages, deliveryInvoiceOf, getPurchaseItemsByDate, getInvoicesQuery, cleanUpInventory, createInvoice, updateOrderStatuses, useWalletBalance, processPackagesPayment, checkSufficientFunds, truncateToTwo, getUserWalletMap, validatePayment, validatePackages, loadDeliverablePackages, claimPackagesForDelivery, withCalculatedRate } = require('../utils/helperApi');
+const { cancelInvoicePackages, deliveryInvoiceOf, getPurchaseItemsByDate, getInvoicesQuery, cleanUpInventory, createInvoice, updateOrderStatuses, useWalletBalance, processPackagesPayment, checkSufficientFunds, truncateToTwo, getUserWalletMap, validatePayment, validatePackages, loadDeliverablePackages, redeemDeliveryPoints, claimPackagesForDelivery, withCalculatedRate } = require('../utils/helperApi');
 
 const { ObjectId } = mongodb;
 
@@ -249,6 +249,18 @@ module.exports.getUserPackagesOfOrdersAdmin = async (req, res, next) => {
               }
             }
           }
+        }
+      }
+    }
+
+    // What loyalty points already paid on each package's shipping: the delivery asks only the rest
+    if (tabType !== 'finished') {
+      const pairs = (orders || []).flatMap((order) => (order.paymentList || []).map((pkg) => ({ orderId: order._id, packageId: pkg._id })));
+      if (pairs.length) {
+        const paid = await require('../accounting/services/loyalty').pointsPaidOnPackages(pairs);
+        for (const order of orders) for (const pkg of order.paymentList || []) {
+          const pointsUsd = paid.get(String(pkg._id)) || 0;
+          if (pointsUsd > 0) pkg.pointsUsd = pointsUsd;
         }
       }
     }
@@ -945,7 +957,8 @@ module.exports.updateOrder = async (req, res, next) => {
       const oldOrder = await Orders.findOne({ _id: String(id) }).session(session);
       if (!oldOrder) throw new ErrorHandler(404, errorMessages.ORDER_NOT_FOUND);
       await assertOpenPeriod(req.user, oldOrder.createdAt, { session });
-      guardOrderUpdate(body, oldOrder);
+      guardOrderUpdate(body, oldOrder, { user: req.user });
+      if (body.madeBy && !(await Users.exists({ _id: body.madeBy, $or: [{ 'roles.isAdmin': true }, { 'roles.isEmployee': true }] }).session(session))) throw new ErrorHandler(400, 'Made by must be an employee');
       // All staff can edit before delivery; delivered packages are immutable.
       if (body.paymentList !== undefined && !Array.isArray(body.paymentList)) throw new ErrorHandler(400, 'Packages must be a list');
       if (Array.isArray(body.paymentList)) {
@@ -1143,7 +1156,8 @@ module.exports.updateSinglePackage = async (req, res, next) => {
       let oldOrder = await Orders.findOne({ _id: String(id) }).session(session);
       if (!oldOrder) throw new ErrorHandler(404, errorMessages.ORDER_NOT_FOUND);
       await assertOpenPeriod(req.user, oldOrder.createdAt, { session });
-      guardOrderUpdate(body, oldOrder);
+      guardOrderUpdate(body, oldOrder, { user: req.user });
+      if (body.madeBy && !(await Users.exists({ _id: body.madeBy, $or: [{ 'roles.isAdmin': true }, { 'roles.isEmployee': true }] }).session(session))) throw new ErrorHandler(400, 'Made by must be an employee');
       if (body.paymentList) {
         try {
           await guardMeasures(oldOrder, [body.paymentList], req.user, { partial: true });
@@ -1548,8 +1562,9 @@ module.exports.updateStatusOfOrder = async (req, res, next) => {
 module.exports.getClientHomeData = async (req, res, next) => {
   try {
     const receivedOrders = await Orders.countDocuments({ user: req.user._id, isFinished: true, unsureOrder: false });
-    const readyForReceivement = await Orders.countDocuments({ user: req.user._id, unsureOrder: false, $or: [ { isPayment: true, orderStatus: 4 }, { isPayment: false, orderStatus: 3 } ] });
-    const activeOrders = await Orders.countDocuments({ user: req.user._id, isCanceled: false, unsureOrder: false, isFinished: false });
+    // A shipment stopped by the office (prohibited goods) is neither active nor ready to collect
+    const readyForReceivement = await Orders.countDocuments({ user: req.user._id, unsureOrder: false, shippingBlocked: { $ne: true }, $or: [ { isPayment: true, orderStatus: 4 }, { isPayment: false, orderStatus: 3 } ] });
+    const activeOrders = await Orders.countDocuments({ user: req.user._id, isCanceled: false, unsureOrder: false, isFinished: false, shippingBlocked: { $ne: true } });
     const totalPaidInvoices = (await Orders.aggregate([
       { $match: { user: req.user._id, isCanceled: false, unsureOrder: false } },
       { $group: { _id: 'id', total: { $sum: '$totalInvoice' } } },
@@ -1572,16 +1587,24 @@ module.exports.getClientHomeData = async (req, res, next) => {
   }
 }
 
+// The customer's lists that a stopped shipment must leave (it shows under "blocked" instead)
+const CLIENT_TABS_WITHOUT_BLOCKED = ['active', 'arrivedWarehouse', 'readyForPickup'];
+const notBlocked = { $ne: ['$shippingBlocked', true] };
+
 module.exports.getOrdersForUser = async (req, res, next) => {
   try {
     const { type } = req.params;
-    const query = convertObjDataFromStringToNumberType(req.query);
+    const query = buildClientOrderProjection(req.query, ['images']);
 
     let orders;
     if (type === 'all') {
       orders = await Orders.find({ user: req.user._id, isCanceled: false, unsureOrder: false, isFinished: false }, query).sort({ createdAt: -1 });
+    } else if (type === 'blocked') {
+      // Shipments the office stopped (prohibited goods): their own list, out of the active ones
+      orders = await Orders.find({ user: req.user._id, isCanceled: false, unsureOrder: false, isFinished: false, shippingBlocked: true }, query).sort({ createdAt: -1 });
     } else {
       const queryType = getTapTypeQuery(type);
+      if (CLIENT_TABS_WITHOUT_BLOCKED.includes(type)) queryType.shippingBlocked = { $ne: true };
       orders = await Orders.find({ ...queryType, user: req.user._id, isCanceled: false }, query).sort({ createdAt: -1 });
     }
 
@@ -1607,6 +1630,7 @@ module.exports.getOrdersForUser = async (req, res, next) => {
                     { $eq: ["$isFinished", false] },
                     { $eq: ["$unsureOrder", false] },
                     { $eq: ["$isCanceled", false] },
+                    notBlocked,
                     {
                       $or: [
                         { $and: [{ $eq: ["$isPayment", true] }, { $eq: ["$isShipment", true] }] },
@@ -1634,6 +1658,7 @@ module.exports.getOrdersForUser = async (req, res, next) => {
               $cond: [
                 {
                   $and: [
+                    notBlocked,
                     { $eq: ["$unsureOrder", false] },
                     { $eq: ["$isCanceled", false] },
                     {
@@ -1670,6 +1695,7 @@ module.exports.getOrdersForUser = async (req, res, next) => {
               $cond: [
                 {
                   $and: [
+                    notBlocked,
                     { $eq: ["$unsureOrder", false] },
                     { $eq: ["$isCanceled", false] },
                     {
@@ -1701,6 +1727,15 @@ module.exports.getOrdersForUser = async (req, res, next) => {
               ]
             }
           },
+          blockedOrders: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$shippingBlocked", true] }, { $eq: ["$isFinished", false] }, { $eq: ["$unsureOrder", false] }] },
+                1,
+                0
+              ]
+            }
+          },
           invoiceOrders: {
             $sum: {
               $cond: [
@@ -1726,6 +1761,7 @@ module.exports.getOrdersForUser = async (req, res, next) => {
         unsureOrders: 0,
         warehouseArrived: 0,
         readyForReceivement: 0,
+        blockedOrders: 0,
         invoiceOrders: 0
       }
     }
@@ -1761,7 +1797,7 @@ module.exports.getOrdersClientBySearch= async (req, res, next) => {
   })
 
   // show only the important fields
-  const orderedList = convertObjDataFromStringToNumberType(req.query);
+  const orderedList = buildClientOrderProjection(req.query, ['images']);
   query.push({
     $project: orderedList
   })
@@ -1834,12 +1870,17 @@ module.exports.markPackagesAsDelivered = async (req, res, next) => {
     const id = req.params.id;
     validatePackages(req.body.selectedPackages);
     const paymentAmounts = validatePayment(req.body.payment, { allowZero: true });
+    // Loyalty points paid with this delivery (staff only, like the route): part of the payment
+    const points = require('../accounting/services/loyalty').pointsOfPayment(req.body.points);
 
     // Costs come from the database. Credit delivery uses the explicitly agreed, validated rate.
     const allowPartial = req.body.allowPartial === true;
     const partialDelivery = require('../utils/partialDelivery');
     const feeMode = allowPartial || req.body.feeMode === 'usd' ? 'usd' : 'separate';
     const { invoice } = await require('../accounting/services/transaction').runInTransaction(async (session) => {
+      // The points first, in this transaction: the packages are then priced net of them, and the
+      // payment is checked against what is left. Any failure below gives the points back.
+      await redeemDeliveryPoints(id, req.body.selectedPackages, points, { session, req });
       const { packages, totalCost, feesLYD, totalFeeLYD } = await loadDeliverablePackages(id, req.body.selectedPackages, { feeMode, session });
       // Nothing paid is right only for packages that cost nothing (free shipping with a purchase)
       if (!allowPartial && !paymentAmounts.amountUSD && !paymentAmounts.amountLYD && totalCost > 0) {
@@ -1883,6 +1924,20 @@ module.exports.markPackagesAsDelivered = async (req, res, next) => {
     return next(new ErrorHandler(error.statusCode || 500, error.message));
   }
 };
+
+// Delivering many packages in batches (utils/batchDelivery.js): start, then one batch per call
+const deliveryRoute = (fn) => async (req, res, next) => {
+  try {
+    return res.status(200).json(await fn(req));
+  } catch (error) {
+    console.error(error);
+    return next(new ErrorHandler(error.statusCode || 500, error.message));
+  }
+};
+module.exports.startDelivery = deliveryRoute((req) => require('../utils/batchDelivery').start(req, req.params.id, req.body || {}));
+module.exports.nextDeliveryBatch = deliveryRoute((req) => require('../utils/batchDelivery').next(req, req.params.jobId));
+module.exports.stopDelivery = deliveryRoute((req) => require('../utils/batchDelivery').stop(req, req.params.jobId));
+module.exports.openDelivery = deliveryRoute(async (req) => ({ delivery: await require('../utils/batchDelivery').open(req.params.id) }));
 
 module.exports.getInvoicesByCustomer = async (req, res, next) => {
   try {
@@ -1995,7 +2050,7 @@ module.exports.getClientOrder = async (req, res, next) => {
   const id = req.params.id;
   if (!id) return next(new ErrorHandler(404, errorMessages.ORDER_NOT_FOUND));
 
-  const orderedByList = convertObjDataFromStringToNumberType(req.query);
+  const orderedByList = buildClientOrderProjection(req.query);
   try {
     let query = { orderId : String(id), user: req.user._id };
     if (mongoose.Types.ObjectId.isValid(id)) {
@@ -2006,7 +2061,40 @@ module.exports.getClientOrder = async (req, res, next) => {
     order.images = order.images.filter(img => img.category === 'receipts');
     order.paymentList = order.paymentList.filter(package => package.settings.visableForClient);
 
-    res.status(200).json(order);
+    // The trip (رحلة) each package is loaded on, same lookup as the admin's package flights.
+    // Only the trip name and its arrival date go to the customer: the inventory holds other
+    // customers' packages and internal costs, so nothing else from it may leave here.
+    // Callers choose the fields (projection from the query), so a package may come without _id:
+    // those simply get no trip instead of failing the whole order.
+    const result = order.toJSON();
+    const packageIds = (order.paymentList || []).map(pkg => pkg?._id).filter(Boolean);
+    if (packageIds.length > 0) {
+      const trips = await Inventory.find({
+        'orders.paymentList._id': { $in: packageIds },
+        inventoryType: 'inventoryGoods',
+        shippingType: { $ne: 'domestic' }
+      }).select('voyage arrivalDate orders.paymentList._id').lean();
+
+      const wanted = new Set(packageIds.map(pkgId => pkgId.toString()));
+      const tripByPackage = {};
+      for (const trip of trips) {
+        for (const invOrder of (trip.orders || [])) {
+          const list = Array.isArray(invOrder.paymentList) ? invOrder.paymentList : (invOrder.paymentList ? [invOrder.paymentList] : []);
+          for (const invPkg of list) {
+            const pkgId = invPkg?._id?.toString();
+            if (pkgId && wanted.has(pkgId)) tripByPackage[pkgId] = trip;
+          }
+        }
+      }
+
+      for (const pkg of (result.paymentList || [])) {
+        if (!pkg?._id) continue;
+        const trip = tripByPackage[pkg._id.toString()];
+        if (trip?.voyage) pkg.trip = { voyage: trip.voyage, ...(trip.arrivalDate ? { arrivalDate: trip.arrivalDate } : {}) };
+      }
+    }
+
+    res.status(200).json(result);
   } catch (error) {
     console.log(error);
     return next(new ErrorHandler(404, error.message));
@@ -2123,8 +2211,15 @@ module.exports.getPaymentsOfOrder = async (req, res, next) => {
       return result;
     }));
 
+    // What was written off of the order's claims (accounting): the order page takes it off what is
+    // left, as the X-Tracking list (the ledger) already does
+    const writeOffs = ObjectId.isValid(id) ? (await require('../accounting/models/documents').ClaimWriteOff.find({ orderId: id, status: 'posted' }).sort({ day: 1 }).lean())
+      .map((w) => ({ _id: w._id, number: w.number, day: w.day, reason: w.reason, usd: Number(w.amountUsd || 0) / 100,
+        kind: String(w.arKey).startsWith('PUR:') ? 'invoice' : 'receivedGoods', packageId: String(w.arKey).split(':')[2] || null })) : [];
+
     res.status(200).json({
-      results: updatedPaymentList
+      results: updatedPaymentList,
+      writeOffs,
     });
   } catch (error) {
     console.log(error);
@@ -2138,11 +2233,16 @@ module.exports.addPaymentToOrder = async (req, res, next) => {
     const { receivedAmount, currency, createdAt, paymentType, customerId, category, list, rate } = req.body;
     const newList = typeof list === 'string' ? JSON.parse(list) : (list || []);
     if (paymentType !== 'cash') throw new ErrorHandler(400, 'Use the wallet payment action for wallet deductions');
-    if (!['USD', 'LYD', 'EURO'].includes(currency) || !Number.isFinite(Number(receivedAmount)) || Math.round(Number(receivedAmount) * 100) <= 0 || typeof receivedAmount === 'boolean') throw new ErrorHandler(400, 'Enter a positive payment amount and valid currency');
+    // Loyalty points sent with the payment: paid first in the same transaction, the cash pays the
+    // rest. Only points (no amount) is accepted when they close what is due.
+    const points = require('../accounting/services/loyalty').pointsOfPayment(req.body.points);
+    if (points > 0 && !['invoice', 'receivedGoods'].includes(category)) throw new ErrorHandler(400, 'النقاط تُستعمل فقط مع دفعة فاتورة الشراء أو الشحن');
+    const pointsOnly = points > 0 && (receivedAmount === undefined || receivedAmount === null || receivedAmount === '' || Number(receivedAmount) === 0);
+    if (!pointsOnly && (!['USD', 'LYD', 'EURO'].includes(currency) || !Number.isFinite(Number(receivedAmount)) || Math.round(Number(receivedAmount) * 100) <= 0 || typeof receivedAmount === 'boolean')) throw new ErrorHandler(400, 'Enter a positive payment amount and valid currency');
     if (!createdAt || Number.isNaN(new Date(createdAt).getTime())) throw new ErrorHandler(400, 'Invalid payment date');
     await assertOpenPeriod(req.user, createdAt);
     // Money in another currency counts at its own rate; without one it cannot be valued (owner's rule)
-    if (currency && currency !== 'USD' && !(Number.isFinite(Number(rate)) && Number(rate) > 0)) {
+    if (!pointsOnly && currency && currency !== 'USD' && !(Number.isFinite(Number(rate)) && Number(rate) > 0)) {
       return next(new ErrorHandler(400, `Type the exchange rate for a payment in ${currency}.`));
     }
 
@@ -2168,6 +2268,12 @@ module.exports.addPaymentToOrder = async (req, res, next) => {
       if (customerId && String(customerId) !== String(order.user)) throw new ErrorHandler(400, 'Payment customer does not own this order');
       if (category === 'receivedGoods' && await Balances.exists({ order: order._id, deliveryInvoiceId: { $exists: true }, status: { $in: ['open', 'overdue'] }, amount: { $gt: 0 } }).session(session)) {
         throw new ErrorHandler(400, 'للسداد على فاتورة تسليم جزئي، أودع المبلغ في المحفظة ثم سدد الدين المرتبط بالطرد من قسم الديون');
+      }
+      if (points > 0) {
+        const packageIds = category === 'receivedGoods' ? (newList || []).map((p) => String(p?._id || p?.id || '')).filter(Boolean) : [];
+        const target = { orderId: order._id, category, ...(packageIds.length && { packageIds }) };
+        await require('../accounting/services/loyalty').redeemInPayment({ userId: order.user, target, points, pointsOnly }, { session, req });
+        if (pointsOnly) return { points };
       }
       await Orders.updateOne({ _id: order._id }, { $inc: { accountingMutationVersion: 1 } }, { session });
       const data = {

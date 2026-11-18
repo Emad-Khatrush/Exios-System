@@ -15,6 +15,7 @@ import {
   TextField,
   Backdrop,
   CircularProgress,
+  LinearProgress,
   Snackbar,
   Alert,
   AvatarGroup,
@@ -22,10 +23,12 @@ import {
   InputAdornment,
 } from '@mui/material';
 import { Boxes, ChevronDown, CircleCheck, MapPin, Package as PackageIcon, PackageOpen, Plane, TriangleAlert, Wallet } from 'lucide-react';
-import SwipeableTextMobileStepper from '../../components/SwipeableTextMobileStepper/SwipeableTextMobileStepper';
+import FileViewer from '../../components/FileViewer/FileViewer';
 import FlightPdfButton from '../Inventory/FlightPdfButton';
 import { convertGoogleStorageUrl } from '../../utils/methods';
 import { usePackageSettings } from '../../utils/usePackageSettings';
+import { useStaffAccess } from '../../utils/useStaffAccess';
+import PaymentPoints, { pointsOf, remainingAfter, usePointsQuote } from '../Loyalty/PaymentPoints';
 
 // Paying up to this many USD short of (or over) the total is accepted to absorb rounding.
 const PAYMENT_TOLERANCE_USD = 2;
@@ -45,6 +48,8 @@ type SelectedPackage = {
   feeAmount?: number;
   feeCurrency?: string;
   feeLydAmounts?: number[];
+  // What loyalty points already paid on the shipping (cost is what is left)
+  pointsUsd?: number;
 };
 
 type PaymentInput = { amountUSD: string; amountLYD: string };
@@ -66,13 +71,18 @@ const formatMoney = (value: number) => value.toLocaleString('en-US', { minimumFr
 // The fees a package can carry beside its shipping: transport to another office, customs clearance
 const feesOf = (pkg: any) => ['domesticFee', 'customsFee'].map((field) => pkg?.deliveredPackages?.[field]).filter((fee) => Number(fee?.amount) > 0);
 
-// The shipping in dollars, plus the fees set in dollars. A fee in dinars stays in dinars: paid from
-// the dinar wallet on its own, or converted at today's rate (spec v8)
+// What loyalty points already paid on a package's shipping (sent by the server with the packages)
+const pointsUsdOf = (pkg: any) => Math.max(Number(pkg?.pointsUsd) || 0, 0);
+
+// The shipping in dollars, less what points already paid on it (never below zero), plus the fees set
+// in dollars. A fee in dinars stays in dinars: paid from the dinar wallet on its own, or converted
+// at today's rate (spec v8). The server takes the same figure.
 const getPackageCost = (pkg: Package): number => {
   const weight = pkg?.deliveredPackages?.weight?.total || 0;
   const price = pkg?.deliveredPackages?.exiosPrice || 0;
+  const shipping = Number((weight * price).toFixed(2));
   const feeUsd = feesOf(pkg).filter((fee) => fee.currency === 'USD').reduce((sum, fee) => sum + Number(fee.amount), 0);
-  return Number((weight * price + feeUsd).toFixed(2));
+  return Number((shipping - Math.min(pointsUsdOf(pkg), shipping) + feeUsd).toFixed(2));
 };
 
 const lydFeesOf = (pkg: any) => feesOf(pkg).filter((fee) => fee.currency === 'LYD').reduce((sum, fee) => sum + Number(fee.amount), 0);
@@ -91,6 +101,7 @@ const toSelectedPackage = (pkg: any, orderId: string): SelectedPackage => ({
   feeAmount: lydFeesOf(pkg),
   feeCurrency: lydFeesOf(pkg) > 0 ? 'LYD' : undefined,
   feeLydAmounts: feesOf(pkg).filter(fee => fee.currency === 'LYD').map(fee => Number(fee.amount)),
+  pointsUsd: pointsUsdOf(pkg) || undefined,
 });
 
 // Received packages were already delivered (and paid for), so they can never be selected again;
@@ -116,12 +127,24 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
   const [payment, setPayment] = useState<PaymentInput>(emptyPayment);
   const [allowPartial, setAllowPartial] = useState(false);
   const [partialRate, setPartialRate] = useState('');
-  const canCredit = useSelector((state: any) => !!(state.session.account?.roles?.isAdmin || state.session.account?.roles?.isAccountant));
+  // «التسليم مع دين متبقٍ» in Settings > Permissions. Staff nobody has configured yet keep what their
+  // role gave them: admins and accountants.
+  const isAdminOrAccountant = useSelector((state: any) => !!(state.session.account?.roles?.isAdmin || state.session.account?.roles?.isAccountant));
+  const staff = useStaffAccess();
+  const canCredit = staff.configured ? staff.can('delivery_on_credit') : isAdminOrAccountant;
   const [previewImages, setPreviewImages] = useState<any>();
   // Fees in dinars (transport, customs clearance): paid from the dinar wallet on their own, or converted to dollars
   const [feeMode, setFeeMode] = useState<'separate' | 'usd'>('separate');
   const effectiveFeeMode = allowPartial ? 'usd' : feeMode;
   const { rate: todayRate } = usePackageSettings();
+  // Paying with points at delivery: the server allows the loyalty, delivery or payments permission;
+  // staff nobody has configured yet keep what their role gives them (this page is staff only)
+  const staffAccess = useStaffAccess();
+  const canUsePoints = staffAccess.configured ? staffAccess.can('loyalty', 'delivery', 'invoices_payments') : true;
+
+  // A delivery in batches (see runDelivery): its progress, and one left unfinished to resume
+  const [progress, setProgress] = useState<{ done: number, total: number } | null>(null);
+  const [openDelivery, setOpenDelivery] = useState<any>(null);
 
   const [ordersError, setOrdersError] = useState<string | null>(null);
   const ordersRequest = useRef<CancelTokenSource | null>(null);
@@ -130,7 +153,7 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
   const walletUsd = toNumber(balances?.walletUsd);
   const walletLyd = toNumber(balances?.walletLyd);
 
-  const fetchOrders = async (tabType: string) => {
+  const fetchOrders = async (tabType: string): Promise<any[] | undefined> => {
     const requestId = ++latestRequestId.current;
     ordersRequest.current?.cancel();
     const source = axios.CancelToken.source();
@@ -147,6 +170,7 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
       // Ignore responses from a tab switch that's since been superseded by a newer one.
       if (requestId !== latestRequestId.current) return;
       setOrders(res.data.results || []);
+      return res.data.results || [];
     } catch (err: any) {
       if (requestId !== latestRequestId.current) return;
       if (axios.isCancel(err)) return;
@@ -167,6 +191,7 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
     setFilter('active');
     setSelectedPackages([]);
     fetchOrders('active');
+    loadOpenDelivery();
     return () => invalidateRequests();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
@@ -273,25 +298,42 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
     return { totalKG, totalCBM, totalFees: Number(totalFees.toFixed(2)), feesLYD: Number(feesLYD.toFixed(2)), separateLYD: effectiveFeeMode === 'separate' ? Number(feesLYD.toFixed(2)) : 0 };
   }, [selectedPackages, effectiveFeeMode, todayRate]);
 
+  // ---- Loyalty points on the selected packages' shipping (at most 20%, never the fees) ----
+  // A field of the payment (owner's decision): sent with the delivery, which takes both in one
+  // transaction. Quoted again whenever the selection changes; the old figures are cleared first.
+  const selectedIds = selectedPackages.map((pkg) => pkg.id).join(',');
+  const pointsQuote = usePointsQuote(openDialog && canUsePoints && selectedIds ? `user/${customerId}/loyalty/delivery-quote` : null, { packageIds: selectedIds });
+  const [pointsInput, setPointsInput] = useState('');
+  useEffect(() => { setPointsInput(''); }, [selectedIds]);
+  const { points: pointsUsed, usd: pointsUsd } = pointsOf(pointsInput, pointsQuote.quote);
+  // What the money pays: the total less the points. The amounts, the rate and the checks use it.
+  const dueTotal = remainingAfter(totals.totalFees, pointsUsd);
+
   // The rate is calculated, never typed (the server calculates it the same way):
   // USD only -> 0, LYD only -> LYD / total, both -> USD is taken first and LYD pays the rest.
   const paymentSummary = useMemo(() => {
     const amountUSD = toNumber(payment.amountUSD);
     const amountLYD = toNumber(payment.amountLYD);
-    const remainingUSD = round2(totals.totalFees - amountUSD);
+    const remainingUSD = round2(dueTotal - amountUSD);
     const rate = allowPartial ? Number(partialRate) : amountLYD > 0 && remainingUSD > 0 ? calculateRate(amountLYD, remainingUSD) : 0;
     const lydInUsd = rate > 0 ? allowPartial ? amountLYD / rate : remainingUSD : 0;
     const covered = round2(amountUSD + lydInUsd);
-    const difference = round2(covered - totals.totalFees);
+    const difference = round2(covered - dueTotal);
 
     const errors: string[] = [];
     if (amountUSD < 0 || amountLYD < 0) errors.push('Amounts cannot be negative.');
     if (amountUSD > walletUsd + 0.001) errors.push(`USD wallet only has $${formatMoney(walletUsd)}.`);
-    if (amountLYD + totals.separateLYD > walletLyd + 0.001) errors.push(totals.separateLYD ? `LYD wallet only has ${formatMoney(walletLyd)} LYD for the payment and the ${formatMoney(totals.separateLYD)} LYD fees.` : `LYD wallet only has ${formatMoney(walletLyd)} LYD.`);
-    if (amountLYD > 0 && remainingUSD <= 0) errors.push('The USD amount already covers the total, remove the LYD amount.');
+    if (amountLYD + totals.separateLYD > walletLyd + 0.001) errors.push(totals.separateLYD
+      ? `محفظة الدينار فيها ${formatMoney(walletLyd)} LYD، والمطلوب منها ${formatMoney(amountLYD + totals.separateLYD)} LYD (رسوم ${formatMoney(totals.separateLYD)}${amountLYD ? ` + دفعة شحن ${formatMoney(amountLYD)}` : ''}). أودع الدينار الذي استلمته من العميل في محفظته أولًا، أو اختر تحويل الرسوم إلى الدولار.`
+      : `LYD wallet only has ${formatMoney(walletLyd)} LYD.`);
+    // The dinar fees are taken on their own: typing them in the LYD field as well would charge them twice
+    if (amountLYD > 0 && remainingUSD <= 0) errors.push(totals.separateLYD
+      ? `رسوم الدينار (${formatMoney(totals.separateLYD)} LYD) تُخصم تلقائيًا من محفظة الدينار. امسح خانة الدينار؛ هي لدفع الشحن بالدينار فقط.`
+      : 'The USD amount already covers the total, remove the LYD amount.');
     // Free shipping (offered with a purchase): packages that cost nothing are delivered with no payment
     // Separate LYD fees are collected automatically from that wallet, outside these inputs.
-    if (amountUSD === 0 && amountLYD === 0 && totals.totalFees > 0 && !allowPartial) errors.push('Enter a USD or LYD amount.');
+    if (amountUSD === 0 && amountLYD === 0 && dueTotal > 0 && !allowPartial) errors.push('Enter a USD or LYD amount.');
+    if (pointsInput && !pointsQuote.quote) errors.push('جارٍ تحميل نقاط العميل…');
     if (allowPartial && amountLYD > 0 && (!Number.isFinite(rate) || rate <= 0)) errors.push('أدخل سعر صرف صحيحًا للدينار.');
     if (allowPartial && totals.feesLYD > 0 && !todayRate) errors.push('سجل سعر الدينار أولًا لتحويل رسوم الطرود.');
     if (allowPartial && difference > 0) errors.push('الدفعة أكبر من إجمالي الطرود المحددة.');
@@ -301,7 +343,7 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
     }
 
     return { amountUSD, amountLYD, rate, remainingUSD, lydInUsd, covered, difference, errors };
-  }, [payment, totals.totalFees, totals.feesLYD, totals.separateLYD, walletUsd, walletLyd, allowPartial, partialRate, todayRate]);
+  }, [payment, dueTotal, totals.feesLYD, totals.separateLYD, walletUsd, walletLyd, allowPartial, partialRate, todayRate, pointsInput, pointsQuote.quote]);
 
   const updatePayment = (field: keyof PaymentInput) => (event: any) => {
     const value = event.target.value;
@@ -309,7 +351,7 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
   };
 
   const payFullInUsd = () => {
-    setPayment({ amountUSD: String(round2(Math.min(totals.totalFees, walletUsd))), amountLYD: '' });
+    setPayment({ amountUSD: String(round2(Math.min(dueTotal, walletUsd))), amountLYD: '' });
   };
 
   const closeDialog = () => {
@@ -317,10 +359,127 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
     setPayment(emptyPayment);
     setAllowPartial(false);
     setPartialRate('');
+    setPointsInput('');
+  };
+
+  // An unfinished delivery of this customer (the page was closed or the connection cut)
+  const loadOpenDelivery = async () => {
+    try {
+      setOpenDelivery((await api.get(`user/${customerId}/deliveries`)).data.delivery);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Delivers a started delivery batch after batch (owner's request 2026-11-05): many packages in one
+  // request passed the server's 30 seconds. Each batch is all or nothing on the server, so a call
+  // whose answer was lost is simply sent again: the delivery only moves forward once.
+  const runDelivery = async (job: any) => {
+    setProgress({ done: job.done, total: job.total });
+    let current = job;
+    while (current.status === 'running') {
+      let attempt = 0;
+      for (;;) {
+        try {
+          current = (await api.post(`deliveries/${current._id}/next`, {})).data;
+          break;
+        } catch (err: any) {
+          // A lost answer or a busy server is retried; a refusal (4xx) is shown
+          const status = err?.response?.status;
+          if ((status && status < 500) || attempt >= 2) throw err;
+          attempt += 1;
+          await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+        }
+      }
+      setProgress({ done: current.done, total: current.total });
+    }
+    return current;
+  };
+
+  const finishDelivery = (job: any) => {
+    setOpenDelivery(job.status === 'running' ? job : null);
+    handleFilterChange(filter);
+    onDelivered?.();
+  };
+
+  const resumeDelivery = async () => {
+    if (!openDelivery || isPending) return;
+    try {
+      setIsPending(true);
+      const job = await runDelivery(openDelivery);
+      setIsError(false);
+      setResMessage(`تم تسليم ${job.done} من ${job.total} شحنة`);
+      finishDelivery(job);
+    } catch (err: any) {
+      setIsError(true);
+      setResMessage(`${err?.response?.data?.message || 'توقف التسليم.'} يمكنك الإكمال لاحقاً.`);
+      await loadOpenDelivery();
+      handleFilterChange(filter);
+      onDelivered?.();
+    } finally {
+      setIsPending(false);
+      setProgress(null);
+      setIsFinished(true);
+    }
+  };
+
+  const stopOpenDelivery = async () => {
+    if (!openDelivery || isPending) return;
+    if (!window.confirm(`إيقاف التسليم؟ ${openDelivery.total - openDelivery.done} شحنة لن تُسلَّم ولن يُخصم ثمنها. ما سُلّم يبقى كما هو.`)) return;
+    try {
+      setIsPending(true);
+      await api.post(`deliveries/${openDelivery._id}/stop`, {});
+      setOpenDelivery(null);
+      setIsError(false);
+      setResMessage(`أُوقف التسليم. سُلّمت ${openDelivery.done} شحنة، والباقي لم يُخصم.`);
+    } catch (err: any) {
+      setIsError(true);
+      setResMessage(err?.response?.data?.message || 'تعذر إيقاف التسليم.');
+      await loadOpenDelivery();
+    } finally {
+      setIsPending(false);
+      setIsFinished(true);
+    }
   };
 
   const markAsDelivered = async () => {
     if (isPending || selectedPackages.length === 0 || paymentSummary.errors.length > 0) return;
+
+    // Paid in full: in batches. Credit delivery keeps its single request.
+    if (!allowPartial) {
+      let started: any = null;
+      try {
+        setIsPending(true);
+        started = (await api.post(`user/${customerId}/deliveries`, {
+          selectedPackages: selectedPackages.map(({ images, ...pkg }) => pkg),
+          payment: { amountUSD: paymentSummary.amountUSD, amountLYD: paymentSummary.amountLYD, rate: paymentSummary.rate },
+          feeMode: effectiveFeeMode,
+          // Paid once at the start over every package, in the start's transaction
+          ...(pointsUsed > 0 && { points: pointsUsed }),
+        })).data;
+        closeDialog();
+        const job = await runDelivery(started);
+        setIsError(false);
+        setResMessage(`تم تسليم ${job.done} شحنة بنجاح`);
+        finishDelivery(job);
+      } catch (err: any) {
+        console.error(err);
+        setIsError(true);
+        setResMessage(started
+          ? `${err?.response?.data?.message || 'انقطع التسليم.'} ما سُلّم محفوظ؛ أكمل الباقي من الشريط أعلى الطلبيات.`
+          : err?.response?.data?.message || 'Could not mark the packages as delivered. Please try again.');
+        if (started) {
+          await loadOpenDelivery();
+          handleFilterChange(filter);
+          onDelivered?.();
+        }
+      } finally {
+        setIsPending(false);
+        setProgress(null);
+        setIsFinished(true);
+      }
+      return;
+    }
 
     try {
       setIsPending(true);
@@ -332,9 +491,10 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
           amountLYD: paymentSummary.amountLYD,
           rate: paymentSummary.rate,
         },
-        totalCost: totals.totalFees,
+        totalCost: dueTotal,
         feeMode: effectiveFeeMode,
         allowPartial,
+        ...(pointsUsed > 0 && { points: pointsUsed }),
       });
 
       closeDialog();
@@ -362,6 +522,18 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
 
   return (
     <div className="customer-orders">
+      {openDelivery && !isPending && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={<>
+            <Button color="inherit" size="small" onClick={resumeDelivery}>إكمال التسليم</Button>
+            <Button color="inherit" size="small" onClick={stopOpenDelivery}>إيقاف الباقي</Button>
+          </>}
+        >
+          تسليم غير مكتمل: سُلّمت {openDelivery.done} من {openDelivery.total} شحنة وخُصم ثمنها. بقيت {openDelivery.total - openDelivery.done} لم تُسلَّم ولم يُخصم ثمنها.
+        </Alert>
+      )}
       <div className="co-toolbar">
         <div className="co-tabs" role="tablist">
           {tabs.map(tab => (
@@ -503,6 +675,7 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
                       <dl className="co-package-figures">
                         <div><dt>Measure</dt><dd>{measureValue} {measureUnit}</dd></div>
                         <div><dt>Price</dt><dd>${exiosPrice}</dd></div>
+                        {pointsUsdOf(pkg) > 0 && <div className="co-points-paid"><dt>بالنقاط</dt><dd>−${formatMoney(pointsUsdOf(pkg))}</dd></div>}
                         <div><dt>Cost</dt><dd className="is-strong">${formatMoney(getPackageCost(pkg))}</dd></div>
                       </dl>
 
@@ -577,6 +750,13 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
             </div>
           </div>
 
+          {canUsePoints && (
+            <PaymentPoints
+              quote={pointsQuote.quote} balance={pointsQuote.balance} loading={pointsQuote.loading} failed={pointsQuote.failed}
+              value={pointsInput} onChange={setPointsInput} totalUsd={totals.totalFees} disabled={isPending}
+            />
+          )}
+
           {totals.feesLYD > 0 && (
             <div className="co-fee-box" style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, margin: '12px 0' }}>
               <strong>Fees in LYD (transport, customs clearance): {formatMoney(totals.feesLYD)} LYD</strong>
@@ -584,7 +764,10 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
                 <label><input type="radio" checked={feeMode === 'separate'} disabled={allowPartial} onChange={() => setFeeMode('separate')} /> Pay them in LYD from the LYD wallet (separately)</label>
                 <label><input type="radio" checked={feeMode === 'usd'} onChange={() => setFeeMode('usd')} disabled={!todayRate} /> Convert to USD at {todayRate || '-'} and add to the total</label>
               </div>
-              {feeMode === 'separate' && <small>{formatMoney(totals.feesLYD)} LYD are taken from the LYD wallet on their own; the total above is the shipping only.</small>}</>}
+              {feeMode === 'separate' && <p dir="rtl" style={{ margin: '8px 0 0' }}>
+                <b>{formatMoney(totals.feesLYD)} LYD</b> تُخصم تلقائيًا من محفظة الدينار. <b>لا تكتبها في خانة الدينار بالأسفل.</b> الإجمالي ${formatMoney(dueTotal)} هو الشحن فقط: ادفعه بالدولار (أو بالدينار إن أراد العميل).
+                <br />سيُخصم: <b>${formatMoney(paymentSummary.amountUSD)}</b> من محفظة الدولار{paymentSummary.amountLYD > 0 && <> + <b>{formatMoney(paymentSummary.amountLYD)} LYD</b> للشحن</>} + <b>{formatMoney(totals.feesLYD)} LYD</b> رسوم من محفظة الدينار.
+              </p>}</>}
             </div>
           )}
 
@@ -636,9 +819,9 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
             </div>
             <div className="is-total">
               <dt>Covered</dt>
-              <dd>${formatMoney(paymentSummary.covered)} of ${formatMoney(totals.totalFees)}</dd>
+              <dd>${formatMoney(paymentSummary.covered)} of ${formatMoney(dueTotal)}</dd>
             </div>
-            {allowPartial && <div className="co-remaining" dir="rtl" aria-live="polite"><dt>المتبقي على العميل</dt><dd dir="ltr">{paymentSummary.amountLYD > 0 && !(Number.isFinite(paymentSummary.rate) && paymentSummary.rate > 0) ? '—' : `$${formatMoney(Math.max(0, totals.totalFees - paymentSummary.covered))}`}</dd></div>}
+            {allowPartial && <div className="co-remaining" dir="rtl" aria-live="polite"><dt>المتبقي على العميل</dt><dd dir="ltr">{paymentSummary.amountLYD > 0 && !(Number.isFinite(paymentSummary.rate) && paymentSummary.rate > 0) ? '—' : `$${formatMoney(Math.max(0, dueTotal - paymentSummary.covered))}`}</dd></div>}
           </dl>
 
           {paymentSummary.errors.length > 0 ? (
@@ -648,7 +831,7 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
               ))}
             </ul>
           ) : (
-            <p className="co-ok"><CircleCheck size={16} strokeWidth={2} /> {allowPartial && paymentSummary.covered < totals.totalFees ? 'المتبقي سيُسجل كدين مرتبط بهذه الفاتورة والطرود.' : 'Payment covers the total.'}</p>
+            <p className="co-ok"><CircleCheck size={16} strokeWidth={2} /> {allowPartial && paymentSummary.covered < dueTotal ? 'المتبقي سيُسجل كدين مرتبط بهذه الفاتورة والطرود.' : 'Payment covers the total.'}</p>
           )}
 
           <details className="co-selected-list">
@@ -661,6 +844,7 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
                     {pkg.weight} {pkg.measureUnit} x ${pkg.exiosPrice || 0}
                     {pkg.boxesCount ? `, ${pkg.boxesCount} boxes` : ''}
                     {pkg.locationPlace ? `, ${pkg.locationPlace}` : ''}
+                    {pkg.pointsUsd ? `, −$${formatMoney(pkg.pointsUsd)} بالنقاط` : ''}
                   </small>
                 </div>
                 <strong>${formatMoney(pkg.cost)}</strong>
@@ -676,8 +860,14 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
         </DialogActions>
       </Dialog>
 
-      <Backdrop sx={{ color: '#fff', zIndex: (theme: any) => theme.zIndex.drawer + 1000 }} open={isPending}>
-        <CircularProgress color="inherit" />
+      <Backdrop sx={{ color: '#fff', zIndex: (theme: any) => theme.zIndex.drawer + 1000, flexDirection: 'column', gap: 2 }} open={isPending}>
+        {progress ? (
+          <div style={{ width: 'min(360px, 80vw)', textAlign: 'center' }}>
+            <div style={{ marginBottom: 12, fontSize: 16 }}>جارٍ التسليم: {progress.done} من {progress.total} شحنة</div>
+            <LinearProgress variant="determinate" value={progress.total ? (progress.done / progress.total) * 100 : 0} color="inherit" sx={{ height: 8, borderRadius: 4 }} />
+            <div style={{ marginTop: 12, fontSize: 13, opacity: 0.85 }}>لا تغلق الصفحة. إن انقطع الاتصال، ما سُلّم محفوظ ويمكن إكمال الباقي.</div>
+          </div>
+        ) : <CircularProgress color="inherit" />}
       </Backdrop>
 
       <Snackbar open={isFinished} autoHideDuration={6000} onClose={closeSnackbar}>
@@ -686,14 +876,7 @@ const CustomerOrders = ({ customerId, balances, onDelivered }: any) => {
         </Alert>
       </Snackbar>
 
-      <Dialog open={!!previewImages} onClose={() => setPreviewImages(undefined)}>
-        <DialogContent>
-          <SwipeableTextMobileStepper data={previewImages} />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPreviewImages(undefined)}>Close</Button>
-        </DialogActions>
-      </Dialog>
+      <FileViewer open={!!previewImages} files={previewImages} onClose={() => setPreviewImages(undefined)} />
     </div>
   );
 };

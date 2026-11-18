@@ -155,6 +155,8 @@ const orderSchema = new Schema({
   },
   // Separate from edited notes and payments: they must not restart the stage's age.
   orderStatusChangedAt: Date,
+  // The last orderStatus the customer got a phone notification for (utils/orderPush.js)
+  pushedStatus: Number,
   isFinished: {
     type: Boolean,
     default: false
@@ -198,6 +200,13 @@ const orderSchema = new Schema({
     type: Boolean,
     default: false,
   },
+  // Loyalty points (spec 2026-11-16): staff can mark an order "no points" with a reason
+  loyalty: {
+    noPoints: Boolean,
+    reason: String,
+    by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    at: Date,
+  },
   // Deleted by an admin because it was created by mistake (spec 19.10): hidden from the whole
   // system; accounting still shows it (its claims reversed) with a "deleted" badge
   isDeleted: { type: Boolean, default: false },
@@ -240,6 +249,9 @@ const orderSchema = new Schema({
       appliedAt: Date,
       effectiveFrom: Date,
       appliedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      cancelledAt: Date,
+      cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      cancellationReason: String,
     },
     link: {
       type: String,
@@ -496,6 +508,8 @@ orderSchema.index({ shippingBlocked: 1, isFinished: 1, createdAt: -1 }, { partia
 // Date ranges read by the sales goals dashboard (sales by invoice date, packages by arrival date)
 orderSchema.index({ createdAt: 1 });
 orderSchema.index({ user: 1, createdAt: -1 });
+// The push watcher's "what moved in the last hours", once a minute
+orderSchema.index({ orderStatusChangedAt: 1 });
 orderSchema.index({ 'paymentList.deliveredPackages.arrivedAt': 1 });
 
 module.exports = mongoose.model("Order", orderSchema);

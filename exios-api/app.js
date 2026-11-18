@@ -55,6 +55,10 @@ const campaigns = require('./routes/campaigns');
 const companyNotes = require('./routes/companyNotes');
 const { routes: accountingRoutes, systemRoutes: accountingSystemRoutes, initAccounting } = require('./accounting');
 const goals = require('./routes/goals');
+const files = require('./routes/files');
+const staffAccess = require('./routes/staffAccess');
+const feedback = require('./routes/feedback');
+const loyalty = require('./routes/loyalty');
 const Redis = require('ioredis');
 
 let REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
@@ -88,6 +92,7 @@ redisClient?.on('error', (err) => {
 const { Client, MessageMedia } = require('whatsapp-web.js');
 const { WhatsAppMongoStore, SafeRemoteAuth } = require('./utils/whatsappStore');
 const { isAdmin, protect } = require('./middleware/check-auth');
+const { allow } = require('./middleware/permissions');
 const { generatePDF } = require('./utils/sender');
 const Orders = require('./models/order');
 
@@ -97,6 +102,10 @@ let isWhatsAppReady = false;
 let isInitializingWhatsApp = false; // guards against overlapping initialize() calls
 
 const app = express();
+// The host's router sits in front of the app: trust its X-Forwarded-For (one hop), so req.ip is the
+// visitor's own address. Without it every request has the router's address and per-visitor limits
+// (sign-in, password reset, sign-up check) would count all customers as one.
+app.set('trust proxy', 1);
 app.get('/', (req, res) => res.json({ service: 'Exios API', environment: isQa ? 'qa' : 'production', databaseConnected: mongoose.connection.readyState === 1 }));
 app.get('/health', (req, res) => res.status(mongoose.connection.readyState === 1 ? 200 : 503).json({ ok: mongoose.connection.readyState === 1, environment: isQa ? 'qa' : 'production' }));
 
@@ -122,6 +131,10 @@ if (isLocalAccountingTrial) app.get('/api/accounting/trial-status', async (req, 
 mongoose.connect(connectionUrl, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
+  // Compress the traffic with Atlas (built into the driver; Atlas supports it). Measured on a copy
+  // of the real data: a full backup read moved 89.6 MB without it, 10.8 MB with it (2026-11-05),
+  // when Atlas was slowing large reads down so much that backups could not finish.
+  compressors: ['zlib'],
 }).catch(error => {
   console.error('MongoDB startup connection failed:', error.code || error.name);
   process.exit(1);
@@ -189,6 +202,8 @@ let whatsappStore; // created once DB is connected
 let isShuttingDown = false;
 let isBackupRestart = false; // Chrome is being closed on purpose for a clean backup
 let shownQrThisClient = false; // current client needed a QR scan (= new link)
+// 'disconnected' reasons that mean the link is gone for good (not a hiccup)
+const WHATSAPP_UNLINKED_REASONS = ['LOGOUT', 'UNPAIRED', 'UNPAIRED_IDLE'];
 
 // Closes Chrome and waits for the process to exit, so it has flushed
 // IndexedDB and Local Storage to disk before we copy the profile.
@@ -406,10 +421,14 @@ async function initializeWhatsAppClient() {
       if (isShuttingDown || isBackupRestart) return;
 
       try {
-        // Only wipe the stored session on an explicit logout; a network drop
-        // or Heroku restart should just reconnect with the existing session.
-        if (reason === 'LOGOUT' && await whatsappStore.sessionExists({ session: 'RemoteAuth' })) {
-          console.log('Logged out — deleting session from store');
+        // Wipe the stored session only when WhatsApp itself says this device
+        // is no longer linked (logged out here, or removed from the phone's
+        // "Linked devices"). Keeping it would restore a dead session on every
+        // retry and the QR would never come back. Network drops, conflicts,
+        // a hang or a Heroku restart keep the session and just reconnect.
+        if (WHATSAPP_UNLINKED_REASONS.includes(reason)) {
+          console.log(`WhatsApp device unlinked (${reason}) — deleting saved session from MongoDB.`);
+          clearTimeout(snapshotRefreshTimer);
           await whatsappStore.delete({ session: 'RemoteAuth' });
         }
       } catch (err) {
@@ -437,6 +456,8 @@ db.once("open", () => {
   console.log('MongoDB connected');
   initAccounting();
   require('./controllers/goals').prepareGoals();
+  // Phone notifications when a shipment moves on (only when Firebase credentials are set)
+  require('./utils/orderPush').startOrderPush();
   initializeWhatsAppClient();
 });
 
@@ -483,8 +504,14 @@ app.use('/api', analytics);
 app.use('/api', campaigns);
 app.use('/api', companyNotes);
 app.use('/api', goals);
+app.use('/api', files);
+app.use('/api', staffAccess);
+app.use('/api', feedback);
+app.use('/api', loyalty);
+app.use('/api', require('./routes/push'));
 
-app.get('/api/get-qr-code', (req, res) => {
+// Whoever scans this QR links their phone as the company's sending number: staff only
+app.get('/api/get-qr-code', protect, staffOnly, (req, res) => {
   if (qrCodeData) {
     res.status(200).json({ qrCode: qrCodeData });
   } else {
@@ -504,7 +531,15 @@ function requireWhatsApp(req, res, next) {
   return res.status(503).json({ success: false, message });
 }
 
-app.post('/api/sendWhatsupMessage', requireWhatsApp, async (req, res) => {
+// Sending from the company's WhatsApp number is for signed-in staff only, never customers or
+// anonymous callers. Used with `protect` before it.
+function staffOnly(req, res, next) {
+  const roles = req.user?.roles || {};
+  if (roles.isAdmin || roles.isEmployee || roles.isAccountant) return next();
+  return res.status(403).json({ success: false, message: 'authorize-invalid' });
+}
+
+app.post('/api/sendWhatsupMessage', protect, staffOnly, requireWhatsApp, async (req, res) => {
   const { phoneNumber, message } = req.body
   try {
     await sendMessage(client, validatePhoneNumber(phoneNumber), message);
@@ -514,7 +549,7 @@ app.post('/api/sendWhatsupMessage', requireWhatsApp, async (req, res) => {
   }
 });
 
-app.post('/api/sendWhatsupImages', requireWhatsApp, async (req, res) => {
+app.post('/api/sendWhatsupImages', protect, staffOnly, requireWhatsApp, async (req, res) => {
   const { imgUrls, phoneNumber } = req.body
   try {
     for (const imgUrl of imgUrls || []) {
@@ -526,7 +561,7 @@ app.post('/api/sendWhatsupImages', requireWhatsApp, async (req, res) => {
   }
 });
 
-app.post('/api/inventorySendWhatsupMessages', protect, requireWhatsApp, async (req, res) => {
+app.post('/api/inventorySendWhatsupMessages', protect, allow(['inventory', 'warehouse', 'marketing'], staffOnly), requireWhatsApp, async (req, res) => {
   try {
     const { data } = req.body;
     let index = 0;
@@ -550,7 +585,7 @@ app.post('/api/inventorySendWhatsupMessages', protect, requireWhatsApp, async (r
   }
 })
 
-app.post('/api/sendMessagesToClients', protect, isAdmin, requireWhatsApp, async (req, res) => {
+app.post('/api/sendMessagesToClients', protect, allow(['marketing'], isAdmin), requireWhatsApp, async (req, res) => {
   const { imgUrl, content, target, testMode, testBigData, skip, limit } = req.body;
 
   try {
@@ -899,11 +934,38 @@ app.use(async (req, res) => {
  * @param {string} jid - Target WhatsApp ID (phone_number@c.us)
  * @param {string} text - The message body
  */
+// Asks WhatsApp for the number's real ID before sending, so numbers whose WhatsApp ID differs
+// from how they are written (some countries) still arrive, and numbers that are not on WhatsApp
+// fail right away with an error isPermanentSendError recognises (no wasted retries).
+// Cached, since a campaign message resolves the same number for the photo and the text.
+const resolvedJids = new Map();
+const RESOLVED_JIDS_MAX = 5000;
+
+async function resolveJid(waClient, jid) {
+    if (resolvedJids.has(jid)) return resolvedJids.get(jid);
+    let numberId;
+    try {
+        numberId = await waClient.getNumberId(jid.split('@')[0]);
+    } catch (error) {
+        // The lookup itself failed (not the number): send to the ID as written, as before
+        console.error(`Could not look up ${jid} on WhatsApp, sending as is:`, error.message);
+        return jid;
+    }
+    if (!numberId) {
+        throw new Error(`${jid} is not a valid WhatsApp number`);
+    }
+    const resolved = numberId._serialized || jid;
+    if (resolvedJids.size >= RESOLVED_JIDS_MAX) resolvedJids.clear();
+    resolvedJids.set(jid, resolved);
+    return resolved;
+}
+
 async function sendMessage(waClient, jid, text) {
     if (!waClient || !isWhatsAppReady) {
         throw new Error('whatsup-auth-not-found');
     }
     try {
+        jid = await resolveJid(waClient, jid);
         await waClient.sendMessage(jid, text);
         console.log(`Message successfully sent to ${jid}`);
     } catch (error) {
@@ -1017,6 +1079,7 @@ async function sendPhoto(waClient, jid, imgUrl) {
     }
     let media;
     try {
+        jid = await resolveJid(waClient, jid);
         media = await downloadImage(imgUrl);
         await patchMediaIdCollision(waClient);
         await waClient.sendMessage(jid, media);
