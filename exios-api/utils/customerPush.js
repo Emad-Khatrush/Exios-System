@@ -83,4 +83,49 @@ async function shippingResumed(order) {
   }));
 }
 
-module.exports = { pointsEarned, levelUp, announcement, shippingBlocked, shippingResumed };
+// A points offer that just started (spec 2026-11-19), to everyone: what it covers and its last day
+const PROMO_COUNTRIES = { china: 'الصين', uae: 'الإمارات', turkey: 'تركيا', usa: 'أمريكا', uk: 'بريطانيا' };
+const DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+// What an offer covers, and a Libya day as "الجمعة 27 نوفمبر"
+function promotionWhat(p) {
+  const parts = [];
+  if ((p.kinds || []).includes('shipping')) {
+    const methods = p.methods || [];
+    const method = methods.length === 1 ? (methods[0] === 'air' ? ' الجوي' : ' البحري') : '';
+    const countries = (p.countries || []).map((c) => PROMO_COUNTRIES[c] || c);
+    parts.push(`الشحن${method}${countries.length ? ` من ${countries.join(' و')}` : ''}`);
+  }
+  if ((p.kinds || []).includes('purchase')) parts.push('فواتير الشراء');
+  if ((p.kinds || []).includes('remittance')) parts.push('الحوالات');
+  return parts.join(' و');
+}
+const libyaDay = (time) => {
+  const day = require('moment-timezone').tz(time, 'Africa/Tripoli');
+  return `${DAYS[day.day()]} ${day.date()} ${MONTHS[day.month()]}`;
+};
+const timesOf = (p) => Number(((p.multiplierPct || 100) / 100).toFixed(2));
+// The last day the offer covers, in Libya (endsAt is the midnight after it)
+const lastDayOf = (p) => libyaDay(new Date(p.endsAt).getTime() - 1);
+
+function promotionText(p) {
+  return {
+    title: `🔥 ${p.name}: نقاطك ×${timesOf(p)}`,
+    body: `على ${promotionWhat(p)} لكل طلبية تُنشئها حتى ${lastDayOf(p)}.`,
+  };
+}
+// Announced before it starts: what is coming and from when
+function promotionAnnouncedText(p) {
+  return {
+    title: `⏳ قريباً: ${p.name}، نقاطك ×${timesOf(p)}`,
+    body: `على ${promotionWhat(p)} لكل طلبية تُنشئها من ${libyaDay(new Date(p.startsAt))} حتى ${lastDayOf(p)}.`,
+  };
+}
+async function promotionAnnounced(p) {
+  return safely('promotion', () => sendToAll({ ...promotionAnnouncedText(p), url: '/points', tag: 'promotion' }));
+}
+async function promotionStarted(p) {
+  return safely('promotion', () => sendToAll({ ...promotionText(p), url: '/points', tag: 'promotion' }));
+}
+
+module.exports = { pointsEarned, levelUp, announcement, shippingBlocked, shippingResumed, promotionText, promotionStarted, promotionAnnouncedText, promotionAnnounced };
