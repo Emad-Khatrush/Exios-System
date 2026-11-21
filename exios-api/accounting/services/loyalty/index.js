@@ -20,7 +20,7 @@ const { lockClaimAllocations } = require('../claims/locks');
 const { syncOrder } = require('../claims/sync');
 const { openBalances, resolveClaimKeys, splitOverClaims, claimLines } = require('../posting/operations');
 const { resolveAccount } = require('../roles');
-const { purchaseKey, shipmentKey, parseKey, CLAIM_EVENTS } = require('../claims/keys');
+const { purchaseKey, shipmentKey, parseKey, packageChargeCents, CLAIM_EVENTS } = require('../claims/keys');
 const { earnPoints, redeemCap, takeOldest, EXPIRY_DAYS, SOON_DAYS } = require('./rules');
 const tiers = require('./tiers');
 const promotions = require('./promotions');
@@ -30,7 +30,7 @@ const LOTS = ['earn', 'add', 'restore'];
 const earnKey = (arKey) => `LOYALTY_EARN:${arKey}`;
 const oid = (value) => new mongoose.Types.ObjectId(String(value));
 // shipment and package method: which points offer a claim gets (promotions.js)
-const ORDER_FIELDS = 'orderId user placedAt createdAt isRemittance isCanceled loyalty paymentList._id paymentList.status.received shipment.method shipment.fromWhere paymentList.deliveredPackages.shipmentMethod';
+const ORDER_FIELDS = 'orderId user placedAt createdAt isRemittance isCanceled loyalty paymentList._id paymentList.status.received shipment.method shipment.fromWhere paymentList.deliveredPackages.shipmentMethod paymentList.deliveredPackages.compensation.closed paymentList.deliveredPackages.weight paymentList.deliveredPackages.exiosPrice paymentList.freeShippingOffer';
 const WRITEOFF_EVENTS = ['CLAIM_WRITEOFF', 'WRITEOFF_RECOVERY'];
 
 // Orders placed from this day earn points (env LOYALTY_START_DATE, an ISO date). Unset or invalid:
@@ -125,7 +125,12 @@ function claimState({ arKey, order, ledger, redeemed, earned }) {
   if (parsed.kind === 'shipment') {
     const pkg = (order.paymentList || []).find((p) => String(p._id) === parsed.packageId);
     if (!pkg) return null;
-    if (!pkg.status?.received) return { points, waitingFor: 'delivery' };
+    // A package closed by a compensation (lost, or damaged and closed) is never delivered (it was
+    // left "waiting for delivery" for ever). Owner, 2026-11-21: it earns only when its whole shipping
+    // was paid; closed with part of it paid (billed only that part), it earns nothing
+    const closed = !pkg.status?.received && pkg.deliveredPackages?.compensation?.closed;
+    if (closed && billed < packageChargeCents(pkg)) return null;
+    if (!pkg.status?.received && !closed) return { points, waitingFor: 'delivery' };
   }
   return { points, waitingFor: 'processing' };
 }
@@ -344,10 +349,26 @@ async function summaryOf(userId) {
   };
 }
 
+// An order's points given back after it was paid again, or moved with it to another customer (adds
+// with reearnOf), count as earned on the earn's claim; a take-back of one of them counts against
+// that claim. Without this the order page and the orders list showed 0 earned once points came back.
+function asEarned(movements) {
+  const byId = new Map(movements.map((m) => [String(m._id), m]));
+  const keyOf = (m) => (m.kind === 'add' && m.reearnOf ? byId.get(String(m.reearnOf))?.arKey : m.arKey);
+  return movements.map((m) => {
+    if (m.kind === 'add' && m.reearnOf) return { ...m, kind: 'earn', arKey: keyOf(m) };
+    if (m.kind === 'revoke' && !m.arKey) {
+      const lot = byId.get(String(m.sources?.[0]?.lotId || ''));
+      return lot ? { ...m, arKey: keyOf(lot) } : m;
+    }
+    return m;
+  });
+}
+
 // One order's points: earned, on the way, paid with points, or why it earns none
 async function orderLoyalty(orderId) {
   const order = await Order.findById(orderId).select(ORDER_FIELDS).lean();
-  const movements = await LoyaltyPoint.find({ orderId: oid(orderId) }).select('kind points arKey promotion').lean();
+  const movements = asEarned(await LoyaltyPoint.find({ orderId: oid(orderId) }).select('kind points arKey promotion reearnOf sources').lean());
   const sum = (kind) => movements.filter((m) => m.kind === kind).reduce((total, m) => total + m.points, 0);
   const pendingRows = order ? await pendingOf([order]) : [];
   const pending = pendingRows.reduce((total, row) => total + row.points, 0);
@@ -626,6 +647,48 @@ async function takeBackLot(lotId, kind, session, { reason } = {}) {
   return movement;
 }
 
+// ---- Points spent from a lot that is taken back (owner, 2026-11-21) ----
+// When a lot is taken back because its order was cancelled (or marked "no points"), moved to another
+// customer, or an invite reward was cancelled, what the customer had already spent from it comes off
+// the rest of their points balance: oldest lots first, down to 0 and never below, the wallet never
+// touched. One 'deduct' movement per lot (eventKey LOYALTY_CLAWBACK:<lot>), with its entry like a
+// staff deduction. Returns the points taken (0 when nothing was spent or nothing is left).
+const CLAWBACK_REASON = 'نقاط صُرفت من طلبية أُلغيت أو نُقلت أو من مكافأة أُلغيت';
+const clawbackKey = (lotId) => `LOYALTY_CLAWBACK:${lotId}`;
+
+// Points spent from a lot: what redemptions took from it, less those given back since
+async function spentOf(lotId, session) {
+  const redemptions = await LoyaltyPoint.find({ kind: 'redeem', 'sources.lotId': lotId }).select('_id sources').session(session).lean();
+  let spent = 0;
+  for (const r of redemptions) {
+    if (await LoyaltyPoint.exists({ eventKey: { $regex: `^${restorePrefix(r._id)}` } }).session(session)) continue;
+    spent += (r.sources || []).filter((src) => String(src.lotId) === String(lotId)).reduce((sum, src) => sum + src.points, 0);
+  }
+  return spent;
+}
+
+async function clawBackSpent(lotId, session, now = new Date()) {
+  const eventKey = clawbackKey(lotId);
+  if (await LoyaltyPoint.exists({ eventKey }).session(session)) return 0;
+  const lot = await LoyaltyPoint.findById(lotId).select('user office orderId').session(session).lean();
+  if (!lot) return 0;
+  const spent = await spentOf(lot._id, session);
+  if (!(spent > 0)) return 0;
+  await lockWalletOwner(lot.user, session);
+  const lots = await spendableLots(lot.user, now, session);
+  const take = Math.min(spent, lots.reduce((sum, l) => sum + l.remaining, 0));
+  if (!(take > 0)) return 0;
+  const sources = takeOldest(lots, take);
+  for (const { lotId: from, points } of sources) {
+    const result = await LoyaltyPoint.updateOne({ _id: from, remaining: { $gte: points } }, { $inc: { remaining: -points } }, { session });
+    if (result.modifiedCount !== 1) throw new Error('Loyalty lot changed concurrently; retry the transaction');
+  }
+  const [created] = await LoyaltyPoint.create([{ user: lot.user, kind: 'deduct', points: take, sources, office: lot.office || DEFAULT_ADJUST_OFFICE,
+    ...(lot.orderId && { orderId: lot.orderId }), reason: CLAWBACK_REASON, eventKey }], { session });
+  if ((await getConfig()).settings?.liveEnabled) await postAdjustEntry(created.toObject(), session);
+  return take;
+}
+
 // Dr loyalty_points (the customer) / Cr loyalty_expense (the movement's office), for an expire or
 // revoke movement; the entry has the movement's eventKey
 async function postTakeBackEntry(movement, session) {
@@ -673,11 +736,22 @@ async function reverseRedemption(redemption, session, { reason = 'إلغاء ا�
 
 // The points an order earned and not spent yet are taken back (order "no points" or cancelled).
 // Returns how many lots were taken back.
-async function revokeOrder(orderId, session) {
-  const lots = await LoyaltyPoint.find({ orderId: oid(orderId), remaining: { $gt: 0 }, $or: [{ kind: 'earn' }, { kind: 'add', reearnOf: { $exists: true } }] })
-    .select('_id').session(session).lean();
+async function revokeOrder(orderId, session, now = new Date()) {
+  const lots = await LoyaltyPoint.find({ orderId: oid(orderId), $or: [{ kind: 'earn' }, { kind: 'add', reearnOf: { $exists: true } }] })
+    .select('_id user earnedAt remaining').session(session).lean();
   let revoked = 0;
-  for (const { _id } of lots) if (await takeBackLot(_id, 'revoke', session)) revoked += 1;
+  for (const lot of lots) if (lot.remaining > 0 && await takeBackLot(lot._id, 'revoke', session)) revoked += 1;
+  // What was already spent from them comes off the rest of the balance (owner, 2026-11-21)
+  for (const lot of lots) await clawBackSpent(lot._id, session, now);
+  // The order may be what brought the customer's level (owner, 2026-11-21): it drops back with it,
+  // spent or not; checked once per order
+  const order = await Order.findById(orderId).setOptions({ withDeleted: true }).select('loyaltyLevelCheckedAt').session(session).lean();
+  if (lots.length && !order?.loyaltyLevelCheckedAt) {
+    for (const userId of new Set(lots.map((lot) => String(lot.user)))) {
+      await require('./levels').dropAfterCancel(userId, lots.filter((lot) => String(lot.user) === userId), { now, session });
+    }
+    await Order.collection.updateOne({ _id: oid(orderId) }, { $set: { loyaltyLevelCheckedAt: now } }, { session });
+  }
   return revoked;
 }
 
@@ -978,6 +1052,8 @@ async function settleOwedClaim(earnId, now, session) {
   if (!owed && !lastTaken && String(last.user) !== String(owner)) {
     if (earn.expiresAt && new Date(earn.expiresAt) <= now) return null;
     await takeBackLot(last._id, 'revoke', session, { reason: MOVED_OUT_REASON });
+    // What they had spent of it comes off the rest of their points (owner, 2026-11-21)
+    await clawBackSpent(last._id, session, now);
     const points = last.points;
     const base = Number.isFinite(earn.basePoints) ? earn.basePoints : earn.points;
     const levelPoints = Math.floor((base * points) / Math.max(earn.points, 1));
@@ -1152,6 +1228,7 @@ function sourceOf(eventKey) {
   if (key.startsWith('LOYALTY_TIER_GIFT:')) return 'level';
   if (key.startsWith('RATING:')) return 'rating';
   if (key.startsWith('LOYALTY_ADJUST:')) return 'staff';
+  if (key.startsWith('LOYALTY_CLAWBACK:')) return 'clawback';
   if (key.startsWith('LOYALTY_REEARN:')) return 'reearn';
   if (key.startsWith('LOYALTY_MOVE:')) return 'moved';
   return null;
@@ -1194,7 +1271,7 @@ async function historyOf(userId, { page, limit, type } = {}) {
   const fromIds = [...new Set(movements.filter((m) => ['revoke', 'expire'].includes(m.kind)).map((m) => String(m.sources?.[0]?.lotId || '')).filter(Boolean))];
   const fromLots = new Map((await LoyaltyPoint.find({ _id: { $in: fromIds } }).select('eventKey reason').lean()).map((l) => [String(l._id), l]));
   const rowSource = (m) => {
-    if (m.kind === 'add') return sourceOf(m.eventKey);
+    if (m.kind === 'add' || m.kind === 'deduct') return sourceOf(m.eventKey);
     if (m.kind === 'revoke' || m.kind === 'expire') return sourceOf(fromLots.get(String(m.sources?.[0]?.lotId))?.eventKey);
     return null;
   };
@@ -1276,8 +1353,9 @@ async function ordersPointsOf(userId) {
   const user = oid(userId);
   const [movements, orders] = await Promise.all([
     LoyaltyPoint.aggregate([
-      { $match: { user, kind: { $in: ['earn', 'revoke'] }, orderId: { $ne: null } } },
-      { $group: { _id: '$orderId', points: { $sum: { $cond: [{ $eq: ['$kind', 'earn'] }, '$points', { $multiply: ['$points', -1] }] } } } },
+      // Earns, and points of an order given back or moved in (adds with reearnOf), less take-backs
+      { $match: { user, orderId: { $ne: null }, $or: [{ kind: { $in: ['earn', 'revoke'] } }, { kind: 'add', reearnOf: { $exists: true } }] } },
+      { $group: { _id: '$orderId', points: { $sum: { $cond: [{ $eq: ['$kind', 'revoke'] }, { $multiply: ['$points', -1] }, '$points'] } } } },
     ]),
     Order.find({ user, isCanceled: { $ne: true }, 'loyalty.noPoints': { $ne: true } }).select(ORDER_FIELDS).lean(),
   ]);
@@ -1322,6 +1400,11 @@ async function settleOrders({ now = new Date() } = {}) {
   // A deleted order counts as cancelled (its claims are reversed the same way): withDeleted
   const toRevoke = await Order.find({ _id: { $in: earning }, $or: [{ isCanceled: true }, { isDeleted: true }, { 'loyalty.noPoints': true }] })
     .setOptions({ withDeleted: true }).select('_id').lean();
+  // Orders whose points were all spent before they were cancelled: nothing to take back, but their
+  // customer's level is checked once (owner, 2026-11-21)
+  const everEarned = await LoyaltyPoint.distinct('orderId', { kind: 'earn' });
+  toRevoke.push(...await Order.find({ _id: { $in: everEarned }, loyaltyLevelCheckedAt: { $exists: false }, $or: [{ isCanceled: true }, { isDeleted: true }, { 'loyalty.noPoints': true }] })
+    .setOptions({ withDeleted: true }).select('_id').lean());
   const redeemedOrders = await LoyaltyPoint.distinct('orderId', { kind: 'redeem' });
   const cancelled = (await Order.find({ _id: { $in: redeemedOrders }, $or: [{ isCanceled: true }, { isDeleted: true }] })
     .setOptions({ withDeleted: true }).select('_id').lean()).map((o) => o._id);
@@ -1338,7 +1421,7 @@ async function settleOrders({ now = new Date() } = {}) {
         if (order.user) await lockWalletOwner(order.user, session);
         const out = { revoked: 0, restored: 0 };
         const cancelled = order.isCanceled || order.isDeleted;
-        if (cancelled || order.loyalty?.noPoints) out.revoked = await revokeOrder(order._id, session);
+        if (cancelled || order.loyalty?.noPoints) out.revoked = await revokeOrder(order._id, session, now);
         if (cancelled) out.restored = await restoreOrder(order._id, now, session);
         return out;
       });
@@ -1366,5 +1449,5 @@ module.exports = {
   moneyUsdCents,
   awardDue, summaryOf, orderLoyalty, redeemedByPart, orderRedemptions, cancelRedemption, redeemQuote, redeem, packagesQuote, redeemPackages, pointsPaidOnPackages, expireDue, settleOrders, setNoPoints,
   pointsOfPayment, redeemInPayment, adjust, customersWithPoints, overview, historyOf, ordersPointsOf, HISTORY_PAGE_SIZE, HISTORY_TYPES,
-  claimLedger, claimState, earnKey, loyaltyStartDate, grantGift, earnStillValid, takeBackLot, owedDue, OWED_REASON, REEARN_REASON, MOVED_OUT_REASON, MOVED_IN_REASON, levelsOf, isEligibleOrder, isOff, setOff, OFF_REASON,
+  claimLedger, claimState, earnKey, loyaltyStartDate, grantGift, earnStillValid, takeBackLot, clawBackSpent, CLAWBACK_REASON, owedDue, OWED_REASON, REEARN_REASON, MOVED_OUT_REASON, MOVED_IN_REASON, levelsOf, isEligibleOrder, isOff, setOff, OFF_REASON,
 };
