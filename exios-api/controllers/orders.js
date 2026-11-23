@@ -819,6 +819,9 @@ module.exports.createOrder = async (req, res, next) => {
         }), session });
       }
 
+      // The customer's waiting packages (طرود منتظرة) with the same tracking numbers join this order
+      await require('../utils/trackingLinks').linkWaitingPackages(order, { user: req.user, session });
+
       return order;
     });
     res.status(200).json(outcome);
@@ -1130,6 +1133,8 @@ module.exports.updateOrder = async (req, res, next) => {
       // Saving the order rewrites its packages; their trip links are worked out again
       await refreshPackageTrips((newOrder.paymentList || []).map((pkg) => pkg._id), { session });
       await emitAccountingEvent('order', newOrder._id, {}, req.user, { session });
+      // The customer's waiting packages (طرود منتظرة) with the same tracking numbers join this order
+      await require('../utils/trackingLinks').linkWaitingPackages(await Orders.findById(newOrder._id).session(session), { user: req.user, session });
       return newOrder;
     });
     res.status(200).json(outcome);
@@ -1780,9 +1785,11 @@ module.exports.getOrdersForUser = async (req, res, next) => {
 
 module.exports.getOrdersClientBySearch= async (req, res, next) => {
   const { value } = req.params;
+  // What the customer typed is plain text: escaped, so ".*" or "(" is searched for, not run as a pattern
+  const text = (v) => new RegExp(escapeRegex(String(v).slice(0, 100).toLowerCase()), 'i');
 
   let query = [
-    { $match: { unsureOrder: false, $or: [ {orderId: { $regex: new RegExp(value.toLowerCase(), 'i') }, user: req.user._id}, { 'paymentList.deliveredPackages.trackingNumber': { $regex: new RegExp(value.trim().toLowerCase(), 'i') }, user: req.user._id }, { 'customerInfo.fullName': { $regex: new RegExp(value.toLowerCase(), 'i') }, user: req.user._id } ] } }
+    { $match: { unsureOrder: false, $or: [ {orderId: { $regex: text(value) }, user: req.user._id}, { 'paymentList.deliveredPackages.trackingNumber': { $regex: text(value.trim()) }, user: req.user._id }, { 'customerInfo.fullName': { $regex: text(value) }, user: req.user._id } ] } }
   ]
 
   if (value === '') {
@@ -1828,17 +1835,21 @@ module.exports.deleteUnsureOrder = async (req, res, next) => {
   }
 }
 
+const MAX_CLIENT_TRACKING = 100;
 module.exports.createTrackingNumbersForClient = async (req, res, next) => {
   try {
-    const trackingArray = [];
-    req.body.forEach(({ trackingNumber, method }) => {
-      trackingArray.push({
-        deliveredPackages: {
-          trackingNumber,
-          shipmentMethod: method
-        }
-      })
-    })
+    // A list of up to MAX_CLIENT_TRACKING numbers, each plain text with a known method
+    const list = req.body;
+    const valid = Array.isArray(list) && list.length > 0 && list.length <= MAX_CLIENT_TRACKING && list.every((item) => item
+      && typeof item.trackingNumber === 'string' && item.trackingNumber.trim() && item.trackingNumber.trim().length <= 100
+      && ['air', 'sea', 'unknown'].includes(item.method));
+    if (!valid) return next(new ErrorHandler(400, 'أرقام التتبع غير صحيحة'));
+    const trackingArray = list.map(({ trackingNumber, method }) => ({
+      deliveredPackages: {
+        trackingNumber: trackingNumber.trim(),
+        shipmentMethod: method
+      }
+    }));
     const orderId = orderid.generate().slice(7, 17);
 
     const order = await Orders.create({
@@ -2137,7 +2148,9 @@ module.exports.createRatingForOrder = async (req, res, next) => {
 module.exports.getOrderRating = async (req, res, next) => {
   try {
     const orderId = req.params.id;
-    const orderRating = await OrderRating.findOne({ order: orderId });
+    if (!mongoose.isValidObjectId(orderId)) return res.status(200).json(null);
+    // The customer's own rating only: another customer's order gives nothing
+    const orderRating = await OrderRating.findOne({ order: orderId, user: req.user._id });
 
     res.status(200).json(orderRating);
   } catch (error) {
@@ -2590,4 +2603,19 @@ const calculateTotalInvoice = (items) => {
     total += amount;
   })
   return total;
+}
+
+// Where else the tracking numbers being typed on an order already are: a customer's waiting package
+// or another order's package. Staff are only warned (owner's request 2026-11-24).
+module.exports.getTrackingMatches = async (req, res, next) => {
+  try {
+    const { findMatches, MAX_NUMBERS } = require('../utils/trackingLinks');
+    const raw = req.query.numbers;
+    const numbers = (Array.isArray(raw) ? raw : String(raw || '').split(',')).slice(0, MAX_NUMBERS);
+    const exclude = mongoose.Types.ObjectId.isValid(req.query.exclude) ? req.query.exclude : undefined;
+    res.status(200).json({ matches: await findMatches(numbers, { excludeOrderId: exclude }) });
+  } catch (error) {
+    console.log(error);
+    return next(new ErrorHandler(400, error.message));
+  }
 }

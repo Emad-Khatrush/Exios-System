@@ -128,9 +128,19 @@ module.exports.readPassportNumber = async (req, res, next) => {
   }
 };
 
+// A new passport photo (never uploaded, or after a rejection): like sign-up, it needs the number the
+// customer confirmed (and what was read from the photo), unique among the other accounts
 module.exports.uploadPassport = async (req, res, next) => {
+  const passportNo = passportNumber.normalize(req.body.passportNumber);
+  const passportRead = passportNumber.normalize(req.body.passportNumberRead);
   try {
     if (!req.file) return next(new ErrorHandler(400, errorMessages.PASSPORT_IMAGE_REQUIRED));
+    if (!passportNumber.isValid(passportNo)) return next(new ErrorHandler(400, errorMessages.PASSPORT_NUMBER_REQUIRED));
+    const takenByOther = await User.exists({
+      _id: { $ne: req.user._id },
+      $or: [{ 'passportVerification.number': passportNo }, { 'passportVerification.numberRead': passportNo }],
+    });
+    if (takenByOther) return next(new ErrorHandler(400, errorMessages.PASSPORT_EXIST));
 
     const uploadedPassport = await uploadToGoogleCloud(req.file, 'exios-passports');
     if (!uploadedPassport?.publicUrl) return next(new ErrorHandler(500, errorMessages.PASSPORT_UPLOAD_FAILED));
@@ -141,10 +151,15 @@ module.exports.uploadPassport = async (req, res, next) => {
         'passportVerification.imageUrl': uploadedPassport.publicUrl,
         'passportVerification.submittedAt': new Date(),
         'passportVerification.rejectionReason': null,
+        'passportVerification.number': passportNo,
+        'passportVerification.numberSource': passportRead && passportRead === passportNo ? 'read' : 'typed',
+        ...(passportRead && { 'passportVerification.numberRead': passportRead }),
       },
       $unset: {
         'passportVerification.reviewedAt': '',
         'passportVerification.reviewedBy': '',
+        // A read from the old photo no longer describes this one
+        ...(!passportRead && { 'passportVerification.numberRead': '' }),
       }
     }, { new: true });
 
@@ -266,16 +281,18 @@ module.exports.acceptTerms = async (req, res, next) => {
   }
 }
 
+// The customer may change their city only. The name is checked against the passport and the phone is
+// how they sign in and how invites are told apart, so the office changes those (PUT customer/:id/info).
 module.exports.updateUser = async (req, res, next) => {
-  const { firstName, lastName, city, phone } = req.body;
+  const same = (field, value) => value === undefined || value === null || String(value).trim() === String(req.user[field] ?? '');
+  const { firstName, lastName, phone } = req.body;
+  if (!same('firstName', firstName) || !same('lastName', lastName) || !(phone === undefined || phone === null || Number(formatPhoneNumber(String(phone))) === req.user.phone)) {
+    return next(new ErrorHandler(400, 'لتغيير الاسم أو رقم الهاتف تواصل مع المكتب'));
+  }
+  const city = typeof req.body.city === 'string' ? req.body.city.trim().slice(0, 60) : undefined;
 
   try {
-    const user = await User.findByIdAndUpdate(req.user._id, {
-      firstName,
-      lastName,
-      city,
-      phone
-    }, { new: true });
+    const user = await User.findByIdAndUpdate(req.user._id, { ...(city !== undefined && { city }) }, { new: true });
     res.status(200).json(user);
   } catch (error) {
     console.log(error);
@@ -658,10 +675,17 @@ module.exports.login = async (req, res, next) => {
 module.exports.verifyToken = async (req, res, next) => {
   const { token } = req.body;
 
-  if (!token) next(new ErrorHandler(404, errorMessages.TOKEN_NOT_FOUND));
+  if (!token || typeof token !== 'string') return next(new ErrorHandler(404, errorMessages.TOKEN_NOT_FOUND));
 
   try {
     const tokenConfig = await jwt.verify(token, process.env.JWT_SECRET);
+    // The apps ask this when they open: a session ended by a password change (or a cancelled account)
+    // is refused here, so the app signs out instead of failing on every request
+    const user = await User.findById(tokenConfig.id).select('isCanceled +passwordChangedAt').lean();
+    if (!user || user.isCanceled) return next(new ErrorHandler(401, errorMessages.INVALID_TOKEN));
+    if (user.passwordChangedAt && Number(tokenConfig.iat) < Math.floor(new Date(user.passwordChangedAt).getTime() / 1000)) {
+      return next(new ErrorHandler(401, errorMessages.INVALID_TOKEN));
+    }
 
     res.status(200).json({
       token,
