@@ -2,7 +2,10 @@
 // - GET  /pricing         public: only what is visible, shipping prices merged in from ShipmentPrice.
 //                          ?parts=shipping,fcl sends only those sections (each prices page asks for its own)
 // - GET  /pricing/config  staff with settings_prices: everything, hidden parts included
-// - PUT  /pricing/config  same: saves the page and the shipping price of each route
+// - PUT  /pricing/config  same: saves the page, the shipping price of each route, the text of the
+//                          "arrived at the warehouse" message of each route, and the customers'
+//                          dollar rate (only shown to customers; the accounting rate is not touched).
+// Since 2026-11-24 this is the only prices page in the admin (the old Pricing page was merged in).
 const PricingConfig = require('../models/pricingConfig');
 const ShipmentPrices = require('../models/shipmentPrices');
 const ExchangeRate = require('../models/exchangeRate');
@@ -90,9 +93,18 @@ const canon = (value) => JSON.stringify(value, (_k, v) => (v && typeof v === 'ob
   ? Object.keys(v).sort().reduce((o, k) => { o[k] = v[k]; return o; }, {})
   : v));
 
+// A shopping site as the app reads it; sites saved before their own commission existed use the brackets
+const SITE_COMMISSIONS = ['default', 'none', 'percent', 'fixed'];
+const siteOf = (s) => ({
+  key: s.key, label: s.label, feePercent: Number(s.feePercent) || 0,
+  commission: SITE_COMMISSIONS.includes(s.commission) ? s.commission : 'default',
+  commissionValue: Number(s.commissionValue) || 0,
+  freeShipping: !!s.freeShipping,
+});
+
 // What counts as a price change, per part: notes, durations and visibility do not
 const PRICE_FIELDS = {
-  purchase: (s) => ({ minCommission: s?.minCommission ?? 0, tiers: s?.tiers || [], sites: s?.sites || [] }),
+  purchase: (s) => ({ minCommission: s?.minCommission ?? 0, tiers: s?.tiers || [], sites: (s?.sites || []).map(siteOf) }),
   alipay: (s) => ({ tiers: s?.tiers || [] }),
   swift: (s) => ({ tiers: swiftTiers(s), fixedFee: s?.fixedFee ?? 0, minFee: s?.minFee ?? 0 }),
 };
@@ -100,6 +112,7 @@ const PRICE_FIELDS = {
 // minimum and the carrier (a new line usually means a new price) here
 const routePrices = (r) => ({
   minCharge: Number(r?.minCharge) || 0,
+  minWeight: Number(r?.minWeight) || 0,
   carrier: r?.carrier || '',
   kinds: (r?.categories || []).map((c, i) => ({ label: c.label || '', price: i === 0 ? 0 : Number(c.price) || 0 })),
 });
@@ -143,12 +156,21 @@ async function shippingRoutes(config, prices = null) {
         // The free text the office wrote for this route before (ShipmentPrice.priceDescription)
         note: cleanNote(display.note ?? price.priceDescription ?? ''),
         minCharge: Number(display.minCharge) || 0,
+        minWeight: Number(display.minWeight) || 0,
+        // The route's part of the "arrived at the warehouse" message staff send (ShipmentPrice.priceDescription)
+        message: cleanNote(price.priceDescription || ''),
         carrier: display.carrier || '',
         // The last time any price of the route changed, for "updated on" in the app
         updatedAt: latest(price.updatedAt, display.pricesUpdatedAt),
       };
     })
     .sort((a, b) => orderOf(a.key) - orderOf(b.key));
+}
+
+// The rate customers see: the one set on this page, else the accounting rate
+function customerRate(config, accounting) {
+  const own = Number(config.exchangeRate?.rate) || 0;
+  return own > 0 ? { rate: own, updatedAt: config.exchangeRate.rateUpdatedAt || config.updatedAt || null } : accounting;
 }
 
 async function currentRate() {
@@ -177,11 +199,11 @@ module.exports.getPublic = async (req, res, next) => {
     const updated = (value) => latest(value) || config.updatedAt || null;
     const section = (part, build) => (want(part) ? { [part]: build() } : {});
     res.status(200).json({
-      exchangeRate: config.exchangeRate?.visible ? rate : null,
+      exchangeRate: config.exchangeRate?.visible ? customerRate(config, rate) : null,
       ...section('shipping', () => (visible('shipping') && routes.length ? {
         note: config.shipping.note || '',
         volumetricDivisor: config.shipping.volumetricDivisor || 6000,
-        routes: routes.map(({ visible: _v, ...route }) => ({ ...route, updatedAt: updated(route.updatedAt), categories: route.categories.filter((c) => c.price > 0) })),
+        routes: routes.map(({ visible: _v, message: _m, ...route }) => ({ ...route, updatedAt: updated(route.updatedAt), categories: route.categories.filter((c) => c.price > 0) })),
         updatedAt: updated(latest(...routes.map((r) => r.updatedAt))),
       } : null)),
       ...section('purchase', () => (visible('purchase') ? {
@@ -189,7 +211,7 @@ module.exports.getPublic = async (req, res, next) => {
         note: config.purchase.note || '',
         minCommission: config.purchase.minCommission || 0,
         tiers: config.purchase.tiers || [],
-        sites: config.purchase.sites || [],
+        sites: (config.purchase.sites || []).map(siteOf),
       } : null)),
       ...section('alipay', () => (visible('alipay') && (config.alipay.tiers || []).some((t) => t.rate > 0) ? {
         updatedAt: updated(config.alipay.pricesUpdatedAt),
@@ -226,9 +248,14 @@ module.exports.getConfig = async (req, res, next) => {
       ...config,
       shipping: { ...config.shipping, routes: await shippingRoutes(config) },
       swift: { ...config.swift, tiers: swiftTiers(config.swift) },
+      purchase: { ...config.purchase, sites: (config.purchase?.sites || []).map(siteOf) },
       // Rows saved before shipping lines and ports existed get them empty
       fcl: { ...config.fcl, containers: (config.fcl?.containers || []).map((c) => ({ carrier: '', fromPort: '', toPort: '', route: '', duration: '', ...c })) },
-      exchangeRate: { visible: config.exchangeRate?.visible !== false, current: await currentRate() },
+      exchangeRate: await (async () => {
+        const accounting = await currentRate();
+        // current: what customers see; own: whether this page set it; accounting: for reference only
+        return { visible: config.exchangeRate?.visible !== false, current: customerRate(config, accounting), own: Number(config.exchangeRate?.rate) > 0, accounting };
+      })(),
     });
   } catch (error) {
     return next(new ErrorHandler(500, error.message));
@@ -280,10 +307,24 @@ module.exports.saveConfig = async (req, res, next) => {
     // were kept gets the previous save time, so later saves of other parts do not move it.
     const stamp = (before, after, previous) => (canon(before) !== canon(after) ? now : (previous || current.updatedAt || now));
 
-    if (body.exchangeRate) update.exchangeRate = { visible: bool(body.exchangeRate.visible) };
+    // The customers' rate. Sent unchanged while none was set (the accounting rate is shown), it is
+    // not stored, so the page keeps following accounting until the office types its own.
+    if (body.exchangeRate) {
+      const before = current.exchangeRate || {};
+      let rate = Number(before.rate) || 0;
+      let rateUpdatedAt = before.rateUpdatedAt || null;
+      if (body.exchangeRate.rate !== undefined && body.exchangeRate.rate !== null) {
+        const typed = Number(body.exchangeRate.rate);
+        if (!(typed > 0 && typed < 1000)) throw fail('سعر الصرف يجب أن يكون أكبر من صفر');
+        const shown = customerRate(current, await currentRate());
+        if (typed !== Number(shown?.rate)) { rate = typed; rateUpdatedAt = now; }
+      }
+      update.exchangeRate = { visible: bool(body.exchangeRate.visible), rate, rateUpdatedAt };
+    }
 
     // Shipping: how each route is shown here, its price in ShipmentPrice
     let priceUpdates = [];
+    let messageUpdates = [];
     if (body.shipping) {
       const known = new Map((await ShipmentPrices.find({}).lean()).map((p) => [routeKey(p), p]));
       const before = new Map((current.shipping?.routes || []).map((r) => [r.key, r]));
@@ -294,7 +335,7 @@ module.exports.saveConfig = async (req, res, next) => {
         volumetricDivisor: num(body.shipping.volumetricDivisor, { min: 1000, max: 10000 }) || 6000,
         routes: routes.map((r) => {
           const route = {
-            key: r.key, visible: bool(r.visible), duration: text(r.duration, 60), note: text(r.note, 1500), minCharge: num(r.minCharge), carrier: text(r.carrier, 60),
+            key: r.key, visible: bool(r.visible), duration: text(r.duration, 60), note: text(r.note, 1500), minCharge: num(r.minCharge), minWeight: num(r.minWeight, { max: 100000 }), carrier: text(r.carrier, 60),
             categories: cleanCategories(r),
           };
           const old = before.get(r.key);
@@ -312,11 +353,24 @@ module.exports.saveConfig = async (req, res, next) => {
         if (!(price > 0)) throw fail(`ضع سعر «${categories[0]?.label || 'البضائع العادية'}» لخط ${r.label || r.key}: هو السعر الذي تقرؤه الفواتير`);
         return { country, shippingType, price };
       }).filter((p) => Number(known.get(`${p.country}-${p.shippingType}`)?.sellingPrice) !== p.price);
+      // The message text: written only when it was edited, so an untouched older text keeps its form
+      messageUpdates = routes
+        .filter((r) => typeof r.message === 'string')
+        .map((r) => ({ key: r.key, message: text(r.message, 2000) }))
+        .filter((m) => m.message !== cleanNote(known.get(m.key)?.priceDescription || ''));
     }
 
     if (body.purchase) {
       const sites = (Array.isArray(body.purchase.sites) ? body.purchase.sites : []).slice(0, 12)
-        .map((s, i) => ({ key: text(s.key, 40) || `site-${i + 1}`, label: text(s.label, 40), feePercent: num(s.feePercent, { max: 100 }) }))
+        .map((s, i) => {
+          const commission = SITE_COMMISSIONS.includes(s.commission) ? s.commission : 'default';
+          return {
+            key: text(s.key, 40) || `site-${i + 1}`, label: text(s.label, 40), feePercent: num(s.feePercent, { max: 100 }),
+            commission,
+            commissionValue: commission === 'percent' ? num(s.commissionValue, { max: 100 }) : commission === 'fixed' ? num(s.commissionValue, { max: 1e5 }) : 0,
+            freeShipping: bool(s.freeShipping),
+          };
+        })
         .filter((s) => s.label);
       update.purchase = {
         visible: bool(body.purchase.visible),
@@ -382,6 +436,10 @@ module.exports.saveConfig = async (req, res, next) => {
 
     for (const p of priceUpdates) {
       await ShipmentPrices.updateOne({ country: p.country, shippingType: p.shippingType }, { $set: { sellingPrice: p.price } });
+    }
+    for (const m of messageUpdates) {
+      const [country, shippingType] = m.key.split('-');
+      await ShipmentPrices.updateOne({ country, shippingType }, { $set: { priceDescription: m.message } });
     }
     await PricingConfig.updateOne({ _id: current._id }, { $set: { ...update, updatedBy: req.user?._id } });
     return module.exports.getConfig(req, res, next);
