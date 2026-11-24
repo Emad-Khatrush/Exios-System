@@ -207,9 +207,10 @@ async function awardDue({ now = new Date() } = {}) {
         const earned = await runInTransaction((session) => earnClaim(arKey, now, session));
         if (earned) {
           awarded += 1;
-          const mine = earnedBy.get(earned.userId) || { points: 0, level: null };
+          const mine = earnedBy.get(earned.userId) || { points: 0, level: null, gift: 0 };
           mine.points += earned.points;
           if (earned.movedTo) mine.level = earned.movedTo;
+          mine.gift += earned.gift || 0;
           earnedBy.set(earned.userId, mine);
           const ref = earned.referral;
           if (ref) {
@@ -230,9 +231,9 @@ async function awardDue({ now = new Date() } = {}) {
   // After every earn has committed: one notification per customer for the points, and one for a
   // new level reached on the way
   const customerPush = require('../../../utils/customerPush');
-  for (const [userId, { points, level }] of earnedBy) {
+  for (const [userId, { points, level, gift }] of earnedBy) {
     await customerPush.pointsEarned(userId, points);
-    if (level) await customerPush.levelUp(userId, level);
+    if (level) await customerPush.levelUp(userId, level, gift);
   }
   for (const [inviterId, got] of invitedBy) await customerPush.referralRewards(inviterId, got);
   const { settings } = await getConfig();
@@ -272,7 +273,8 @@ async function postMovementEntry(movement, session) {
 }
 
 // Earns one claim if it is still due, read again inside the transaction. When it earned:
-// { userId, points, movedTo } (movedTo: the new level when the customer moved up), else false.
+// { userId, points, movedTo, gift } (movedTo: the new level when the customer moved up; gift: the
+// upgrade gift points given with it), else false.
 async function earnClaim(arKey, now, session) {
   const eventKey = earnKey(arKey);
   if (await LoyaltyPoint.exists({ eventKey }).session(session)) return false;
@@ -302,7 +304,7 @@ async function earnClaim(arKey, now, session) {
   const moved = await require('./levels').refreshLevel(order.user, { now, session });
   // The friend's inviter: the big reward at $50 paid, then the share for 12 months (spec 2026-11-20)
   const referral = await require('./referrals').afterEarn(movement.toObject(), { now, session });
-  return { userId: String(order.user), points, movedTo: moved?.to || null, referral };
+  return { userId: String(order.user), points, movedTo: moved?.to || null, gift: moved?.gift || 0, referral };
 }
 
 // An earn still stands as it was made: its order neither cancelled nor "no points", its claim fully
@@ -494,8 +496,18 @@ async function packagesQuote({ userId, packageIds }, { session } = {}) {
 // Pays `points` of the target with the customer's points, oldest lots first: one redeem movement
 // per claim paid, and one entry Dr loyalty_points (the customer) / Cr customer_receivable (the
 // claims, by what is still owed on each). At most 20% of the invoice, what is owed and the balance.
-async function redeem({ userId, target, points }, { session, req } = {}) {
-  return redeemOn(userId, points, (now) => quoteOf({ userId, target }, session, now), { session, req });
+// `applyToDebts`: the points also pay down the order's debts for the same thing (the order page).
+// The debts screen pays its own debt and passes false.
+async function redeem({ userId, target, points }, { session, req, applyToDebts = true } = {}) {
+  const result = await redeemOn(userId, points, (now) => quoteOf({ userId, target }, session, now), { session, req });
+  if (applyToDebts) {
+    const first = await LoyaltyPoint.findOne({ kind: 'redeem', journalEntryId: result.journalEntryId }).sort({ _id: 1 }).select('_id').session(session).lean();
+    const order = await Order.findById(target.orderId).select('orderId').session(session).lean();
+    await require('../../../utils/debts').payOrderDebtsWithPoints({
+      orderId: target.orderId, category: target.category, usd: points / 100, redemptionId: first?._id, packageIds: target.packageIds, orderNumber: order?.orderId,
+    }, { session });
+  }
+  return result;
 }
 
 // The same over the shipping of some packages of the customer, possibly of several orders (the
@@ -599,7 +611,7 @@ async function owedOnTarget(target, session) {
 // `moneyUsdCents`: the money paid with the points, in US cents (owner's rule 2026-11-19): points only
 // cover what that money leaves, so a payment never pays more than is owed. Unknown (another
 // currency without a usable rate): not checked here.
-async function redeemInPayment({ userId, target, points, pointsOnly = false, moneyUsdCents }, { session, req } = {}) {
+async function redeemInPayment({ userId, target, points, pointsOnly = false, moneyUsdCents }, { session, req, applyToDebts = true } = {}) {
   if (!['invoice', 'receivedGoods'].includes(target?.category)) throw new ErrorHandler(400, 'النقاط تُستعمل فقط مع دفعة فاتورة الشراء أو الشحن');
   if (Number.isFinite(moneyUsdCents) && moneyUsdCents > 0) {
     const room = Math.max(0, (await owedOnTarget(target, session)) - Math.round(moneyUsdCents));
@@ -609,7 +621,7 @@ async function redeemInPayment({ userId, target, points, pointsOnly = false, mon
         : 'هذه الدفعة تغطي كامل المستحق، فلا تُستعمل معها نقاط. النقاط تُستعمل فقط لتغطية المتبقي.');
     }
   }
-  const result = await redeem({ userId, target, points }, { session, req });
+  const result = await redeem({ userId, target, points }, { session, req, applyToDebts });
   if (pointsOnly && await owedOnTarget(target, session) > 0) {
     throw new ErrorHandler(400, 'النقاط لا تغطي كامل المستحق؛ أدخل مبلغ الدفع للباقي');
   }
@@ -786,6 +798,8 @@ async function restoreRedemption(redemption, now, session, { reason, reverse } =
     }], { session });
     if (lot.expiresAt <= now) await takeBackLot(back._id, 'expire', session);
   }
+  // The debts these points paid are owed again
+  await require('../../../utils/debts').restoreDebtsOfRedemption(redemption._id, { session });
   return true;
 }
 
@@ -867,7 +881,9 @@ async function orderRedemptions(orderId) {
 // Staff undo a redemption of an order with a required reason: its whole entry is reversed (every
 // claim it paid is owed again) and the points come back with their lots' original expiry, as when
 // the order is cancelled. Needs live accounting, like redeeming. Returns { restored, usd }.
-async function cancelRedemption({ orderId, redemptionId, reason } = {}, { session, req } = {}) {
+// `fromDebt`: the debts screen cancels a payment it made with points (the points paid that debt, not
+// the delivery invoice, so the invoice does not hold them)
+async function cancelRedemption({ orderId, redemptionId, reason } = {}, { session, req, fromDebt = false } = {}) {
   assertInTransaction(session);
   if (!mongoose.isValidObjectId(orderId)) throw new ErrorHandler(400, 'حدد الطلبية');
   const order = await Order.findById(orderId).setOptions({ withDeleted: true }).select('user orderId paymentList._id paymentList.status.received').session(session).lean();
@@ -889,7 +905,7 @@ async function cancelRedemption({ orderId, redemptionId, reason } = {}, { sessio
     || await JournalEntry.exists({ eventKey }).session(session)
     || await LoyaltyPoint.exists({ $or: movements.map((m) => ({ eventKey: { $regex: `^${restorePrefix(m._id)}` } })) }).session(session);
   if (done) throw new ErrorHandler(400, 'تم إلغاء هذه النقاط من قبل');
-  const invoice = invoiceOfMovements(movements, await deliveryInvoicesOf(order, movements, session));
+  const invoice = fromDebt ? null : invoiceOfMovements(movements, await deliveryInvoicesOf(order, movements, session));
   if (invoice) {
     throw new ErrorHandler(400, `هذه النقاط مستعملة في فاتورة التسليم رقم #0${invoice.referenceId}؛ تُلغى من فواتير العميل (Created Invoices) بإلغاء الفاتورة أو الشحنة`);
   }

@@ -2259,9 +2259,17 @@ module.exports.getPaymentsOfOrder = async (req, res, next) => {
       .map((w) => ({ _id: w._id, number: w.number, day: w.day, reason: w.reason, usd: Number(w.amountUsd || 0) / 100,
         kind: String(w.arKey).startsWith('PUR:') ? 'invoice' : 'receivedGoods', packageId: String(w.arKey).split(':')[2] || null })) : [];
 
+    // Money given back from the invoice's payments to the wallet (posting/paymentReturn.js): the
+    // order page takes it off what was paid
+    const returns = ObjectId.isValid(id) ? (await require('../accounting/models/documents').PaymentReturn.find({ orderId: id, status: 'posted' }).sort({ createdAt: 1 })
+      .populate('createdBy', 'firstName lastName').lean())
+      .map((r) => ({ _id: r._id, number: r.number, day: r.day, usd: Number(r.usd || 0) / 100, currency: r.currency || 'USD', amount: r.amount ?? Number(r.usd || 0) / 100, rate: r.rate || 0,
+        description: r.description, category: r.category, createdAt: r.createdAt, createdBy: r.createdBy })) : [];
+
     res.status(200).json({
       results: updatedPaymentList,
       writeOffs,
+      returns,
     });
   } catch (error) {
     console.log(error);
@@ -2350,6 +2358,11 @@ module.exports.addPaymentToOrder = async (req, res, next) => {
           //   );
           // }
         }
+      }
+      // A debt opened on this order for the same thing is paid down by this cash too, as a wallet
+      // payment does (2026-11-25: cash used to leave the debt as it was); cancelling the payment puts it back
+      if (category) {
+        data.debtPayments = await require('../utils/debts').payOrderDebts({ orderId: order._id, category, amount: data.receivedAmount, currency, rate: data.rate, createdAt, orderNumber: order.orderId }, { session });
       }
       const [payment] = await OrderPaymentHistory.create([data], { session });
       if (payment.paymentType === 'cash') await emitAccountingEvent('cashPayment', payment._id, { office: req.body.office }, req.user, { session });
