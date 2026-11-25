@@ -85,17 +85,20 @@ async function overpaidProfitOf(orderId, category, accountId, session) {
 async function byCurrency(orderId, category, refunds, session) {
   const payments = await OrderPaymentHistory.find({ order: orderId, category }).select('receivedAmount currency rate').session(session || null).lean();
   let usdPaid = 0; let lydPaid = 0; let lydPaidUsd = 0;
+  // The dollars the dinars counted for, unrounded: the rate is worked from them (2026-11-25: from the
+  // rounded cents, 105 LYD at 10.32 came back at 10.3245)
+  let lydExactUsd = 0;
   for (const p of payments) {
     const amount = Number(p.receivedAmount || 0);
     if (p.currency === 'USD') usdPaid += Math.round(amount * 100);
-    else if (p.currency === 'LYD' && Number(p.rate) > 0) { lydPaid += amount; lydPaidUsd += Math.round((amount / Number(p.rate)) * 100); }
+    else if (p.currency === 'LYD' && Number(p.rate) > 0) { lydPaid += amount; lydPaidUsd += Math.round((amount / Number(p.rate)) * 100); lydExactUsd += amount / Number(p.rate); }
   }
   // Old invoice payments the books know of but the order does not: dollars
   if (category === 'invoice') usdPaid += Math.max((await moneyPaid(orderId, category, session)) - usdPaid - lydPaidUsd, 0);
   const rows = await PaymentReturn.find({ orderId, status: 'posted', category }).select('currency amount usd').session(session || null).lean();
   const usdBack = rows.filter((r) => (r.currency || 'USD') === 'USD').reduce((sum, r) => sum + (r.usd || 0), 0);
   const lydBack = rows.filter((r) => r.currency === 'LYD').reduce((sum, r) => sum + Number(r.amount || 0), 0);
-  const rate = lydPaid > 0 && lydPaidUsd > 0 ? Math.round((lydPaid / (lydPaidUsd / 100)) * 10000) / 10000 : 0;
+  const rate = lydPaid > 0 && lydExactUsd > 0 ? Math.round((lydPaid / lydExactUsd) * 10000) / 10000 : 0;
   return {
     USD: { paid: usdPaid, available: Math.max(usdPaid - usdBack - refunds, 0) },
     LYD: { paid: Math.round(lydPaid * 1000) / 1000, available: Math.max(Math.round((lydPaid - lydBack) * 1000) / 1000, 0), rate },
@@ -237,4 +240,32 @@ async function listPaymentReturns(orderId) {
   };
 }
 
-module.exports = { createPaymentReturn, listPaymentReturns, returnedOnInvoice };
+// A payment taken off the order (deleted, or its delivery invoice cancelled) gives all of it back to
+// the wallet. When money was already given back from that currency (2026-11-25: a 105 LYD payment
+// deleted after 105 LYD were given back paid the customer twice), the returns must be cancelled
+// first: refused when what stays paid in the currency would be less than what was given back in it.
+async function assertReturnsStayCovered({ orderId, category, currency, removing }, session) {
+  const rows = await PaymentReturn.find({ orderId, status: 'posted', category: category || 'invoice', currency: currency === 'LYD' ? 'LYD' : { $in: ['USD', null] } })
+    .select('number amount usd currency').session(session || null).lean();
+  if (!rows.length) return;
+  const own = (await byCurrency(orderId, category || 'invoice', 0, session))[currency === 'LYD' ? 'LYD' : 'USD'];
+  const back = currency === 'LYD' ? rows.reduce((sum, r) => sum + Number(r.amount || 0), 0) : rows.reduce((sum, r) => sum + (r.usd || 0), 0) / 100;
+  const paid = currency === 'LYD' ? own.paid : own.paid / 100;
+  if (paid - Number(removing || 0) < back - 0.005) {
+    const unit = currency === 'LYD' ? 'د.ل' : '$';
+    throw fail(`أُرجع للعميل من دفعات هذه العملة ${Math.round(back * 100) / 100} ${unit} (${rows.map((r) => r.number).join('، ')}). ألغِ الإرجاع أولاً من صفحة الطلبية، ثم احذف الدفعة، حتى لا يأخذ المبلغ مرتين.`);
+  }
+}
+
+// The order cancelled: every payment goes back to the wallet, so what was already given back from
+// them is taken back from the wallet (each return cancelled) and the customer gets what they paid once
+async function cancelOrderReturns(order, user, session) {
+  const rows = await PaymentReturn.find({ orderId: order._id, status: 'posted' }).select('_id number currency amount usd').session(session).lean();
+  const { cancelDocument } = require('../cancel');
+  for (const row of rows) {
+    await cancelDocument('AccountingPaymentReturn', row._id, { session, req: { user }, reason: `إلغاء الطلب ${order.orderId}`, confirmNegative: true, cascaded: true });
+  }
+  return rows.map((r) => ({ amount: -(r.currency === 'LYD' ? Number(r.amount) : r.usd / 100), currency: r.currency || 'USD', paymentType: 'returnTakenBack', number: r.number }));
+}
+
+module.exports = { createPaymentReturn, listPaymentReturns, returnedOnInvoice, assertReturnsStayCovered, cancelOrderReturns };
